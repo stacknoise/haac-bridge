@@ -1,0 +1,934 @@
+# HA Android Client (HAAC) – Technical Concept
+
+Status: 2026-09-27 · Author: Anton Graichen-Hartl
+
+## 1. Introduction and scope
+
+The solution consists of a native Android app and a companion Home Assistant (HA) custom integration distributed via HACS. Together they let a HA user organise selected entities into their own homes, floors and rooms on the phone and control them with the same functionality HA offers.
+
+Product name of the app: **HA Android Client**, short form **HAAC**. The companion integration keeps the working title **"Client Bridge"** (domain `client_bridge`) until its final name is set (14.5).
+
+### 1.1 Goals
+
+- Connect the app to one or more reachable HA instances by entering their server URLs, and switch between them at any time.
+- Log in with the user's existing HA account; afterwards unlock via fingerprint.
+- Never store plaintext passwords – not in code, not in any database, not in preferences.
+- Let the user model homes, floors and rooms locally and change that structure at any time.
+- Load only entities the HA administrator has exposed to that specific user via `configuration.yaml`.
+- Assign exposed entities to rooms, remove them again and give them local display names.
+- Detect newly exposed and withdrawn entities on every app start.
+
+### 1.2 Scope of version 1
+
+| Area | In scope (v1) | Out of scope (later) |
+| --- | --- | --- |
+| Entity domains | `switch`, `sensor`, `climate` | `light`, `cover`, `binary_sensor`, `media_player`, `lock`, … |
+| HA instances | Several instances, one active at a time, switch at any time | Entities of several instances combined in one view |
+| Login | HA username/password (incl. MFA) per instance, fingerprint unlock | Passkeys |
+| Structure | Home → Floor → Room, Home → Room (per instance) | Sharing layouts between devices/users |
+| Storage | Local on the device | Cloud backup of the layout |
+| Entity exposure | Per HA user via YAML | Config flow / UI in HA |
+
+### 1.3 Assumptions
+
+- HA Core is a current release (2026.x); the integration targets the latest stable HA Python version.
+- The HA instance is reachable from the phone via LAN, VPN, reverse proxy or Nabu Casa remote URL.
+- One app installation can hold several HA instances, each bound to exactly one HA user; exactly one instance is active at a time.
+
+## 2. System overview
+
+Three components work together: the Android app, the Client Bridge integration running inside HA, and HA Core itself. The app talks to HA over HTTPS (authentication, token refresh) and a single persistent WebSocket connection (entity data, state updates, service calls).
+
+```mermaid
+flowchart LR
+  subgraph Phone[Android device]
+    UI[Compose UI] --> VM[ViewModels]
+    VM --> REPO[Repositories]
+    REPO --> DB[(Room DB: layout, aliases, cache)]
+    REPO --> SEC[Keystore: encrypted refresh token]
+    REPO --> WS[WebSocket client]
+    REPO --> HTTP[HTTPS client]
+  end
+  subgraph HA[Home Assistant]
+    AUTH[Auth API /auth/*]
+    CORE[WebSocket API /api/websocket]
+    BR[Client Bridge integration]
+    YAML[configuration.yaml]
+  end
+  HTTP -- login flow, tokens --> AUTH
+  WS -- client_bridge/* commands --> BR
+  BR -- filtered states, service calls --> CORE
+  YAML -- per-user exposure --> BR
+```
+
+| Component | Responsibility | Technology |
+| --- | --- | --- |
+| Android app | UI, local layout (homes/floors/rooms), aliases, secure token storage, biometric unlock, sync | Kotlin, Jetpack Compose, Room, Android Keystore |
+| Client Bridge (HACS) | Reads per-user exposure from YAML, resolves the calling HA user, returns only exposed entities, pushes filtered state changes, validates service calls | Python custom integration (`custom_components/client_bridge`) |
+| HA Core | User accounts, authentication, tokens, entity states, services, history | Stock Home Assistant |
+
+The layout (homes, floors, rooms, room assignments, aliases) lives only on the device. HA is the single source of truth for entity states and for which entities a user may see.
+
+## 3. Android app architecture and technology stack
+
+The app follows Google's recommended layered architecture (UI → domain → data) with unidirectional data flow and a single-activity Compose UI.
+
+### 3.1 Layers
+
+- **UI layer** – Jetpack Compose screens, one `ViewModel` per screen, immutable `UiState` exposed as `StateFlow`.
+- **Domain layer** – use cases such as `LoginUseCase`, `SyncExposedEntitiesUseCase`, `AssignEntityToRoomUseCase`, `CallEntityServiceUseCase`.
+- **Data layer** – repositories (`AuthRepository`, `LayoutRepository`, `EntityRepository`) combining the Room database, the secure token store and the HA network clients.
+
+### 3.2 Modules
+
+| Gradle module | Content |
+| --- | --- |
+| `:app` | Activity, navigation graph, DI setup |
+| `:core:security` | Keystore key handling, token encryption, biometric helper |
+| `:core:network` | HTTPS client, WebSocket client, HA message models, reconnect logic |
+| `:core:database` | Room entities, DAOs, migrations |
+| `:feature:onboarding` | Server URL entry, login |
+| `:feature:layout` | Homes, floors, rooms editor |
+| `:feature:entities` | Entity picker, room view, entity detail/control screens |
+| `:feature:settings` | Instances (add, switch, edit, remove), account, security (fingerprint unlock on/off), logout, diagnostics |
+
+### 3.3 Technology stack
+
+| Concern | Choice |
+| --- | --- |
+| Language | Kotlin (latest stable), coroutines and Flow |
+| UI | Jetpack Compose, Material 3, Navigation Compose |
+| DI | Hilt |
+| Persistence | Room (SQLite) for layout and cache; DataStore (Proto) for non-sensitive settings |
+| Networking | OkHttp (HTTPS + WebSocket), kotlinx.serialization for JSON |
+| Security | Android Keystore, AndroidX Biometric (`BiometricPrompt`), Google Tink for AEAD where needed |
+| Background work | WorkManager (optional periodic re-sync) |
+| Testing | JUnit 5, Turbine, MockK, MockWebServer, Compose UI tests |
+
+- **minSdk 28** (Android 9) – reliable `BiometricPrompt` and StrongBox support; **targetSdk** = latest stable API level required by Google Play.
+- `androidx.security:security-crypto` (EncryptedSharedPreferences) is deprecated and is **not** used; encryption is done directly with Keystore keys (see chapter 5).
+
+## 4. Onboarding and server connection
+
+On first start – or whenever no server is bound – the app shows the server screen; with a bound server and valid session it goes straight to unlock or the home view.
+
+### 4.1 Start routing
+
+| Condition at app start | Target screen |
+| --- | --- |
+| No instance configured | Server URL entry |
+| Last active instance has no refresh token | HA login for that instance |
+| Last active instance: token stored, biometric unlock enabled | Biometric prompt |
+| Last active instance: token stored, biometric unlock disabled | Opens directly; the stored token is usable only while the device is unlocked |
+| Unlocked | Sync of the active instance (chapter 9), then its home view |
+
+### 4.2 Server URL entry
+
+**LAN discovery (M-01).** While the server screen is open, the app browses the local network via Android `NsdManager` for the service `_home-assistant._tcp`, which HA announces over zeroconf. Found servers are listed with host name and `IP:port`; the TXT record supplies base URL and HA version. Discovery needs the permission `NEARBY_WIFI_DEVICES` (Android 13+) or runs without it on older versions; if nothing is found, manual entry (*Other address…*) is always available.
+
+1. User enters a URL, e.g. `https://ha.example.com` or `http://192.168.1.10:8123`.
+2. The app normalises it: adds `https://` if no scheme is given, removes trailing slashes and paths such as `/lovelace`.
+3. Validation request `GET <url>/auth/providers`: a JSON list of auth providers confirms a HA instance and tells the app whether the `homeassistant` (username/password) provider is enabled.
+4. Check that the Client Bridge integration is installed: after login, the WebSocket command `client_bridge/info` must succeed (see chapter 11). If not, show an install hint with the HACS repository link.
+5. The URL is persisted in DataStore (not sensitive, not encrypted).
+
+### 4.3 Transport security
+
+- **HTTPS is the default.** Plain `http://` is only accepted for private address ranges (RFC 1918, `.local`) after an explicit warning dialog; the network security config allows cleartext only when the user has opted in.
+- Self-signed certificates: the user can trust the certificate on first use (TOFU). The app then pins its SHA-256 public-key hash for that server and shows the fingerprint for manual comparison. A later certificate change triggers a blocking warning.
+- Optional second URL (internal/external) with automatic selection is a later feature; v1 has one URL.
+
+### 4.4 Multiple HA instances and switching
+
+The app can hold any number of HA instances; exactly one is active, and the user can switch to another one at any time from the top app bar.
+
+**Adding an instance** – *Settings → Instances → Add* runs the same flow as the first start: URL entry and validation (4.2), HA login (chapter 5), optional fingerprint unlock. Each instance gets a display name (default: the HA `location_name`) and an accent colour so the active instance is always recognisable.
+
+**Isolation** – every instance has its own:
+
+- refresh token and Keystore key (chapter 5),
+- exposure cache and revision (chapter 9),
+- homes, floors, rooms, room assignments and aliases (chapters 6, 7),
+- certificate pin and transport settings (4.3).
+
+Nothing is shared between instances. The same server may be added twice with different HA users (e.g. a family account and a guest account); such entries are labelled with the HA user name.
+
+**Switching**
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant A as App
+  participant O as Old instance
+  participant N as New instance
+  U->>A: select instance in switcher
+  A->>O: close WebSocket, drop access token from memory
+  A->>U: BiometricPrompt (or HA login) for new instance
+  U-->>A: authenticated
+  A->>N: refresh token → access token, open WebSocket
+  A->>N: revision check / sync (chapter 9)
+  A->>U: home view of new instance
+```
+
+- The switcher (dropdown in the top app bar, also reachable via a long-press on the app icon shortcut) lists all instances with name, colour, URL and last connection status.
+- Only the active instance holds a live WebSocket connection; inactive instances keep no connection, which saves battery and data.
+- UI state of the old instance (open screen, scroll position) is discarded; the new instance opens on its home view.
+- The last active instance is remembered and opened on the next app start.
+- If the switch fails (server unreachable), the new instance opens in offline mode with its cached data; the user can switch back at any time.
+
+With an active unlock window (5.4), the fingerprint step of the switch is skipped and the switch runs without any prompt.
+
+**Editing and removing**
+
+| Action | Effect |
+| --- | --- |
+| Rename / change colour | Local only |
+| Change URL (e.g. new domain) | Re-validation; login only if HA rejects the existing refresh token; layout stays |
+| Remove instance | Confirmation dialog; refresh token revoked on the server (if reachable), token and Keystore key deleted, cache, layout, assignments and aliases of that instance deleted |
+| Remove last instance | App returns to the first-start screen |
+
+## 5. Authentication, credential storage and biometric login
+
+The user logs in with their HA username and password once; the app then stores only an encrypted HA **refresh token**, never the password. "Storing the login data locally" is therefore implemented as storing a revocable, encrypted token – the current standard for OAuth2 clients and the approach of HA's own companion app.
+
+### 5.1 Login flow (HA auth API)
+
+HA implements OAuth2 authorization code flow. The app drives HA's login-flow API natively in its own Compose screen, so the user sees username, password and – if configured – the MFA code field inside the app.
+
+```mermaid
+sequenceDiagram
+  participant A as App
+  participant H as HA /auth
+  A->>H: POST /auth/login_flow {client_id, handler:["homeassistant",null], redirect_uri}
+  H-->>A: flow_id, step "init" (fields username, password)
+  A->>H: POST /auth/login_flow/{flow_id} {username, password, client_id}
+  alt MFA enabled
+    H-->>A: step "mfa"
+    A->>H: POST /auth/login_flow/{flow_id} {code}
+  end
+  H-->>A: type "create_entry", result = authorization code
+  A->>H: POST /auth/token grant_type=authorization_code, code, client_id
+  H-->>A: access_token (30 min), refresh_token
+```
+
+- **client\_id**: HA requires a URL. The app uses a URL under the publisher's domain (e.g. `https://stacknoise.com/haac/`). That page declares the app's redirect URI (`haac://auth-callback`) with `<link rel="redirect_uri" href="haac://auth-callback">`, which HA checks for non-matching redirect URIs.
+- **Fallback**: if the server has no `homeassistant` provider (e.g. only trusted networks or command-line auth), the app opens `/auth/authorize` in a Chrome Custom Tab with PKCE and receives the code via the redirect URI.
+- The password lives only in a `CharArray` for the duration of the request and is overwritten afterwards; it is never logged, persisted, put in a `String` constant or sent anywhere except to the configured HA server over TLS.
+- HTTP logging is disabled for all `/auth/*` requests, also in debug builds.
+
+### 5.2 Token handling
+
+| Token | Lifetime | Where it lives |
+| --- | --- | --- |
+| Access token | 30 min (HA default) | Memory only, in the network layer |
+| Refresh token | Until revoked; HA expires unused refresh tokens after a period of inactivity | Encrypted with a Keystore key, stored in app-private no-backup storage |
+| Password | Seconds (during login) | Memory only, wiped after use |
+
+- The access token is refreshed with `grant_type=refresh_token` shortly before expiry or after an `auth_invalid` on the WebSocket.
+- A refresh that returns HTTP 400/401 means the token was revoked in HA (user → security → refresh tokens). The app deletes local tokens and returns to the login screen.
+- Logout calls HA's token revocation endpoint, then deletes ciphertext and Keystore key.
+
+### 5.3 Encryption at rest
+
+- One AES-256-GCM key per HA instance, generated in the **Android Keystore**, StrongBox-backed when the device has it; the key material never leaves secure hardware.
+- Ciphertext + IV of the refresh token are stored in a file under `noBackupFilesDir`; the Room database contains no secrets.
+- Key properties: `setUnlockedDeviceRequired(true)`, no export, purpose `ENCRYPT|DECRYPT` only.
+- `android:allowBackup="false"` plus data-extraction rules excluding all app data from cloud backup and device transfer.
+
+### 5.4 Fingerprint unlock
+
+Fingerprint login is an unlock of the stored refresh token, not a separate account system. HA never learns about the fingerprint.
+
+1. Fingerprint unlock is optional and off by default. The user can enable it per instance under Settings → Security (only if `BiometricManager.canAuthenticate(BIOMETRIC_STRONG)` succeeds).
+2. On enabling, a **second** Keystore key is generated with `setUserAuthenticationRequired(true)`, `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)` (auth per use) and `setInvalidatedByBiometricEnrollment(true)`. The refresh token is re-encrypted with it and the old key is deleted.
+3. On app start, `BiometricPrompt` is shown with a `CryptoObject` wrapping a `Cipher` in decrypt mode. Only a successful Class-3 biometric authentication unlocks the cipher, so the token cannot be decrypted without the finger – a UI-only check would not be sufficient.
+4. The decrypted refresh token is used immediately to obtain an access token and then discarded from memory.
+5. If fingers are added or removed, the key is permanently invalidated (`KeyPermanentlyInvalidatedException`); the app deletes it and asks for the HA password again.
+6. "Use password" on the prompt leads to the HA login (5.1); a new token is issued and the old one revoked.
+
+With several instances, fingerprint unlock is a per-instance setting and each instance has its own biometric-bound key, so a token of one instance can never be decrypted with the key of another.
+
+**Unlock window (optional).** So that switching between instances does not need a new fingerprint every time, the user can set an unlock window under Settings → Security: *Off* (default), 1, 5 or 15 minutes. Within the window, one fingerprint unlocks all instances with fingerprint unlock enabled.
+
+| Setting | Key parameters | Behaviour |
+| --- | --- | --- |
+| Off | `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)` | One `BiometricPrompt` with `CryptoObject` per decryption; strongest option |
+| 1 / 5 / 15 min | `setUserAuthenticationParameters(<window in s>, AUTH_BIOMETRIC_STRONG)` | One `BiometricPrompt`; afterwards every biometric-bound key of the app is usable until the window expires, without a further prompt |
+
+- The window is enforced by the Keystore in secure hardware, not by the app: after it expires, the keys cannot be used until the next successful fingerprint.
+- The Keystore tracks the time of the last strong authentication per device user, not per key; that is why a single fingerprint covers all instances.
+- The key parameter is fixed at key creation. Changing the window therefore needs one fingerprint check, after which the app re-creates the keys of all fingerprint-enabled instances and re-encrypts their tokens.
+- With `setUnlockedDeviceRequired(true)`, locking the phone makes all keys unusable immediately, even inside the window.
+- The app lock (5.5) still applies on top: after the background timeout the app shows its lock screen again, even if the window is still open.
+
+Disabling fingerprint unlock in the settings requires one last successful biometric check; the token is then re-encrypted with the non-biometric key described in 5.3 and the biometric key is deleted. Without fingerprint unlock the app opens with the stored token as long as the device itself is unlocked.
+
+### 5.5 App lock behaviour
+
+- Re-lock after the app has been in the background longer than a configurable timeout (default 5 minutes).
+- `FLAG_SECURE` on login and settings screens to keep them out of screenshots and the recent-apps preview.
+- Root/emulator detection is informational only (warning), not a hard block.
+
+## 6. Home structure: homes, floors and rooms
+
+Every room belongs to exactly one home, and optionally to one floor of that home; this single rule covers both "Home → Floor → Room" and "Home → Room".
+
+```mermaid
+erDiagram
+  HOME ||--o{ FLOOR : has
+  HOME ||--o{ ROOM : contains
+  FLOOR |o--o{ ROOM : groups
+  ROOM ||--o{ ROOM_ENTITY : holds
+```
+
+### 6.1 Rules
+
+- A **home** has a name, optional icon and a sort order. Every home belongs to exactly one HA instance; several homes per instance are allowed (e.g. house and holiday flat on the same HA server). Only homes of the active instance are shown.
+- A **floor** belongs to exactly one home; it has a name, a level number (for sorting, e.g. -1, 0, 1) and optional icon.
+- A **room** always has `homeId`; `floorId` is nullable. If `floorId` is set, the floor must belong to the same home (enforced in the use case and by a DB trigger).
+- Rooms without a floor are shown in a section "Other rooms" directly under the home.
+
+**A home is mandatory.** Every level and every room belongs to exactly one home; there are no unlinked levels or rooms. A home may consist of rooms only, without any levels. If no home exists yet, the create menu offers only *New home*, and creating a level or room always asks for its home (preselected when there is only one).
+
+### 6.2 Editing at any time
+
+| Action | Effect |
+| --- | --- |
+| Rename / change icon / reorder | Immediate, no side effects |
+| Move room to another floor or to "no floor" | Only `floorId` changes; entity assignments stay |
+| Move room to another home | `homeId` changes, `floorId` is reset or set to a floor of the new home |
+| Delete floor | User chooses: rooms become floor-less (default) or are deleted as well |
+| Delete room | Entity assignments of the room are removed; entities stay available in the picker |
+| Delete home | Confirmation dialog listing affected floors, rooms and assignments; cascade delete |
+
+- All structural changes run in one Room transaction.
+- Deletions offer an "Undo" snackbar for 5 seconds (soft delete, then purge).
+- Drag-and-drop reordering in edit mode; sort order stored as integer with gaps.
+
+### 6.3 Optional import from HA
+
+HA itself has floors and areas. As a convenience, the setup wizard can offer to pre-fill floors and rooms from HA's floor/area registry, if the Client Bridge exposes it. The result is an ordinary local structure that the user can then edit freely; there is no ongoing sync back to HA.
+
+## 7. Entity management
+
+The app only ever sees entities that the Client Bridge exposes to the logged-in HA user; the user picks from these, places them in rooms and can name them locally.
+
+### 7.1 Loading entities
+
+- After the home structure exists, the user opens *Add entities* in a room or in the global entity list.
+- The app calls `client_bridge/entities/list` (chapter 11) and receives, per exposed entity: `entity_id`, domain, HA friendly name, device class, unit, icon, supported features, HA area name and the current state with attributes.
+- The picker groups entities by domain (Switches, Sensors, Climate) and optionally by HA area, with search by name or `entity_id`.
+- Entities already assigned to the current room are marked; unassigned entities are highlighted.
+
+### 7.2 Assigning and removing
+
+- Multi-select in the picker, then *Add to room*.
+- An entity can be assigned to more than one room – any number of rooms, across all homes and floors of the instance (e.g. an outdoor temperature sensor shown in every room). Within one room it appears only once.
+- Remove via swipe or long-press → *Remove from room*. This only deletes the local assignment; nothing changes in HA.
+- Entities can be reordered within a room (drag-and-drop in edit mode).
+
+**Tile sizes and arrangement (M-05 to M-07).** Each assignment has a tile size: 1×1 (default for switches and sensors), 2×1, or 2×2 (default for climate). The room grid has two columns and places tiles in `sortOrder`, filling gaps densely. Order and size are changed in the edit layout (drag and drop) or in the list arrange mode.
+
+### 7.3 Local display names
+
+| Name source | Priority | Stored where |
+| --- | --- | --- |
+| Local alias set in the app | 1 (highest) | Room DB, per server + `entity_id` |
+| HA friendly name | 2 | Delivered by the bridge, cached |
+| `entity_id` | 3 (fallback) | – |
+
+- Aliases are per entity, so the same alias shows in every room. An optional per-room override is a later feature.
+- Aliases never leave the device and are never written back to HA.
+- Clearing the alias falls back to the HA friendly name; the detail screen always shows the original `entity_id` for reference.
+
+### 7.4 Entities removed in HA
+
+If an entity is deleted in HA or no longer shared with the user, it stays in every room it was assigned to but becomes inactive and shows a warning; only the user can remove it.
+
+- **Detection**: during the sync (chapter 9), on an `exposure_changed` event, or when the entity disappears from the bridge's live subscription.
+- **Display**: tile greyed out with a warning icon in the error colour and the label "No longer available in Home Assistant". Tapping it opens a sheet with the reason (deleted in HA or no longer shared) and the actions *Remove from this room* and *Remove from all rooms*.
+- **Inactive**: no controls, no service calls, no history requests; the last known state is shown with its timestamp.
+- **Not assignable**: the entity no longer appears in the entity picker and cannot be added to further rooms.
+- **No automatic removal**: room assignments and alias stay until the user removes them. The home view shows a counter "N unavailable entities" that opens a list for bulk removal.
+- If the same `entity_id` is shared again later, it becomes active again in its rooms with its alias.
+
+## 8. Entity functionality per domain
+
+The app offers the same user-level functions as HA's own tile and "more info" dialogs: current state, all attributes, history and every service the entity supports. Administrative functions (renaming in the entity registry, changing device settings) stay in HA.
+
+Which controls appear is driven by the entity's `supported_features` bitmask and attributes, not hard-coded per device, so new HA features degrade gracefully.
+
+### 8.1 Common to all domains
+
+- Live state via WebSocket subscription (chapter 11), including `unavailable` and `unknown`.
+- Detail screen: state, `last_changed`, `last_updated`, full attribute list, HA friendly name, `entity_id`, local alias editor.
+- History: chart or timeline for 24 h / 7 days / custom range via the bridge's history command.
+- Optimistic UI for service calls with rollback if the confirmed state from HA differs or the call fails.
+
+### 8.2 Switch (`switch`)
+
+| Function | HA service / data |
+| --- | --- |
+| Turn on / off | `switch.turn_on`, `switch.turn_off` |
+| Toggle (tap on tile) | `switch.toggle` |
+| Device class icon (`outlet`, `switch`) | attribute `device_class` |
+| On/off history timeline | history command |
+
+### 8.3 Sensor (`sensor`)
+
+Sensors are read-only; the app renders them by `device_class` and `state_class`.
+
+| Aspect | Behaviour |
+| --- | --- |
+| Numeric sensors | Value + `unit_of_measurement`, rounding per `suggested_display_precision` |
+| `device_class` (temperature, humidity, power, energy, battery, …) | Matching icon and formatting |
+| `state_class` measurement | Line chart; long ranges use long-term statistics (hourly mean/min/max) |
+| `state_class` total / total\_increasing | Bar chart of consumption per hour/day |
+| `enum` sensors | Text state, timeline history |
+| Timestamp sensors | Relative time ("in 3 h") plus absolute date |
+
+### 8.4 Climate (`climate`)
+
+| Feature (flag) | UI control | HA service |
+| --- | --- | --- |
+| Target temperature (1) | Dial / +/- stepper using `min_temp`, `max_temp`, `target_temp_step` | `climate.set_temperature` (`temperature`) |
+| Target range (2) | Two-handle slider low/high | `climate.set_temperature` (`target_temp_low`, `target_temp_high`) |
+| Target humidity (4) | Slider using `min_humidity`, `max_humidity` | `climate.set_humidity` |
+| Fan mode (8) | Chips from `fan_modes` | `climate.set_fan_mode` |
+| Preset mode (16) | Chips from `preset_modes` | `climate.set_preset_mode` |
+| Swing mode (32) | Chips from `swing_modes` | `climate.set_swing_mode` |
+| Turn off (128) / on (256) | Power button | `climate.turn_off` / `climate.turn_on` |
+| Horizontal swing (512) | Chips from `swing_horizontal_modes` | `climate.set_swing_horizontal_mode` |
+| HVAC mode (always) | Segmented control from `hvac_modes` | `climate.set_hvac_mode` |
+
+- Always displayed when present: `current_temperature`, `current_humidity`, `hvac_action` (heating, cooling, idle, …).
+- Temperature input is debounced (about 800 ms) so dragging the dial sends one service call, not dozens.
+- History shows current vs. target temperature and heating/cooling phases.
+
+## 9. Synchronization on app start
+
+On every start and on every instance switch (after unlock) the app compares the locally cached list of exposed entities with the bridge's current list and reports what was added or withdrawn; the check is cheap because the bridge first returns a revision hash.
+
+### 9.1 Sequence
+
+1. Unlock → obtain access token → open WebSocket → `auth` message.
+2. `client_bridge/exposure/revision` → returns `revision` (SHA-256 over the sorted list of exposed `entity_id`s for this user).
+3. If `revision` equals the stored value: no changes, go to 5.
+4. Otherwise `client_bridge/entities/list` → full list; the app computes the diff:
+   - **Added**: exposed now, not in cache → stored in cache, badge "N new entities" on the home view and a list in the picker.
+   - **Removed**: in cache, not exposed any more → cache entry and its room assignments set to *withdrawn* (see 7.4); notice "N entities are no longer shared".
+   - **Changed metadata** (friendly name, unit, supported features) → cache updated silently.
+5. `client_bridge/subscribe_entities` → live states for all exposed entities.
+6. Store new `revision` and timestamp.
+
+**Notification list (M-09).** Every sync result is also written as an entry to a local notification list: *entity added* (actions *Add to room*, *Dismiss*), *entity removed* (actions *Remove tile*, *Keep*) and combined entries for several entities of one sync. Entries are per instance, grouped by day, marked read individually or all at once, and purged after 30 days. The bell icon in the room header shows an unread dot. These are in-app notifications only; Android system notifications are not used in v1.
+
+### 9.2 Changes while the app is running
+
+- The bridge sends an `exposure_changed` event on the subscription when the admin reloads the integration after editing `configuration.yaml`. The app then runs steps 2–4 again without restart.
+- On resume from background after the lock timeout, the full start sequence runs again.
+
+### 9.3 Rules
+
+- The sync never adds entities to rooms automatically; new entities only appear in the picker.
+- If the server is unreachable, the app starts in offline mode with cached data and repeats the sync when the connection returns (chapter 14).
+- Sync result and timestamp are shown under *Settings → Diagnostics*.
+
+The sync always covers only the active instance. Inactive instances are synced when they become active, so changes made in their `configuration.yaml` in the meantime are reported at the first switch.
+
+## 10. HACS integration "Client Bridge"
+
+The Client Bridge is a Python custom integration that exposes a filtered, per-user view of HA entities over dedicated WebSocket commands. Exposure is configured in `configuration.yaml` with the same filter syntax as HA's HomeKit Bridge (`include_domains`, `include_entities`, globs, excludes), but per HA user.
+
+### 10.1 Repository structure
+
+```text
+haac-bridge/                 # GitHub repo stacknoise/haac-bridge (chapter 16)
+├── hacs.json
+├── README.md
+└── custom_components/
+    └── client_bridge/
+        ├── __init__.py        # async_setup, config schema, reload service
+        ├── manifest.json      # domain, version, dependencies: websocket_api, recorder
+        ├── const.py
+        ├── exposure.py        # per-user EntityFilter, revision hash
+        ├── websocket.py       # client_bridge/* commands
+        ├── history.py         # filtered history / statistics
+        └── services.yaml      # client_bridge.reload
+```
+
+- `manifest.json`: `"config_flow": false`, `"iot_class": "local_push"`, `"dependencies": ["websocket_api", "recorder", "history"]`, semantic `version`.
+- `hacs.json`: name, minimum HA version; published as a custom repository (later optionally in the HACS default list).
+- Releases via GitHub tags; CI runs `hassfest` and the HACS validation action.
+
+### 10.2 Configuration in configuration.yaml
+
+```yaml
+client_bridge:
+  users:
+    - username: anton                # HA login name, or user_id: <uuid>
+      filter:
+        include_domains:
+          - climate
+        include_entities:
+          - switch.garage_socket
+          - sensor.living_room_temperature
+        include_entity_globs:
+          - sensor.*_humidity
+        exclude_entities:
+          - climate.server_room
+    - username: guest
+      filter:
+        include_entities:
+          - sensor.outdoor_temperature
+```
+
+| Key | Meaning |
+| --- | --- |
+| `users[].username` / `users[].user_id` | Identifies the HA user; `user_id` is stable across renames and preferred for production |
+| `filter.include_domains` / `exclude_domains` | Whole domains |
+| `filter.include_entities` / `exclude_entities` | Single entity IDs |
+| `filter.include_entity_globs` / `exclude_entity_globs` | Wildcards such as `sensor.*_temperature` |
+
+- Filters are built with HA's own `entityfilter` helper, so evaluation order is identical to the HomeKit Bridge (explicit exclude beats include).
+- Independently of the filter, only the v1 domains `switch`, `sensor`, `climate` are ever returned.
+- **Deny by default**: a HA user not listed under `users` gets an empty list. Unknown usernames are logged as a warning at startup.
+- Changing the YAML takes effect after the service `client_bridge.reload` (or a HA restart); reload recomputes all revisions and emits `exposure_changed` to connected apps.
+
+### 10.3 Runtime behaviour
+
+- `async_setup` validates the YAML with a `voluptuous` schema, builds one `EntityFilter` per user and registers the WebSocket commands.
+- Each command resolves the caller via `connection.user` – the HA user bound to the access token. The app never sends a user name; it cannot ask for another user's entities.
+- The set of visible entities is recomputed when entities are added to or removed from the state machine, so a glob matching a newly created sensor exposes it automatically.
+- Service calls are only executed if the target `entity_id` is exposed to the caller and the service belongs to the entity's domain; everything else is rejected with `not_allowed`.
+- History and statistics requests are filtered the same way before querying the recorder.
+
+## 11. Communication protocol and API specification
+
+All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/api/websocket` using custom commands prefixed `client_bridge/`; only authentication uses HTTPS REST endpoints.
+
+### 11.1 HTTPS endpoints (HA Core)
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /auth/providers` | Server validation, available login providers |
+| `POST /auth/login_flow`, `POST /auth/login_flow/{flow_id}` | Username/password and MFA steps |
+| `POST /auth/token` | Code → tokens; refresh token → new access token |
+| `POST /auth/revoke` | Revoke refresh token on logout |
+
+### 11.2 WebSocket commands (Client Bridge)
+
+| Command | Request fields | Response |
+| --- | --- | --- |
+| `client_bridge/info` | – | Bridge version, API version, supported domains, HA version |
+| `client_bridge/exposure/revision` | – | `revision` (hash), entity count |
+| `client_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
+| `client_bridge/subscribe_entities` | – | Initial states, then compressed state diffs and `exposure_changed` events |
+| `client_bridge/call_service` | `entity_id`, `service`, `service_data` | Success or error `not_allowed` / `invalid_service` / HA error |
+| `client_bridge/history` | `entity_ids[]`, `start`, `end`, `minimal_response` | State history per entity |
+| `client_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
+| `client_bridge/areas` (optional) | – | HA floors and areas of exposed entities for the import wizard |
+
+### 11.3 Message examples
+
+```json
+{"id": 12, "type": "client_bridge/entities/list"}
+
+{"id": 12, "type": "result", "success": true, "result": {
+  "revision": "9f2c…e41a",
+  "entities": [{
+    "entity_id": "climate.living_room",
+    "domain": "climate",
+    "name": "Living room thermostat",
+    "device_class": null,
+    "supported_features": 395,
+    "area": "Living room",
+    "state": "heat",
+    "attributes": {"current_temperature": 21.4, "temperature": 22.0,
+                   "hvac_modes": ["off", "heat", "auto"], "min_temp": 7, "max_temp": 30,
+                   "target_temp_step": 0.5, "preset_modes": ["eco", "comfort"]},
+    "last_changed": "2026-09-26T07:12:03Z"
+  }]
+}}
+
+{"id": 13, "type": "client_bridge/call_service",
+ "entity_id": "climate.living_room", "service": "set_temperature",
+ "service_data": {"temperature": 22.5}}
+```
+
+### 11.4 Versioning and robustness
+
+- `client_bridge/info` returns an integer `api_version`. The app declares the range it supports and shows an "update the integration" hint on mismatch.
+- One WebSocket per app session; heartbeat via HA's `ping`/`pong` every 30 s; reconnect with exponential back-off (1 s → 60 s, with jitter).
+- After reconnect: re-auth, revision check, re-subscribe – the same steps as the start sync.
+- The app never sends `service_data` containing `entity_id`; the bridge sets the target itself so a manipulated payload cannot address other entities.
+
+## 12. Local data model
+
+The Room database holds layout, assignments, aliases and a cache of exposed entities; it contains no passwords or tokens. All tables carry `serverId` which keeps the data of each HA instance strictly separate.
+
+| Table | Key columns | Notes |
+| --- | --- | --- |
+| `server` | `id` (UUID), `baseUrl`, `haVersion`, `bridgeApiVersion`, `pinnedKeyHash?`, `exposureRevision`, `lastSyncAt` | One row per HA instance, plus `displayName`, `accentColor`, `haUserName`, `lastActiveAt`; no credentials |
+| `home` | `id`, `serverId`, `name`, `icon?`, `sortOrder`, `deletedAt?` |  |
+| `floor` | `id`, `homeId` → home, `name`, `level`, `icon?`, `sortOrder`, `deletedAt?` | Cascade on home delete |
+| `room` | `id`, `homeId` → home, `floorId?` → floor, `name`, `icon?`, `sortOrder`, `deletedAt?` | Trigger: floor must belong to same home; `floorId` set null on floor delete |
+| `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `deviceClass?`, `unit?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState` (JSON) | Cache of bridge data |
+| `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (1x1/2x1/2x2), `addedAt` | Assignment; cascade on room delete |
+| `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name |
+| `notification` | `id`, `serverId` → server, `type` (added/removed), `entityIds` (JSON), `createdAt`, `readAt?`, `resolvedAt?` | Sync results for M-09; purged after 30 days |
+
+- Schema migrations are versioned and tested with Room's `MigrationTestHelper`; destructive migration is never enabled.
+- The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
+- Non-sensitive preferences (theme, lock timeout, biometric enabled flag) live in Proto DataStore.
+
+The active instance is stored as `activeServerId` in DataStore. `home`, `exposed_entity` and `entity_alias` reference `server.id` with cascade delete, so removing an instance removes all of its data in one transaction.
+
+## 13. Security concept and threat model
+
+Secrets are limited to one encrypted refresh token in hardware-backed storage; the main residual risk is that a HA token is not scoped to the bridge, so the per-user exposure restricts what the app shows, not what the token could technically reach.
+
+### 13.1 Important limitation: exposure is not a HA permission
+
+HA Core has no per-entity permissions for normal users: any valid access token of a user can read all states and call all services through HA's standard APIs. The Client Bridge enforces the exposure for everything that goes through `client_bridge/*`, and the app uses only those commands. A person who extracts the token and uses HA's core API directly would bypass the filter.
+
+Mitigations:
+
+- Create **dedicated non-admin HA users** for app users; never use an admin account in the app.
+- Hardware-bound token storage and biometric unlock make extraction from the device hard (13.2).
+- Tokens can be revoked per device in the HA user profile.
+- Documented clearly in the integration README so admins do not treat exposure as a security boundary between mutually distrusting users.
+
+### 13.2 Threats and countermeasures
+
+| Threat | Countermeasure |
+| --- | --- |
+| Password leaked from device or DB | Password never stored; only used in memory during login |
+| Token read from a lost/stolen phone | AES-GCM with Keystore/StrongBox key, biometric-bound; `setUnlockedDeviceRequired`; no backup |
+| Fingerprint check bypassed by patched app | Key only usable after `BiometricPrompt` with `CryptoObject` (Class 3); no UI-only check |
+| New fingerprint added by attacker | `setInvalidatedByBiometricEnrollment(true)` → password required |
+| Man-in-the-middle | HTTPS by default; cleartext only on private networks after warning; key pinning for self-signed certs |
+| Access to other users' entities via the bridge | Bridge resolves user from token (`connection.user`), ignores any user field from the client, deny by default |
+| Manipulated service call to a non-exposed entity | Bridge checks `entity_id` against exposure and service against domain before calling HA |
+| Credentials in logs or crash reports | No logging of `/auth/*`; crash reporting (if any) strips headers and bodies |
+| Hard-coded secrets in APK | None needed: `client_id` is a public URL, no API keys; secret scanning in CI |
+| Leaked screens | `FLAG_SECURE` on login/settings; auto-lock after background timeout |
+
+### 13.3 Standards and checks
+
+- Aligned with **OWASP MASVS** (storage, crypto, auth, network, platform) and OAuth 2.0 for Native Apps (RFC 8252) incl. PKCE for the browser fallback.
+- Release builds: R8 obfuscation, `debuggable=false`, no cleartext by default in the network security config.
+- Dependency scanning (Dependabot/Renovate) and static analysis (Android Lint security checks, Detekt) in CI; `bandit` and `ruff` for the integration.
+
+## 14. Error handling, testing, roadmap and open points
+
+### 14.1 Error handling and offline behaviour
+
+| Situation | App behaviour |
+| --- | --- |
+| Server unreachable at start | Offline mode: layout and last known states from cache, marked "stale"; controls disabled; retry with back-off |
+| Connection lost while running | Banner "Reconnecting…", controls disabled, automatic reconnect |
+| Refresh token revoked / expired | Tokens deleted, HA login screen |
+| Bridge not installed or `api_version` incompatible | Blocking screen with install/update instructions |
+| Service call rejected (`not_allowed`) | Error snackbar, state rolled back, triggers a revision check |
+| Entity `unavailable` | Tile greyed out, controls disabled, last value shown with timestamp |
+| Entity deleted in HA or no longer shared | Warning icon on the tile, entity inactive and not assignable; stays in its rooms until the user removes it (7.4) |
+
+### 14.2 Testing
+
+- **App**: unit tests for use cases and diff logic; repository tests against MockWebServer (REST + WebSocket); Room migration tests; Compose UI tests for onboarding, layout editor and climate controls; instrumented tests for Keystore/biometric flows on real devices with and without StrongBox.
+- **Integration**: `pytest-homeassistant-custom-component` tests for YAML validation, filter evaluation per user, deny-by-default, service-call rejection, reload and `exposure_changed`.
+- **End-to-end**: HA test instance in Docker with fixed users and demo entities; CI runs the app against it on an emulator.
+- **Security**: MASVS checklist review before release; manual MITM test with a proxy.
+
+### 14.3 Roadmap
+
+| Phase | Content |
+| --- | --- |
+| MVP (v1.0) | Onboarding, login + fingerprint, homes/floors/rooms, switch/sensor/climate, per-user exposure, start sync, multiple HA instances with switching |
+| v1.1 | HA area import wizard, per-room aliases, home-screen widgets and quick-settings tiles |
+| v1.2 | More domains (`light`, `cover`, `binary_sensor`, `lock`, `media_player`) |
+| v2.0 | Internal/external URL switching per instance, encrypted layout backup/export, UI config flow for the bridge |
+
+### 14.4 Distribution
+
+HAAC is distributed via Google Play and as a sideload APK. Both channels use the same package name and the same app signing key, so users can switch between channels without reinstalling or losing data.
+
+| Channel | Format | Updates |
+| --- | --- | --- |
+| Google Play | Android App Bundle (AAB), Play App Signing with the developer's own uploaded app signing key | Play Store, Play In-App Updates API (`play` build flavor) |
+| Sideload | Signed universal APK on GitHub Releases and stacknoise.com, with SHA-256 checksum | In-app check against GitHub Releases, notification with download link; no self-installation (`sideload` build flavor) |
+
+- **Signing**: when enrolling in Play App Signing, the existing app signing key is exported and uploaded instead of letting Google generate one. The key stays in a secured vault so the sideload flavor can be signed with it.
+- **Developer verification**: Google requires apps on certified Android devices to come from verified developers, sideloaded apps included. Enforcement starts on 30 September 2026 in Brazil, Indonesia, Singapore and Thailand and is planned globally for 2027 ([Google](https://support.google.com/android-developer-console/answer/16561738?hl=en), [Android Authority](https://www.androidauthority.com/android-sideloading-changes-timeline-3679204/)). The developer account and the package name with its signing key must be registered before the first sideload release.
+- **Play requirements**: current target API level, Data safety form (the developer collects no data; all data flows only between the device and the user's own HA instances), privacy policy URL.
+- **Release process**: CI builds both flavors from the same Git tag with the same `versionCode`.
+- The Client Bridge integration is distributed separately via HACS (chapter 10).
+
+### 14.5 Open points
+
+- [ ] Final name and domain of the HA integration (working title Client Bridge / `client_bridge`).
+- [ ] Confirm the `client_id` URL `https://stacknoise.com/haac/` and the redirect scheme `haac://auth-callback`.
+- [ ] Minimum supported HA version for the bridge.
+
+* [ ] GitHub account name: confirm that the Stacknoise account is `stacknoise` (16.1).
+
+## 15. UI mockups
+
+The binding UI reference is mockup set **1c**, in its consolidated form **2a** ("Going with 1c, room grid and edit layout from 1a"), dark theme "Nocturne". It covers nine screens (M-01 to M-09); screens not yet designed are listed in 15.4.
+
+### 15.1 Rules for implementation (Claude Code)
+
+- **Precedence**: chapters 1–14 define behaviour and data; the mockups define layout, visual style and wording. Where they disagree, the concept text wins; 15.5 lists the known cases.
+- **Files in the repository**: `docs/mockups/haac-mockups-1c.html` (interactive source, open in a browser), `docs/mockups/png/M-0x-*.png` (one PNG per screen, 2× resolution).
+- **Scale**: the mockups are drawn on a 300 px wide phone frame. Implement with Material 3 components, `dp`/`sp` units and the M3 type scale; do not copy pixel values literally.
+- **Mockup texts** ("anna", "Main house", "Living room") are sample data, not UI strings. UI strings go into `strings.xml` in English (German translation later).
+- **Terminology**: the UI says *Level*, the code and this concept say *Floor* (`floor` table, `Floor` class). Keep that mapping.
+
+### 15.2 Design tokens
+
+These values were read from the rendered mockups and are the basis of the Compose theme (`HaacTheme`, dark only in v1).
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `background` | `#161826` | Screen background |
+| `surface` | `#232532` | Tiles, input fields, cards |
+| `surfaceVariant` | `#3F424D` | Inactive toggles, dividers |
+| `outline` | `#75798C` | 1 dp borders, chips, removed-entity dashed border |
+| `primary` | `#4DFF7A` | Accent: active toggle, selected chip, primary button border and text, check marks |
+| `primaryContainer` | `#0D2F18` | Background of "on" tiles and selected chips |
+| `onPrimaryContainer` | `#A6FFBB` | Text on "on" tiles |
+| `onBackground` | `#E9E9ED` | Primary text |
+| `onSurfaceVariant` | `#9397AB` | Secondary text, sublines, section labels |
+| Font | Inter (regular 400, medium 500) | All text; bundle via `res/font` |
+| Mono font | system monospace | `entity_id`, IP addresses and ports |
+| Corner radius | 8 dp (chips, fields), 12 dp (tiles, dialogs, buttons), full (toggles, icon buttons) |  |
+
+- Primary buttons are outlined in `primary` with `primary` text, not filled.
+- Section labels ("ON THIS NETWORK", "HOME", "LEVEL") are small uppercase text with letter spacing in `onSurfaceVariant`.
+- Navigation: bottom bar with **Rooms**, **Places**, **Settings**.
+
+### 15.3 Screens
+
+#### M-01 Scan and sign in (4.2, 5.1)
+
+![M-01 Scan and sign in](mockups/png/M-01-sign-in.png)
+
+- Heading "Hello." and a short intro.
+- Section *On this network* with live scan indicator: HA servers found via mDNS/zeroconf (service `_home-assistant._tcp`), each with host name and `IP:port`; the selected server is marked with an accent bar and a check mark.
+- *Other address…* opens manual URL entry (4.2).
+- Username and password fields on the same screen, then *Sign in* (outlined, with arrow).
+- The same screen is used for *Add instance* (4.4).
+
+#### M-02 Places overview with create menu (6)
+
+![M-02 Places overview](mockups/png/M-02-places.png)
+
+- One list of all homes, levels and rooms; filter chips *All / Homes / Levels / Rooms* with counts.
+- Each row: type label, name, relation on the right ("2 levels", "Main house", "Ground floor"); rooms without a level show only their home (e.g. "Garden house"). The *Unlinked* chip of the mockup is not used (15.5).
+- Floating action button opens the create menu: *New home*, *New level*, *New room*.
+
+#### M-03 New level, linking up and down (6.1, 6.2)
+
+![M-03 New level](mockups/png/M-03-new-level.png)
+
+- Large name field.
+- *Belongs to home*: required single-select chips (Main house, Garden house); the None option of the mockup is not used (15.5).
+- *Rooms on this level*: checkbox list of existing rooms with their current link ("directly in Main house", "moves from First floor"); only rooms of the selected home are listed; *New room on …* creates a room directly.
+- Summary line above the button ("Saving creates Attic in Main house with 1 room."), then *Create level*.
+- The same pattern applies to *New home* (link levels and rooms) and *New room* (link level or home), see 15.5 item 1.
+
+#### M-04 Add entities to a room (7.1, 7.2)
+
+![M-04 Add entities](mockups/png/M-04-add-entities.png)
+
+- Header with room name; domain tabs *Switch / Sensor / Climate* with counts; filter field.
+- Rows: checkbox, local or HA name, live state on the right (ON/OFF, value).
+- Entities already in another room show "in Kitchen" as a hint but stay selectable (15.5 item 2).
+- Bottom button summarises the selection across tabs: "Add 2 switches · +1 sensor, +1 climate".
+
+#### M-05 Room grid with live states (7, 8)
+
+![M-05 Room grid](mockups/png/M-05-room-grid.png)
+
+- Breadcrumb *Home · Level* with dropdown to switch; room name as title; icons *Edit layout* and *Add entities*.
+- Room chips for quick switching between rooms of the level.
+- Grid with two columns and tile sizes 1×1, 2×1 and 2×2:
+  - Climate (2×2): name, heating indicator, target temperature on an arc, current temperature ("now 20.8°"), − and + buttons.
+  - Switch (1×1): icon, name, state, toggle; "on" tiles use `primaryContainer`.
+  - Sensor (1×1): icon, value with unit, name.
+- Tap on a tile toggles a switch; tap on the tile body of other types opens the detail screen (15.4).
+
+#### M-06 Edit layout: drag, rename, remove (7.2, 7.3)
+
+![M-06 Edit layout](mockups/png/M-06-edit-layout.png)
+
+- Edit mode title "Edit Living room" with *Done*; hint "Drag tiles to reorder. Tap a name to rename."
+- Every tile shows a drag handle, a remove badge (−) and a pencil next to the name; the dragged tile is lifted and the drop target shown hatched.
+- *Add entities* tile at the end of the grid.
+
+#### M-07 Arrange as list and rename dialog (7.2, 7.3)
+
+![M-07 Arrange and rename](mockups/png/M-07-arrange-rename.png)
+
+- Alternative list mode for reordering (*List / Grid preview*): each row with drag handle, name, tile size (1×1, 2×1, 2×2) and pencil.
+- Rename dialog: explanation "Only changes the name in this app. Home Assistant keeps *Floor lamp plug*.", text field with the local alias, `entity_id` below in mono font, actions *Use HA name* (clears the alias), *Cancel*, *Save*.
+
+#### M-08 Room grid with an entity removed in HA (7.4)
+
+![M-08 Entity removed in HA](mockups/png/M-08-entity-removed.png)
+
+- Warning banner above the grid: "1 entity no longer exists in Home Assistant" with *Review*.
+- Affected tile: dashed `outline` border, hatched background, name struck through, warning badge (!), text "Removed in HA · tap to remove"; no controls.
+- The notification bell in the header shows an unread dot.
+
+#### M-09 Notifications: entity changes in HA (9)
+
+![M-09 Notifications](mockups/png/M-09-notifications.png)
+
+- In-app list of sync results, grouped by day (*Today*, *Yesterday*), with *Mark all read*; unread items carry an accent dot.
+- Item types and actions:
+  - New entity shared: name and `entity_id`, *Add to room*, *Dismiss*.
+  - Entity removed in HA: explanation, *Remove tile*, *Keep*.
+  - Several new entities: combined item with *Review N entities*.
+
+### 15.4 Screens not yet designed
+
+Until mockups exist, Claude Code builds these with the tokens from 15.2 and standard Material 3 patterns.
+
+| Screen | Concept chapter |
+| --- | --- |
+| Instance switcher and *Add instance* | 4.4 |
+| Fingerprint prompt, unlock and lock screen | 5.4, 5.5 |
+| Settings (instances, fingerprint toggle, unlock window, lock timeout, logout, diagnostics) | 4.4, 5.4, 5.5, 9.3 |
+| Entity detail: switch, sensor, climate incl. history | 8 |
+| New home and new room forms | 6 |
+| Offline and error states | 14.1 |
+
+### 15.5 Decisions that override the mockups
+
+1. **A home is mandatory** (decided). The mockup notes allow unlinked levels and rooms and link a room to a home only via its level. Instead, every level and room belongs to a home, and a room links either to a level of that home or directly to the home (6.1). Consequences: no *Unlinked* chip in M-02, no *None* option for the home in M-03, and *New level* / *New room* require a home.
+2. **Entities in any number of rooms** (decided). The mockup notes say an entity sits in at most one room. Instead, an entity can be assigned to any number of rooms (7.2). In M-04, "in Kitchen" is only a hint; the row stays selectable.
+3. **New in the mockups, adopted in the concept**: LAN discovery (M-01), tile sizes and list arrange mode (M-05 to M-07), notification list (M-09). Their data and behaviour are defined in 4.2, 7.2, 9.1 and 12.
+
+### 15.6 App icon
+
+The launcher icon shows a house outline with a 2×2 tile grid in the accent colour `#4DFF7A` on the dark background `#161826`, matching the design tokens (15.2). It is delivered as a complete Android adaptive icon set.
+
+![App icon: circle, squircle and rounded masks, themed icon, Play Store icon](icons/app-icon-overview.png)
+
+*From left: circle, squircle and rounded launcher masks, themed (monochrome) icon on Android 13+, Play Store icon.*
+
+| File | Purpose | Sizes |
+| --- | --- | --- |
+| `res/mipmap-anydpi-v26/ic_launcher.xml`, `ic_launcher_round.xml` | Adaptive icon (Android 8+) with background, foreground and monochrome layer | – |
+| `res/mipmap-*/ic_launcher_foreground.png`, `_background.png`, `_monochrome.png` | Layers, 108 dp | 108–432 px (mdpi–xxxhdpi) |
+| `res/mipmap-*/ic_launcher.png`, `ic_launcher_round.png` | Legacy icons, 48 dp | 48–192 px (mdpi–xxxhdpi) |
+| `res/values/ic_launcher_background.xml` | Colour resource `ic_launcher_background` = `#161826` | – |
+| `docs/icons/playstore-icon-512.png` | Google Play store listing (14.4), no transparency | 512 × 512 px |
+
+- The `res/` files are placed in `app/src/main/res/` of `haac-android`; the manifest references `android:icon="@mipmap/ic_launcher"` and `android:roundIcon="@mipmap/ic_launcher_round"`.
+- The foreground stays inside the 66 dp safe zone, so no launcher mask cuts the motif.
+- The monochrome layer is used for themed icons on Android 13+; the launcher tints it with the wallpaper colours.
+- The icon is used unchanged for both the Play and the sideload flavor.
+
+## 16. Source code management (GitHub)
+
+The code lives in two repositories under the GitHub account **stacknoise**: one for the Android app, one for the HACS integration. They are versioned and released independently and stay compatible through the bridge `api_version` (11.4).
+
+### 16.1 Repositories
+
+| Repository | Content | Visibility | Release artefacts |
+| --- | --- | --- | --- |
+| [`stacknoise/haac-android`](https://github.com/stacknoise/haac-android) | Android app (Gradle project, modules as in 3.2), `docs/` with this concept and the mockups | Public (required for sideload downloads via GitHub Releases, 14.4) | Signed APK + SHA-256 on GitHub Releases; AAB to Google Play |
+| [`stacknoise/haac-bridge`](https://github.com/stacknoise/haac-bridge) | HA custom integration `custom_components/client_bridge`, `hacs.json` (10.1) | Public (HACS only installs from public GitHub repos) | Git tag + GitHub Release per version; HACS reads the releases |
+
+- The repository name `haac-bridge` follows the working title of the integration; if the integration gets a different final name (14.5), the repo is renamed before the first release. GitHub redirects the old URL.
+- Default branch in both: `main`.
+
+### 16.2 License
+
+Both repositories are licensed under the **Apache License 2.0**: anyone may use, modify, fork and redistribute the code, also commercially, and the software is provided "as is" without warranty or liability.
+
+- Each repository contains the unmodified license text as `LICENSE` and a `NOTICE` file: `Copyright 2026 Anton Graichen-Hartl (stacknoise.com)`.
+- Source files get no individual license headers; the `LICENSE` file at the root applies to the whole repository.
+- The license grants no trademark rights: forks must not present themselves as "HA Android Client" or "HAAC".
+- The README of both repositories states that the project is not affiliated with or endorsed by Home Assistant, the Open Home Foundation or Nabu Casa.
+- The app shows its own license and the licenses of all bundled libraries in *Settings → About → Open-source licenses*, generated at build time (e.g. with the AboutLibraries Gradle plugin), as Apache-2.0 and the libraries' licenses require.
+- Dependencies must use licenses compatible with Apache-2.0 (Apache-2.0, MIT, BSD); GPL-licensed libraries are not used.
+- The license does not remove statutory liability that cannot be excluded (under Austrian law, intent and gross negligence); an additional liability notice belongs in the app's terms and privacy policy (14.4).
+
+### 16.3 Repository layout
+
+```text
+haac-android/
+├── CLAUDE.md                # entry point for Claude Code
+├── README.md
+├── LICENSE                  # Apache-2.0
+├── NOTICE
+├── SECURITY.md
+├── docs/
+│   ├── concept.md           # export of this document (leading copy)
+│   ├── icons/               # playstore-icon-512.png, preview/ (15.6)
+│   └── mockups/             # haac-mockups-1c.html, png/M-0x-*.png
+├── app/  core/  feature/    # Gradle modules (3.2); launcher icons in app/src/main/res/
+├── gradle/libs.versions.toml
+└── .github/
+    ├── workflows/           # ci.yml, release.yml
+    ├── ISSUE_TEMPLATE/
+    └── dependabot.yml
+
+haac-bridge/
+├── CLAUDE.md
+├── README.md                # installation via HACS, YAML example (10.2)
+├── LICENSE                  # Apache-2.0
+├── NOTICE
+├── SECURITY.md
+├── hacs.json
+├── docs/concept.md          # copy of the concept, updated together with haac-android
+├── custom_components/client_bridge/
+├── tests/                   # pytest-homeassistant-custom-component
+└── .github/
+    ├── workflows/           # validate.yml, tests.yml, release.yml
+    └── dependabot.yml
+```
+
+- `docs/concept.md` in `haac-android` is the leading copy. Every change to this document is exported and committed to both repositories in the same step, so Claude Code in either repo sees the same specification.
+- Each repository has its own `CLAUDE.md` that points to the chapters relevant for that repo (app: 3–9, 11–15; integration: 10, 11, 13).
+
+### 16.4 Branches, commits and versions
+
+- `main` is protected: changes only via pull request, CI must be green, no force pushes.
+- Feature branches `feat/<topic>`, fixes `fix/<topic>`; commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`).
+- Semantic versioning with tags `vMAJOR.MINOR.PATCH`, independently per repo. The app's `versionName` equals the tag; `versionCode` is derived from it.
+- A breaking change of the WebSocket API raises the bridge `api_version` and the major version of `haac-bridge`; the app declares the supported range (11.4).
+
+### 16.5 CI/CD with GitHub Actions
+
+| Workflow | Repo | Trigger | Steps |
+| --- | --- | --- | --- |
+| `ci.yml` | haac-android | Pull request, push to `main` | Build both flavors, Android Lint, Detekt, unit tests, Room migration tests |
+| `release.yml` | haac-android | Tag `v*` | Signed AAB to Google Play internal track; signed universal APK + SHA-256 to GitHub Release |
+| `validate.yml` | haac-bridge | Pull request, push, nightly | `hassfest` action, HACS validation action (`hacs/action`) |
+| `tests.yml` | haac-bridge | Pull request, push | `pytest` with `pytest-homeassistant-custom-component`, `ruff`, `bandit` |
+| `release.yml` | haac-bridge | Tag `v*` | Check that `manifest.json` version equals the tag, create GitHub Release with notes |
+
+### 16.6 Secrets and repository security
+
+- Signing keystore (base64), keystore and key passwords and the Google Play service account JSON are stored only as GitHub Actions secrets in an environment `release` with a required reviewer; never in the repository.
+- Enabled in both repos: secret scanning with push protection, Dependabot alerts and version updates, CodeQL analysis (Kotlin, Python).
+- `SECURITY.md` names a private reporting channel (GitHub private vulnerability reporting).
+
+### 16.7 Initial setup
+
+```bash
+gh repo create stacknoise/haac-android --public \
+  --description "HA Android Client (HAAC) – Android client for Home Assistant"
+gh repo create stacknoise/haac-bridge --public \
+  --description "Client Bridge – HACS integration for the HA Android Client"
+```
+
+1. Create both repositories with the commands above (GitHub CLI, logged in as the stacknoise account).
+2. Commit the content of the handoff packages: `haac-android.zip` (`CLAUDE.md`, `LICENSE`, `NOTICE`, `docs/` with concept and mockups) into `haac-android`; `haac-bridge.zip` (`CLAUDE.md`, `LICENSE`, `NOTICE`, `docs/concept.md`) into `haac-bridge`.
+3. Set branch protection for `main`, enable the security features from 16.6, create the environment `release` with its secrets.
+4. Add repository topics: `home-assistant`, `android` (app); `home-assistant`, `hacs`, `hacs-integration` (bridge).
