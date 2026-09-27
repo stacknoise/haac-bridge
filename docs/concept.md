@@ -91,6 +91,12 @@ The app follows Google's recommended layered architecture (UI → domain → dat
 | `:feature:layout` | Homes, floors, rooms editor |
 | `:feature:entities` | Entity picker, room view, entity detail/control screens |
 | `:feature:settings` | Instances (add, switch, edit, remove), account, security (fingerprint unlock on/off), logout, diagnostics |
+| :core:common | Shared helpers used by several topics (17.1, 17.6) |
+| :core:error | ErrorCode, HaacException hierarchy, ErrorFactory, ErrorReporter (17.3) |
+| :feature:instance | Instance list, switching, add and remove instances (4.4) |
+| :feature:notifications | Notification list with entity changes and errors (9, 17.4) |
+
+Package names, the factory pattern, error codes and the code index follow chapter 17.
 
 ### 3.3 Technology stack
 
@@ -423,6 +429,8 @@ On every start and on every instance switch (after unlock) the app compares the 
 
 **Notification list (M-09).** Every sync result is also written as an entry to a local notification list: *entity added* (actions *Add to room*, *Dismiss*), *entity removed* (actions *Remove tile*, *Keep*) and combined entries for several entities of one sync. Entries are per instance, grouped by day, marked read individually or all at once, and purged after 30 days. The bell icon in the room header shows an unread dot. These are in-app notifications only; Android system notifications are not used in v1.
 
+Errors appear in the same list, each with its error code (17.4).
+
 ### 9.2 Changes while the app is running
 
 - The bridge sends an `exposure_changed` event on the subscription when the admin reloads the integration after editing `configuration.yaml`. The app then runs steps 2–4 again without restart.
@@ -576,7 +584,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 | `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `deviceClass?`, `unit?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState` (JSON) | Cache of bridge data |
 | `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (1x1/2x1/2x2), `addedAt` | Assignment; cascade on room delete |
 | `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name |
-| `notification` | `id`, `serverId` → server, `type` (added/removed), `entityIds` (JSON), `createdAt`, `readAt?`, `resolvedAt?` | Sync results for M-09; purged after 30 days |
+| notification | id, serverId → server, type (added/removed/error), errorCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results for M-09; purged after 30 days |
 
 - Schema migrations are versioned and tested with Room's `MigrationTestHelper`; destructive migration is never enabled.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
@@ -633,6 +641,8 @@ Mitigations:
 | Service call rejected (`not_allowed`) | Error snackbar, state rolled back, triggers a revision check |
 | Entity `unavailable` | Tile greyed out, controls disabled, last value shown with timestamp |
 | Entity deleted in HA or no longer shared | Warning icon on the tile, entity inactive and not assignable; stays in its rooms until the user removes it (7.4) |
+
+Every error in this table is raised as a `HaacException` with an error code from 17.3 and appears in the notification list (17.4).
 
 ### 14.2 Testing
 
@@ -788,6 +798,8 @@ These values were read from the rendered mockups and are the basis of the Compos
   - Entity removed in HA: explanation, *Remove tile*, *Keep*.
   - Several new entities: combined item with *Review N entities*.
 
+Error entries (warning icon, message, error code, action) are not yet in the mockup; they follow 17.4 until a mockup exists.
+
 ### 15.4 Screens not yet designed
 
 Until mockups exist, Claude Code builds these with the tokens from 15.2 and standard Material 3 patterns.
@@ -865,6 +877,8 @@ haac-android/
 ├── SECURITY.md
 ├── docs/
 │   ├── concept.md           # export of this document (leading copy)
+│   ├── code-index.md        # generated: all classes and functions (17.5)
+│   ├── error-codes.md       # generated: all error codes (17.3)
 │   ├── icons/               # playstore-icon-512.png, preview/ (15.6)
 │   └── mockups/             # haac-mockups-1c.html, png/M-0x-*.png
 ├── app/  core/  feature/    # Gradle modules (3.2); launcher icons in app/src/main/res/
@@ -903,7 +917,7 @@ haac-bridge/
 
 | Workflow | Repo | Trigger | Steps |
 | --- | --- | --- | --- |
-| `ci.yml` | haac-android | Pull request, push to `main` | Build both flavors, Android Lint, Detekt, unit tests, Room migration tests |
+| `ci.yml` | haac-android | Pull request, push to `main` | Build both flavors, Android Lint, Detekt, copy-paste detection (CPD), codeIndexCheck, unit tests, Room migration tests |
 | `release.yml` | haac-android | Tag `v*` | Signed AAB to Google Play internal track; signed universal APK + SHA-256 to GitHub Release |
 | `validate.yml` | haac-bridge | Pull request, push, nightly | `hassfest` action, HACS validation action (`hacs/action`) |
 | `tests.yml` | haac-bridge | Pull request, push | `pytest` with `pytest-homeassistant-custom-component`, `ruff`, `bandit` |
@@ -938,3 +952,128 @@ Login does not depend on stacknoise.com: HA never contacts the site, because `cl
 | `https://stacknoise.com/haac/` | `client_id`, the app's identity towards HA; recommended as a short landing page (name, icon, links to both repositories) | Nothing technically; the URL only has to stay stable, because existing refresh tokens are bound to it |
 | `https://stacknoise.com/haac/privacy` | Privacy policy | Google Play store listing and Data safety form (14.4) |
 | `https://stacknoise.com/.well-known/assetlinks.json` | Verifies the App Link so that `https://stacknoise.com/haac/auth-callback` opens the app; contains the SHA-256 fingerprint of the app signing certificate | Browser login fallback only (5.1) |
+
+## 17. Development guidelines (Android app)
+
+These rules apply to all code in `haac-android` and are binding for people and coding agents alike. They keep the code organised by topic, make every error traceable by a code, and prevent the same logic from existing twice.
+
+### 17.1 Packages by topic
+
+The root package and application ID is `com.stacknoise.haac`. Packages are organised by topic first and by layer second, so everything that belongs to one topic sits together.
+
+```text
+com.stacknoise.haac
+├── app                      # Application, MainActivity, navigation graph
+├── core
+│   ├── common               # shared helpers, dispatchers, time, result types
+│   ├── error                # ErrorCode, HaacException hierarchy, ErrorFactory, ErrorReporter (17.3)
+│   ├── security             # keystore, crypto, biometric
+│   ├── network              # http, websocket, auth, bridge
+│   └── database             # Room database, DAOs, entities
+└── feature
+    ├── onboarding           # server entry, LAN discovery, login
+    ├── instance             # instances, switching
+    ├── layout               # homes, floors, rooms
+    ├── entities             # picker, room grid, controls (switch, sensor, climate), sync
+    ├── notifications        # notification list incl. errors (M-09)
+    └── settings             # settings, about, licenses
+```
+
+- Inside a topic the sub-packages are always `ui`, `domain`, `data` and `di`, e.g. `com.stacknoise.haac.feature.layout.domain`.
+- A class lives in exactly one topic. Code used by several topics moves to `core.common` (or the matching `core.*` package), never into another feature.
+- Features never depend on each other directly; they talk through interfaces in `core.*`.
+- The Gradle modules from 3.2 follow the same topics (`:core:error`, `:feature:notifications`, …).
+
+### 17.2 Factory pattern
+
+Whenever the kind of object depends on a type or on runtime data, it is created by a factory. Object wiring stays with Hilt; factories are interfaces with a Hilt-provided implementation, so they can be replaced in tests.
+
+| Factory | Creates | Why |
+| --- | --- | --- |
+| `EntityControlFactory` | Control model and UI spec per entity domain (switch, sensor, climate) | New domains (v1.2) are added in one place instead of `when (domain)` checks across the app |
+| `TileFactory` | Tile spec with default size per domain (7.2) | Tile rules in one place |
+| `ServiceCallFactory` | Typed `haac_bridge/call_service` requests, checked against `supported_features` | Only valid service calls leave the app (8) |
+| `BridgeMessageFactory` | WebSocket commands with message IDs | Message format and ID sequence in one place (11) |
+| `KeyFactory` / `CipherFactory` | Keystore keys (plain, biometric, unlock window) and ciphers | Key parameters from 5.3 and 5.4 in one place |
+| `InstanceSessionFactory` | Per-instance session: HTTP client, WebSocket, token store for one `serverId` | Strict instance isolation (4.4) |
+| `ErrorFactory` | `HaacException` from any caught `Throwable` | Error mapping in one place (17.3) |
+| ViewModel factories (`@AssistedFactory`) | ViewModels with runtime parameters (`roomId`, `entityId`) | Hilt standard for runtime arguments |
+
+- Outside a factory, no code branches on the entity domain or key type to construct objects.
+- New factories are added to this table and to the code index (17.5).
+
+### 17.3 Custom exceptions and error codes
+
+Every error the app throws or catches is turned into a `HaacException` that carries a unique error code. All error codes are defined in one file, `core/error/ErrorCode.kt`.
+
+```kotlin
+enum class ErrorCode(
+    val code: String,          // e.g. "HAAC-NET-001", never reused or renumbered
+    @StringRes val message: Int, // simple user text in strings.xml
+    val action: ErrorAction,   // RETRY, SIGN_IN, OPEN_SETTINGS, NONE
+    val description: String,   // one-line technical description for troubleshooting
+)
+```
+
+- **Code format** `HAAC-<AREA>-<NNN>`. Areas: `NET` network, `AUTH` login and tokens, `SEC` keystore and biometrics, `BRG` HAAC Bridge, `SYNC` synchronisation, `DB` local database, `LAY` homes/floors/rooms, `ENT` entities and controls, `INST` instances, `DISC` LAN discovery, `APP` unexpected errors.
+- **Exception hierarchy**: sealed class `HaacException(code, cause)` with one subclass per area, e.g. `NetworkException`, `AuthException`, `KeystoreException`, `BridgeException`, `SyncException`, `StorageException`, `ValidationException`, `UnexpectedException` (`HAAC-APP-000`).
+- **Catching**: low-level exceptions (`IOException`, `SSLException`, `SerializationException`, `SQLiteException`, `KeyPermanentlyInvalidatedException`, bridge error replies such as `not_allowed`) are caught at the data-layer boundary and converted with `ErrorFactory`. Code above the data layer only sees `HaacException`.
+- **Throwing**: app code never throws plain `Exception`, `IllegalStateException` or similar; it throws the matching `HaacException` with its code.
+- `CancellationException` is never caught or wrapped; coroutine cancellation must pass through.
+- Nothing is swallowed silently: every caught exception is either handled by the UI or passed to `ErrorReporter`.
+- **Texts**: the user message is short, plain language without technical terms, and says what happened and what to do ("The server is not reachable. Check your Wi-Fi and try again."). Technical details (exception class, HTTP status) go only to the log and the description, never into the user text. Neither contains passwords, tokens or full URLs with query parameters.
+- A unit test checks that codes are unique, match the format and each has a string resource.
+
+**Initial error codes** (the authoritative list is `ErrorCode.kt`):
+
+| Code | User message | Action |
+| --- | --- | --- |
+| HAAC-NET-001 | The server is not reachable. Check your connection and try again. | Retry |
+| HAAC-NET-002 | The connection to the server was lost. Reconnecting… | None |
+| HAAC-NET-003 | The server's certificate has changed. For your safety the connection was blocked. | Open settings |
+| HAAC-AUTH-001 | Username or password is wrong. | None |
+| HAAC-AUTH-002 | The verification code is wrong. | None |
+| HAAC-AUTH-003 | Your sign-in has expired. Please sign in again. | Sign in |
+| HAAC-SEC-001 | Your fingerprints have changed. Please sign in with your password. | Sign in |
+| HAAC-SEC-002 | Secure storage on this device is not available. | None |
+| HAAC-BRG-001 | HAAC Bridge is not installed on this server. | Open settings |
+| HAAC-BRG-002 | HAAC Bridge on the server needs an update. | None |
+| HAAC-BRG-003 | You are not allowed to control this device. | None |
+| HAAC-ENT-001 | This device no longer exists in Home Assistant. | None |
+| HAAC-DB-001 | Your changes could not be saved. Please try again. | Retry |
+| HAAC-APP-000 | Something went wrong. | None |
+
+### 17.4 Errors in the notification list
+
+Every error passed to `ErrorReporter` appears as an entry in the in-app notification list (M-09), next to the entity change entries.
+
+- An error entry shows a warning icon in the M3 `error` colour, the user message, the error code in the mono font (e.g. `HAAC-NET-001`), the time, and one action button from `ErrorCode.action` (*Try again*, *Sign in*, *Open settings*) plus *Dismiss*.
+- Tapping the entry opens a detail sheet with code, time, instance and the technical description; *Copy details* copies them for support requests.
+- The same code within 10 minutes is grouped into one entry with a counter instead of new entries.
+- Errors belong to the active instance (`serverId`); errors without an instance (e.g. during onboarding) are global entries.
+- Errors that block the current screen are additionally shown there (field error, dialog or snackbar), always with the code.
+- Uncaught exceptions are recorded as `HAAC-APP-000` and shown as an entry after the next app start.
+
+### 17.5 Code index against duplicate functions
+
+The file `docs/code-index.md` lists every class and every function of the app with its signature, file and a one-line description. Coding agents read it before writing code, so that existing functions are reused instead of written again.
+
+- Every class and every function, including private ones, has a one-line KDoc summary.
+- The index is generated from the sources with the Gradle task `./gradlew codeIndex`, grouped by package. It is never edited by hand.
+- CI runs `./gradlew codeIndexCheck` and fails if the committed index is out of date or a KDoc summary is missing.
+- `docs/error-codes.md` is generated from `ErrorCode.kt` in the same task, so the error codes can be looked up without opening the code.
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `ServerUrlNormalizer.normalize` | `fun normalize(input: String): String` | `feature/onboarding/domain/ServerUrlNormalizer.kt` | Adds https, removes paths and trailing slashes (4.2) |
+
+*Example row of `docs/code-index.md`.*
+
+### 17.6 No duplicate code
+
+Every task exists exactly once in the app. Code needed in more than one place is moved to its own function or class.
+
+1. Before implementing, search `docs/code-index.md` for an existing function with the same purpose and reuse or extend it.
+2. Code needed in a second place is extracted into its own function at that moment, in the topic package or in `core.common` if several topics use it.
+3. CI runs a copy-paste detector (PMD CPD for Kotlin, build tool only) and fails from 100 duplicated tokens; Detekt rules for complexity and undocumented public API are active.
+4. Pull requests that add a function must update the code index in the same commit (enforced by 17.5).
