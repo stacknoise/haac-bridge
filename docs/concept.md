@@ -6,7 +6,7 @@ Status: 2026-09-27 · Author: Anton Graichen-Hartl
 
 The solution consists of a native Android app and a companion Home Assistant (HA) custom integration distributed via HACS. Together they let a HA user organise selected entities into their own homes, floors and rooms on the phone and control them with the same functionality HA offers.
 
-Product name of the app: **HA Android Client**, short form **HAAC**. The companion integration keeps the working title **"Client Bridge"** (domain `client_bridge`) until its final name is set (14.5).
+Product name of the app: **HA Android Client**, short form **HAAC**. The companion Home Assistant integration is **HAAC Bridge** (integration domain `haac_bridge`, repository `stacknoise/haac-bridge`).
 
 ### 1.1 Goals
 
@@ -31,13 +31,13 @@ Product name of the app: **HA Android Client**, short form **HAAC**. The compani
 
 ### 1.3 Assumptions
 
-- HA Core is a current release (2026.x); the integration targets the latest stable HA Python version.
+- HA Core 2026.9.0 or newer; this is the minimum version of HAAC Bridge, declared in hacs.json and manifest.json; the integration targets the latest stable HA Python version.
 - The HA instance is reachable from the phone via LAN, VPN, reverse proxy or Nabu Casa remote URL.
 - One app installation can hold several HA instances, each bound to exactly one HA user; exactly one instance is active at a time.
 
 ## 2. System overview
 
-Three components work together: the Android app, the Client Bridge integration running inside HA, and HA Core itself. The app talks to HA over HTTPS (authentication, token refresh) and a single persistent WebSocket connection (entity data, state updates, service calls).
+Three components work together: the Android app, the HAAC Bridge integration running inside HA, and HA Core itself. The app talks to HA over HTTPS (authentication, token refresh) and a single persistent WebSocket connection (entity data, state updates, service calls).
 
 ```mermaid
 flowchart LR
@@ -52,11 +52,11 @@ flowchart LR
   subgraph HA[Home Assistant]
     AUTH[Auth API /auth/*]
     CORE[WebSocket API /api/websocket]
-    BR[Client Bridge integration]
+    BR[HAAC Bridge integration]
     YAML[configuration.yaml]
   end
   HTTP -- login flow, tokens --> AUTH
-  WS -- client_bridge/* commands --> BR
+  WS -- haac_bridge/* commands --> BR
   BR -- filtered states, service calls --> CORE
   YAML -- per-user exposure --> BR
 ```
@@ -64,7 +64,7 @@ flowchart LR
 | Component | Responsibility | Technology |
 | --- | --- | --- |
 | Android app | UI, local layout (homes/floors/rooms), aliases, secure token storage, biometric unlock, sync | Kotlin, Jetpack Compose, Room, Android Keystore |
-| Client Bridge (HACS) | Reads per-user exposure from YAML, resolves the calling HA user, returns only exposed entities, pushes filtered state changes, validates service calls | Python custom integration (`custom_components/client_bridge`) |
+| HAAC Bridge (HACS) | Reads per-user exposure from YAML, resolves the calling HA user, returns only exposed entities, pushes filtered state changes, validates service calls | Python custom integration (`custom_components/haac_bridge`) |
 | HA Core | User accounts, authentication, tokens, entity states, services, history | Stock Home Assistant |
 
 The layout (homes, floors, rooms, room assignments, aliases) lives only on the device. HA is the single source of truth for entity states and for which entities a user may see.
@@ -129,7 +129,7 @@ On first start – or whenever no server is bound – the app shows the server s
 1. User enters a URL, e.g. `https://ha.example.com` or `http://192.168.1.10:8123`.
 2. The app normalises it: adds `https://` if no scheme is given, removes trailing slashes and paths such as `/lovelace`.
 3. Validation request `GET <url>/auth/providers`: a JSON list of auth providers confirms a HA instance and tells the app whether the `homeassistant` (username/password) provider is enabled.
-4. Check that the Client Bridge integration is installed: after login, the WebSocket command `client_bridge/info` must succeed (see chapter 11). If not, show an install hint with the HACS repository link.
+4. Check that the HAAC Bridge integration is installed: after login, the WebSocket command `haac_bridge/info` must succeed (see chapter 11). If not, show an install hint with the HACS repository link.
 5. The URL is persisted in DataStore (not sensitive, not encrypted).
 
 ### 4.3 Transport security
@@ -211,8 +211,8 @@ sequenceDiagram
   H-->>A: access_token (30 min), refresh_token
 ```
 
-- **client\_id**: HA requires a URL. The app uses a URL under the publisher's domain (e.g. `https://stacknoise.com/haac/`). That page declares the app's redirect URI (`haac://auth-callback`) with `<link rel="redirect_uri" href="haac://auth-callback">`, which HA checks for non-matching redirect URIs.
-- **Fallback**: if the server has no `homeassistant` provider (e.g. only trusted networks or command-line auth), the app opens `/auth/authorize` in a Chrome Custom Tab with PKCE and receives the code via the redirect URI.
+- **client\_id and redirect\_uri**: HA requires the `client_id` to be a URL. The app uses `client_id` = `https://stacknoise.com/haac/` and `redirect_uri` = `https://stacknoise.com/haac/auth-callback`. Because both share scheme and host, HA accepts the redirect URI without fetching anything from stacknoise.com, so login also works for HA instances without internet access. In the native flow the redirect is never opened; the app reads the authorization code from the flow result. HA shows the `client_id` as the app's identity in the login dialog and in the user's list of refresh tokens (16.8).
+- **Fallback**: if the server has no `homeassistant` provider (e.g. only trusted networks or command-line auth), the app opens `/auth/authorize` in a Chrome Custom Tab. HA then redirects to `https://stacknoise.com/haac/auth-callback`, which Android hands to the app as a verified App Link; this requires `https://stacknoise.com/.well-known/assetlinks.json` (16.8).
 - The password lives only in a `CharArray` for the duration of the request and is overwritten afterwards; it is never logged, persisted, put in a `String` constant or sent anywhere except to the configured HA server over TLS.
 - HTTP logging is disabled for all `/auth/*` requests, also in debug builds.
 
@@ -307,16 +307,16 @@ erDiagram
 
 ### 6.3 Optional import from HA
 
-HA itself has floors and areas. As a convenience, the setup wizard can offer to pre-fill floors and rooms from HA's floor/area registry, if the Client Bridge exposes it. The result is an ordinary local structure that the user can then edit freely; there is no ongoing sync back to HA.
+HA itself has floors and areas. As a convenience, the setup wizard can offer to pre-fill floors and rooms from HA's floor/area registry, if the HAAC Bridge exposes it. The result is an ordinary local structure that the user can then edit freely; there is no ongoing sync back to HA.
 
 ## 7. Entity management
 
-The app only ever sees entities that the Client Bridge exposes to the logged-in HA user; the user picks from these, places them in rooms and can name them locally.
+The app only ever sees entities that the HAAC Bridge exposes to the logged-in HA user; the user picks from these, places them in rooms and can name them locally.
 
 ### 7.1 Loading entities
 
 - After the home structure exists, the user opens *Add entities* in a room or in the global entity list.
-- The app calls `client_bridge/entities/list` (chapter 11) and receives, per exposed entity: `entity_id`, domain, HA friendly name, device class, unit, icon, supported features, HA area name and the current state with attributes.
+- The app calls `haac_bridge/entities/list` (chapter 11) and receives, per exposed entity: `entity_id`, domain, HA friendly name, device class, unit, icon, supported features, HA area name and the current state with attributes.
 - The picker groups entities by domain (Switches, Sensors, Climate) and optionally by HA area, with search by name or `entity_id`.
 - Entities already assigned to the current room are marked; unassigned entities are highlighted.
 
@@ -412,13 +412,13 @@ On every start and on every instance switch (after unlock) the app compares the 
 ### 9.1 Sequence
 
 1. Unlock → obtain access token → open WebSocket → `auth` message.
-2. `client_bridge/exposure/revision` → returns `revision` (SHA-256 over the sorted list of exposed `entity_id`s for this user).
+2. `haac_bridge/exposure/revision` → returns `revision` (SHA-256 over the sorted list of exposed `entity_id`s for this user).
 3. If `revision` equals the stored value: no changes, go to 5.
-4. Otherwise `client_bridge/entities/list` → full list; the app computes the diff:
+4. Otherwise `haac_bridge/entities/list` → full list; the app computes the diff:
    - **Added**: exposed now, not in cache → stored in cache, badge "N new entities" on the home view and a list in the picker.
    - **Removed**: in cache, not exposed any more → cache entry and its room assignments set to *withdrawn* (see 7.4); notice "N entities are no longer shared".
    - **Changed metadata** (friendly name, unit, supported features) → cache updated silently.
-5. `client_bridge/subscribe_entities` → live states for all exposed entities.
+5. `haac_bridge/subscribe_entities` → live states for all exposed entities.
 6. Store new `revision` and timestamp.
 
 **Notification list (M-09).** Every sync result is also written as an entry to a local notification list: *entity added* (actions *Add to room*, *Dismiss*), *entity removed* (actions *Remove tile*, *Keep*) and combined entries for several entities of one sync. Entries are per instance, grouped by day, marked read individually or all at once, and purged after 30 days. The bell icon in the room header shows an unread dot. These are in-app notifications only; Android system notifications are not used in v1.
@@ -436,9 +436,9 @@ On every start and on every instance switch (after unlock) the app compares the 
 
 The sync always covers only the active instance. Inactive instances are synced when they become active, so changes made in their `configuration.yaml` in the meantime are reported at the first switch.
 
-## 10. HACS integration "Client Bridge"
+## 10. HACS integration "HAAC Bridge"
 
-The Client Bridge is a Python custom integration that exposes a filtered, per-user view of HA entities over dedicated WebSocket commands. Exposure is configured in `configuration.yaml` with the same filter syntax as HA's HomeKit Bridge (`include_domains`, `include_entities`, globs, excludes), but per HA user.
+The HAAC Bridge is a Python custom integration that exposes a filtered, per-user view of HA entities over dedicated WebSocket commands. Exposure is configured in `configuration.yaml` with the same filter syntax as HA's HomeKit Bridge (`include_domains`, `include_entities`, globs, excludes), but per HA user.
 
 ### 10.1 Repository structure
 
@@ -447,24 +447,24 @@ haac-bridge/                 # GitHub repo stacknoise/haac-bridge (chapter 16)
 ├── hacs.json
 ├── README.md
 └── custom_components/
-    └── client_bridge/
+    └── haac_bridge/
         ├── __init__.py        # async_setup, config schema, reload service
         ├── manifest.json      # domain, version, dependencies: websocket_api, recorder
         ├── const.py
         ├── exposure.py        # per-user EntityFilter, revision hash
-        ├── websocket.py       # client_bridge/* commands
+        ├── websocket.py       # haac_bridge/* commands
         ├── history.py         # filtered history / statistics
-        └── services.yaml      # client_bridge.reload
+        └── services.yaml      # haac_bridge.reload
 ```
 
 - `manifest.json`: `"config_flow": false`, `"iot_class": "local_push"`, `"dependencies": ["websocket_api", "recorder", "history"]`, semantic `version`.
-- `hacs.json`: name, minimum HA version; published as a custom repository (later optionally in the HACS default list).
+- `hacs.json`: name "HAAC Bridge", minimum HA version "homeassistant": "2026.9.0"; published as a custom repository (later optionally in the HACS default list).
 - Releases via GitHub tags; CI runs `hassfest` and the HACS validation action.
 
 ### 10.2 Configuration in configuration.yaml
 
 ```yaml
-client_bridge:
+haac_bridge:
   users:
     - username: anton                # HA login name, or user_id: <uuid>
       filter:
@@ -493,7 +493,7 @@ client_bridge:
 - Filters are built with HA's own `entityfilter` helper, so evaluation order is identical to the HomeKit Bridge (explicit exclude beats include).
 - Independently of the filter, only the v1 domains `switch`, `sensor`, `climate` are ever returned.
 - **Deny by default**: a HA user not listed under `users` gets an empty list. Unknown usernames are logged as a warning at startup.
-- Changing the YAML takes effect after the service `client_bridge.reload` (or a HA restart); reload recomputes all revisions and emits `exposure_changed` to connected apps.
+- Changing the YAML takes effect after the service `haac_bridge.reload` (or a HA restart); reload recomputes all revisions and emits `exposure_changed` to connected apps.
 
 ### 10.3 Runtime behaviour
 
@@ -505,7 +505,7 @@ client_bridge:
 
 ## 11. Communication protocol and API specification
 
-All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/api/websocket` using custom commands prefixed `client_bridge/`; only authentication uses HTTPS REST endpoints.
+All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/api/websocket` using custom commands prefixed `haac_bridge/`; only authentication uses HTTPS REST endpoints.
 
 ### 11.1 HTTPS endpoints (HA Core)
 
@@ -516,23 +516,23 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `POST /auth/token` | Code → tokens; refresh token → new access token |
 | `POST /auth/revoke` | Revoke refresh token on logout |
 
-### 11.2 WebSocket commands (Client Bridge)
+### 11.2 WebSocket commands (HAAC Bridge)
 
 | Command | Request fields | Response |
 | --- | --- | --- |
-| `client_bridge/info` | – | Bridge version, API version, supported domains, HA version |
-| `client_bridge/exposure/revision` | – | `revision` (hash), entity count |
-| `client_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
-| `client_bridge/subscribe_entities` | – | Initial states, then compressed state diffs and `exposure_changed` events |
-| `client_bridge/call_service` | `entity_id`, `service`, `service_data` | Success or error `not_allowed` / `invalid_service` / HA error |
-| `client_bridge/history` | `entity_ids[]`, `start`, `end`, `minimal_response` | State history per entity |
-| `client_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
-| `client_bridge/areas` (optional) | – | HA floors and areas of exposed entities for the import wizard |
+| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version |
+| `haac_bridge/exposure/revision` | – | `revision` (hash), entity count |
+| `haac_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
+| `haac_bridge/subscribe_entities` | – | Initial states, then compressed state diffs and `exposure_changed` events |
+| `haac_bridge/call_service` | `entity_id`, `service`, `service_data` | Success or error `not_allowed` / `invalid_service` / HA error |
+| `haac_bridge/history` | `entity_ids[]`, `start`, `end`, `minimal_response` | State history per entity |
+| `haac_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
+| `haac_bridge/areas` (optional) | – | HA floors and areas of exposed entities for the import wizard |
 
 ### 11.3 Message examples
 
 ```json
-{"id": 12, "type": "client_bridge/entities/list"}
+{"id": 12, "type": "haac_bridge/entities/list"}
 
 {"id": 12, "type": "result", "success": true, "result": {
   "revision": "9f2c…e41a",
@@ -551,14 +551,14 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
   }]
 }}
 
-{"id": 13, "type": "client_bridge/call_service",
+{"id": 13, "type": "haac_bridge/call_service",
  "entity_id": "climate.living_room", "service": "set_temperature",
  "service_data": {"temperature": 22.5}}
 ```
 
 ### 11.4 Versioning and robustness
 
-- `client_bridge/info` returns an integer `api_version`. The app declares the range it supports and shows an "update the integration" hint on mismatch.
+- `haac_bridge/info` returns an integer `api_version`. The app declares the range it supports and shows an "update the integration" hint on mismatch.
 - One WebSocket per app session; heartbeat via HA's `ping`/`pong` every 30 s; reconnect with exponential back-off (1 s → 60 s, with jitter).
 - After reconnect: re-auth, revision check, re-subscribe – the same steps as the start sync.
 - The app never sends `service_data` containing `entity_id`; the bridge sets the target itself so a manipulated payload cannot address other entities.
@@ -590,7 +590,7 @@ Secrets are limited to one encrypted refresh token in hardware-backed storage; t
 
 ### 13.1 Important limitation: exposure is not a HA permission
 
-HA Core has no per-entity permissions for normal users: any valid access token of a user can read all states and call all services through HA's standard APIs. The Client Bridge enforces the exposure for everything that goes through `client_bridge/*`, and the app uses only those commands. A person who extracts the token and uses HA's core API directly would bypass the filter.
+HA Core has no per-entity permissions for normal users: any valid access token of a user can read all states and call all services through HA's standard APIs. The HAAC Bridge enforces the exposure for everything that goes through `haac_bridge/*`, and the app uses only those commands. A person who extracts the token and uses HA's core API directly would bypass the filter.
 
 Mitigations:
 
@@ -661,17 +661,13 @@ HAAC is distributed via Google Play and as a sideload APK. Both channels use the
 
 - **Signing**: when enrolling in Play App Signing, the existing app signing key is exported and uploaded instead of letting Google generate one. The key stays in a secured vault so the sideload flavor can be signed with it.
 - **Developer verification**: Google requires apps on certified Android devices to come from verified developers, sideloaded apps included. Enforcement starts on 30 September 2026 in Brazil, Indonesia, Singapore and Thailand and is planned globally for 2027 ([Google](https://support.google.com/android-developer-console/answer/16561738?hl=en), [Android Authority](https://www.androidauthority.com/android-sideloading-changes-timeline-3679204/)). The developer account and the package name with its signing key must be registered before the first sideload release.
-- **Play requirements**: current target API level, Data safety form (the developer collects no data; all data flows only between the device and the user's own HA instances), privacy policy URL.
+- **Play requirements**: current target API level, Data safety form (the developer collects no data; all data flows only between the device and the user's own HA instances), privacy policy URL https://stacknoise.com/haac/privacy (16.8).
 - **Release process**: CI builds both flavors from the same Git tag with the same `versionCode`.
-- The Client Bridge integration is distributed separately via HACS (chapter 10).
+- The HAAC Bridge integration is distributed separately via HACS (chapter 10).
 
 ### 14.5 Open points
 
-- [ ] Final name and domain of the HA integration (working title Client Bridge / `client_bridge`).
-- [ ] Confirm the `client_id` URL `https://stacknoise.com/haac/` and the redirect scheme `haac://auth-callback`.
-- [ ] Minimum supported HA version for the bridge.
-
-* [ ] GitHub account name: confirm that the Stacknoise account is `stacknoise` (16.1).
+- [ ] Privacy policy page `https://stacknoise.com/haac/privacy` online before the first Google Play release (16.8).
 
 ## 15. UI mockups
 
@@ -841,7 +837,7 @@ The code lives in two repositories under the GitHub account **stacknoise**: one 
 | Repository | Content | Visibility | Release artefacts |
 | --- | --- | --- | --- |
 | [`stacknoise/haac-android`](https://github.com/stacknoise/haac-android) | Android app (Gradle project, modules as in 3.2), `docs/` with this concept and the mockups | Public (required for sideload downloads via GitHub Releases, 14.4) | Signed APK + SHA-256 on GitHub Releases; AAB to Google Play |
-| [`stacknoise/haac-bridge`](https://github.com/stacknoise/haac-bridge) | HA custom integration `custom_components/client_bridge`, `hacs.json` (10.1) | Public (HACS only installs from public GitHub repos) | Git tag + GitHub Release per version; HACS reads the releases |
+| [`stacknoise/haac-bridge`](https://github.com/stacknoise/haac-bridge) | HA custom integration `custom_components/haac_bridge`, `hacs.json` (10.1) | Public (HACS only installs from public GitHub repos) | Git tag + GitHub Release per version; HACS reads the releases |
 
 - The repository name `haac-bridge` follows the working title of the integration; if the integration gets a different final name (14.5), the repo is renamed before the first release. GitHub redirects the old URL.
 - Default branch in both: `main`.
@@ -886,7 +882,7 @@ haac-bridge/
 ├── SECURITY.md
 ├── hacs.json
 ├── docs/concept.md          # copy of the concept, updated together with haac-android
-├── custom_components/client_bridge/
+├── custom_components/haac_bridge/
 ├── tests/                   # pytest-homeassistant-custom-component
 └── .github/
     ├── workflows/           # validate.yml, tests.yml, release.yml
@@ -925,10 +921,20 @@ haac-bridge/
 gh repo create stacknoise/haac-android --public \
   --description "HA Android Client (HAAC) – Android client for Home Assistant"
 gh repo create stacknoise/haac-bridge --public \
-  --description "Client Bridge – HACS integration for the HA Android Client"
+  --description "HAAC Bridge – HACS integration for the HA Android Client"
 ```
 
 1. Create both repositories with the commands above (GitHub CLI, logged in as the stacknoise account).
 2. Commit the content of the handoff packages: `haac-android.zip` (`CLAUDE.md`, `LICENSE`, `NOTICE`, `docs/` with concept and mockups) into `haac-android`; `haac-bridge.zip` (`CLAUDE.md`, `LICENSE`, `NOTICE`, `docs/concept.md`) into `haac-bridge`.
 3. Set branch protection for `main`, enable the security features from 16.6, create the environment `release` with its secrets.
 4. Add repository topics: `home-assistant`, `android` (app); `home-assistant`, `hacs`, `hacs-integration` (bridge).
+
+### 16.8 Web presence on stacknoise.com
+
+Login does not depend on stacknoise.com: HA never contacts the site, because `client_id` and `redirect_uri` share scheme and host (5.1). The site is needed only for the Play Store and the browser login fallback.
+
+| URL | Purpose | Required for |
+| --- | --- | --- |
+| `https://stacknoise.com/haac/` | `client_id`, the app's identity towards HA; recommended as a short landing page (name, icon, links to both repositories) | Nothing technically; the URL only has to stay stable, because existing refresh tokens are bound to it |
+| `https://stacknoise.com/haac/privacy` | Privacy policy | Google Play store listing and Data safety form (14.4) |
+| `https://stacknoise.com/.well-known/assetlinks.json` | Verifies the App Link so that `https://stacknoise.com/haac/auth-callback` opens the app; contains the SHA-256 fingerprint of the app signing certificate | Browser login fallback only (5.1) |
