@@ -570,7 +570,7 @@ Error reply (format of HA's WebSocket API, `code` = HAB code from 18.3):
 
 ```json
 {"id": 13, "type": "result", "success": false,
- "error": {"code": "HAB-SVC-001", "message": "You are not allowed to control this device."}}
+ "error": {"code": "HAB-SVC-001", "message": "You are not allowed to control this device"}}
 ```
 
 ### 11.4 Versioning and robustness
@@ -1141,23 +1141,23 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 
 - **Code format** `HAB-<AREA>-<NNN>`. Areas: `CFG` YAML configuration, `AUTH` caller, `SVC` service calls, `ENT` entities, `HIST` history and statistics, `WS` request format, `INT` unexpected errors.
 - **Exception hierarchy**: `HaacBridgeError` derives from Home Assistant's `HomeAssistantError` and uses its translation mechanism (`translation_domain="haac_bridge"`, `translation_key`). Subclasses per area: `ConfigError`, `NotAllowedError`, `InvalidServiceError`, `EntityNotFoundError`, `HistoryError`, `RequestError`, `InternalError`.
-- **User texts** live in `translations/en.json` (section `exceptions`): short, plain language, no technical terms, no entity attributes or tokens.
+- **User texts** live in `translations/en.json` (section `exceptions`): short, plain language, no technical terms, no entity attributes or tokens, and no trailing period (Home Assistant strips it from translated exception messages).
 - **Command wrapper**: every `haac_bridge/*` command runs inside one wrapper in `core/command.py`. It converts any exception via `ErrorFactory` and replies with `connection.send_error(msg_id, code, message)`, where `code` is the HAB code. `asyncio.CancelledError` is never caught.
 - No bare `except:` and no `except Exception` outside this wrapper; every error is logged once with its code, never with tokens or passwords.
 - A test checks that codes are unique, match the format and have a translation.
 
 | Code | Message | Shown in the app as |
 | --- | --- | --- |
-| HAB-CFG-001 | The haac\_bridge configuration in configuration.yaml is invalid. | – (HA admin, Repairs) |
-| HAB-CFG-002 | A user in the haac\_bridge configuration does not exist in Home Assistant. | – (HA admin, Repairs) |
-| HAB-AUTH-001 | The request has no signed-in Home Assistant user. | HAAC-AUTH-003 |
-| HAB-SVC-001 | You are not allowed to control this device. | HAAC-BRG-003 |
-| HAB-SVC-002 | This action is not available for this device. | HAAC-BRG-004 |
-| HAB-SVC-003 | Home Assistant could not carry out the action. | HAAC-BRG-005 |
-| HAB-ENT-001 | This device no longer exists in Home Assistant. | HAAC-ENT-001 |
-| HAB-HIST-001 | History is not available on this server. | HAAC-BRG-006 |
-| HAB-WS-001 | The request could not be understood. | HAAC-BRG-005 |
-| HAB-INT-000 | Something went wrong in HAAC Bridge. | HAAC-BRG-005 |
+| HAB-CFG-001 | The haac\_bridge configuration in configuration.yaml is invalid | – (HA admin, Repairs) |
+| HAB-CFG-002 | A user in the haac\_bridge configuration does not exist in Home Assistant | – (HA admin, Repairs) |
+| HAB-AUTH-001 | The request has no signed-in Home Assistant user | HAAC-AUTH-003 |
+| HAB-SVC-001 | You are not allowed to control this device | HAAC-BRG-003 |
+| HAB-SVC-002 | This action is not available for this device | HAAC-BRG-004 |
+| HAB-SVC-003 | Home Assistant could not carry out the action | HAAC-BRG-005 |
+| HAB-ENT-001 | This device no longer exists in Home Assistant | HAAC-ENT-001 |
+| HAB-HIST-001 | History is not available on this server | HAAC-BRG-006 |
+| HAB-WS-001 | The request could not be understood | HAAC-BRG-005 |
+| HAB-INT-000 | Something went wrong in HAAC Bridge | HAAC-BRG-005 |
 
 ### 18.4 Where bridge errors appear
 

@@ -43,7 +43,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 
 **Errors (18.3, 18.4)**
 - Every raised exception is a `HaacBridgeError` subclass (derived from `HomeAssistantError`, with `translation_domain="haac_bridge"` and a `translation_key`) carrying an `ErrorCode`.
-- All codes live only in `core/errors.py`, format `HAB-<AREA>-<NNN>`. A new error gets the next free number of its area; codes are never reused or renumbered. Add its user text to `translations/en.json` (section `exceptions`): short, plain language, no technical terms, no tokens.
+- All codes live only in `core/errors.py`, format `HAB-<AREA>-<NNN>`. A new error gets the next free number of its area; codes are never reused or renumbered. Add its user text to `translations/en.json` (section `exceptions`): short, plain language, no technical terms, no tokens, no trailing period (HA strips it).
 - Every `haac_bridge/*` command runs inside the command wrapper in `core/command.py`, which converts exceptions via `ErrorFactory` and replies with `connection.send_error(msg_id, <HAB code>, <message>)`.
 - No bare `except:` and no `except Exception` outside that wrapper. Never catch `asyncio.CancelledError`. Log every error once with its code.
 - Configuration errors (`HAB-CFG-*`) also create an issue in Home Assistant Repairs; it is removed after a successful reload.
