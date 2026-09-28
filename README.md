@@ -10,7 +10,9 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 
 ## Installation (HACS)
 
-1. In HACS, open *Custom repositories* and add `https://github.com/stacknoise/haac-bridge` with category **Integration**.
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stacknoise&repository=haac-bridge&category=integration)
+
+1. Click the button above to open the repository in HACS, or in HACS open *Custom repositories* and add `https://github.com/stacknoise/haac-bridge` with category **Integration**.
 2. Install **HAAC Bridge** and restart Home Assistant.
 3. Add the configuration below to `configuration.yaml` and restart once more.
 
