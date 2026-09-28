@@ -533,8 +533,8 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version |
 | `haac_bridge/exposure/revision` | – | `revision` (hash), entity count |
 | `haac_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
-| `haac_bridge/subscribe_entities` | – | Initial states, then compressed state diffs and `exposure_changed` events |
-| `haac_bridge/call_service` | `entity_id`, `service`, `service_data` | Success, or an error reply with a HAB code (18.3) |
+| `haac_bridge/subscribe_entities` | – | Empty result, then events: `a` initial and added states, `c` changes, `r` removals (HA's compressed state format) and `exposure_changed` (11.3) |
+| `haac_bridge/call_service` | `entity_id`, `service`, `service_data` (without target keys) | Empty result, or an error reply with a HAB code (18.3) |
 | `haac_bridge/history` | `entity_ids[]`, `start`, `end`, `minimal_response` | State history per entity |
 | `haac_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
 | `haac_bridge/areas` (optional) | – | HA floors and areas of exposed entities for the import wizard |
@@ -573,12 +573,35 @@ Error reply (format of HA's WebSocket API, `code` = HAB code from 18.3):
  "error": {"code": "HAB-SVC-001", "message": "You are not allowed to control this device"}}
 ```
 
+Subscription (`haac_bridge/subscribe_entities`): an empty result, then events in Home Assistant's compressed state format, limited to the caller's exposed entities. Keys: `s` state, `a` attributes, `lc`/`lu` last changed/updated (Unix time), `c` context; in a change, `+` holds new or changed values and `-` removed attribute names.
+
+```json
+{"id": 14, "type": "haac_bridge/subscribe_entities"}
+{"id": 14, "type": "result", "success": true, "result": null}
+
+{"id": 14, "type": "event", "event": {"a": {
+  "switch.garage_socket": {"s": "on", "a": {"device_class": "outlet"}, "c": "01J…", "lc": 1790406723.1}}}}
+
+{"id": 14, "type": "event", "event": {"c": {
+  "switch.garage_socket": {"+": {"s": "off", "lc": 1790410001.4, "c": "01J…"}}}}}
+
+{"id": 14, "type": "event", "event": {"a": {"sensor.cellar_humidity": {"s": "70", "a": {}, "c": "01J…", "lc": 1790410100.0}}}}
+{"id": 14, "type": "event", "event": {"exposure_changed": {"revision": "4b1d…07c2"}}}
+
+{"id": 14, "type": "event", "event": {"r": ["sensor.cellar_humidity"]}}
+{"id": 14, "type": "event", "event": {"exposure_changed": {"revision": "9f2c…e41a"}}}
+```
+
+- `exposure_changed` follows every change of the exposed set: an entity matching the filter appears (`a`) or disappears (`r`), or a `haac_bridge.reload` changed the configuration (then `a`/`r` for the differences first). It is also sent after every reload, even without differences. Its `revision` equals the one `haac_bridge/exposure/revision` returns; the app then runs steps 2–4 of 9.1.
+- Changes of entities outside the exposed set are never sent.
+- The app ends the subscription with HA's `unsubscribe_events` command (`subscription`: the subscription's message id); closing the WebSocket ends it too.
+
 ### 11.4 Versioning and robustness
 
 - `haac_bridge/info` returns an integer `api_version`. The app declares the range it supports and shows an "update the integration" hint on mismatch.
 - One WebSocket per app session; heartbeat via HA's `ping`/`pong` every 30 s; reconnect with exponential back-off (1 s → 60 s, with jitter).
 - After reconnect: re-auth, revision check, re-subscribe – the same steps as the start sync.
-- The app never sends `service_data` containing `entity_id`; the bridge sets the target itself so a manipulated payload cannot address other entities.
+- The app never sends `service_data` containing `entity_id`; the bridge sets the target itself so a manipulated payload cannot address other entities. `service_data` with `entity_id`, `device_id`, `area_id`, `floor_id` or `label_id` is rejected with `HAB-WS-001`, and the call runs in the context of the calling user.
 
 ## 12. Local data model
 
