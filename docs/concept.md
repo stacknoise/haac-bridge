@@ -238,7 +238,7 @@ sequenceDiagram
 ### 5.3 Encryption at rest
 
 - One AES-256-GCM key per HA instance, generated in the **Android Keystore**, StrongBox-backed when the device has it; the key material never leaves secure hardware.
-- Ciphertext + IV of the refresh token are stored in a file under `noBackupFilesDir`; the Room database contains no secrets.
+- Ciphertext + IV of the refresh token are stored in a file under `noBackupFilesDir`; the Room database contains no secrets. A header records which key protects the token: the device-bound key of this section or a fingerprint key (5.4) with its generation and unlock window.
 - Key properties: `setUnlockedDeviceRequired(true)`, no export, purpose `ENCRYPT|DECRYPT` only.
 - `android:allowBackup="false"` plus data-extraction rules excluding all app data from cloud backup and device transfer.
 
@@ -247,11 +247,11 @@ sequenceDiagram
 Fingerprint login is an unlock of the stored refresh token, not a separate account system. HA never learns about the fingerprint.
 
 1. Fingerprint unlock is optional and off by default. The user can enable it per instance under Settings → Security (only if `BiometricManager.canAuthenticate(BIOMETRIC_STRONG)` succeeds).
-2. On enabling, a **second** Keystore key is generated with `setUserAuthenticationRequired(true)`, `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)` (auth per use) and `setInvalidatedByBiometricEnrollment(true)`. The refresh token is re-encrypted with it and the old key is deleted.
-3. On app start, `BiometricPrompt` is shown with a `CryptoObject` wrapping a `Cipher` in decrypt mode. Only a successful Class-3 biometric authentication unlocks the cipher, so the token cannot be decrypted without the finger – a UI-only check would not be sufficient.
-4. The decrypted refresh token is used immediately to obtain an access token and then discarded from memory.
+2. On enabling, a **second** Keystore key is generated with `setUserAuthenticationRequired(true)`, `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)` (auth per use) and `setInvalidatedByBiometricEnrollment(true)`. The refresh token is re-encrypted with it and the old key is deleted. Every new fingerprint key gets the next generation number; the old key is deleted only after the new token file is written, so a cancelled prompt changes nothing.
+3. On app start, `BiometricPrompt` is shown with a `CryptoObject` wrapping a `Cipher` in decrypt mode. Only a successful Class-3 biometric authentication unlocks the cipher, so the token cannot be decrypted without the finger – a UI-only check would not be sufficient. With an unlock window the key is time-bound; see below.
+4. The decrypted refresh token stays in memory only, never in plaintext on disk, until the app locks (5.5), the user signs out or the token is replaced. The access token is refreshed from it without a new prompt; discarding it right away would require a fingerprint about every 30 minutes, whenever the access token expires.
 5. If fingers are added or removed, the key is permanently invalidated (`KeyPermanentlyInvalidatedException`); the app deletes it and asks for the HA password again.
-6. "Use password" on the prompt leads to the HA login (5.1); a new token is issued and the old one revoked.
+6. "Use password" on the prompt leads to the HA login (5.1). The new token is stored with the device-bound key (5.3), so fingerprint unlock is off until the user enables it again. The old refresh token cannot be revoked without the fingerprint; it expires in HA after a period of inactivity.
 
 With several instances, fingerprint unlock is a per-instance setting and each instance has its own biometric-bound key, so a token of one instance can never be decrypted with the key of another.
 
@@ -264,7 +264,9 @@ With several instances, fingerprint unlock is a per-instance setting and each in
 
 - The window is enforced by the Keystore in secure hardware, not by the app: after it expires, the keys cannot be used until the next successful fingerprint.
 - The Keystore tracks the time of the last strong authentication per device user, not per key; that is why a single fingerprint covers all instances.
-- The key parameter is fixed at key creation. Changing the window therefore needs one fingerprint check, after which the app re-creates the keys of all fingerprint-enabled instances and re-encrypts their tokens.
+- A time-bound key cannot be wrapped in a `CryptoObject`, because its cipher can only be created after a strong biometric. The prompt is therefore shown without one; the Keystore still refuses the key without a Class-3 biometric inside the window.
+- Before Android 11, time-bound keys also accept the device PIN (`setUserAuthenticationValidityDurationSeconds`). The unlock window is therefore offered only from Android 11 on; older devices always use *Off*.
+- The key parameter is fixed at key creation. Changing the window therefore needs one fingerprint check, after which the app re-creates the key of the active instance, whose token is unlocked, and re-encrypts its token. Other fingerprint-enabled instances get a key for the new window at their next unlock.
 - With `setUnlockedDeviceRequired(true)`, locking the phone makes all keys unusable immediately, even inside the window.
 - The app lock (5.5) still applies on top: after the background timeout the app shows its lock screen again, even if the window is still open.
 
@@ -272,7 +274,7 @@ Disabling fingerprint unlock in the settings requires one last successful biomet
 
 ### 5.5 App lock behaviour
 
-- Re-lock after the app has been in the background longer than a configurable timeout (default 5 minutes).
+- Re-lock after the app has been in the background longer than a configurable timeout (Settings → Security: immediately, 1, 5, 15 or 30 minutes; default 5). The lock drops all unlocked refresh tokens and runs the start routing (4.1) again: instances with fingerprint unlock show the unlock screen, the others open directly.
 - `FLAG_SECURE` on login and settings screens to keep them out of screenshots and the recent-apps preview.
 - Root/emulator detection is informational only (warning), not a hard block.
 
@@ -632,7 +634,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 
 - Schema migrations are versioned and tested with Room's `MigrationTestHelper`; destructive migration is never enabled.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
-- Non-sensitive preferences (theme, lock timeout, biometric enabled flag) live in a typed DataStore (JSON via kotlinx.serialization).
+- Non-sensitive preferences (theme, unlock window, lock timeout) live in a typed DataStore (JSON via kotlinx.serialization). Whether an instance uses fingerprint unlock is not a separate flag: it follows from the key that protects its token file (5.3).
 
 The active instance is stored as `activeServerId` in DataStore. `home`, `exposed_entity` and `entity_alias` reference `server.id` with cascade delete, so removing an instance removes all of its data in one transaction.
 
@@ -1092,6 +1094,8 @@ enum class ErrorCode(
 | HAAC-AUTH-006 | Home Assistant does not let this user sign in here. Ask your administrator. | None |
 | HAAC-SEC-001 | Your fingerprints have changed. Please sign in with your password. | Sign in |
 | HAAC-SEC-002 | Secure storage on this device is not available. | None |
+| HAAC-SEC-003 | The app is locked. Unlock it with your fingerprint. | None |
+| HAAC-SEC-004 | Fingerprint unlock is not available right now. Try again later or sign in with your password. | None |
 | HAAC-BRG-001 | HAAC Bridge is not installed on this server. | Open settings |
 | HAAC-BRG-002 | HAAC Bridge on the server needs an update. | None |
 | HAAC-BRG-003 | You are not allowed to control this device. | None |
