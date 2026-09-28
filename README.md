@@ -1,5 +1,8 @@
 # HAAC Bridge
 
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://img.shields.io/badge/HACS-Add%20repository-41BDF5?logo=homeassistantcommunitystore&logoColor=white)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stacknoise&repository=haac-bridge&category=integration)
+
 Home Assistant custom integration that gives the **HA Android Client (HAAC)** a filtered, per-user view of your entities. Which entities each Home Assistant user sees in the app is configured in `configuration.yaml`, with the same filter syntax as the HomeKit Bridge.
 
 > This project is not affiliated with or endorsed by Home Assistant, the Open Home Foundation or Nabu Casa.
