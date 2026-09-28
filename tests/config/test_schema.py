@@ -32,6 +32,53 @@ async def test_valid_config_is_parsed() -> None:
     assert other.filter["include_domains"] == []
 
 
+async def test_entity_names_global_and_per_user() -> None:
+    config = CONFIG_SCHEMA(
+        {
+            "haac_bridge": {
+                "entity_config": {
+                    "sensor.outdoor_temperature": {"name": " Outside "},
+                    "switch.garage_socket": {"name": "Garage"},
+                    "sensor.bath_humidity": {},
+                },
+                "users": [
+                    {"username": "anton"},
+                    {
+                        "username": "guest",
+                        "entity_config": {"sensor.outdoor_temperature": {"name": "Temperature"}},
+                    },
+                ],
+            }
+        }
+    )
+    anton, guest = parse_users(config)
+    assert anton.names == {
+        "sensor.outdoor_temperature": "Outside",
+        "switch.garage_socket": "Garage",
+    }
+    assert guest.names == {
+        "sensor.outdoor_temperature": "Temperature",
+        "switch.garage_socket": "Garage",
+    }
+
+
+@pytest.mark.parametrize(
+    "entity_config",
+    [
+        {"not an entity id": {"name": "X"}},
+        {"sensor.a": {"name": "  "}},
+        {"sensor.a": {"icon": "mdi:x"}},
+    ],
+)
+async def test_invalid_entity_config_is_rejected(entity_config: dict) -> None:
+    with pytest.raises(vol.Invalid):
+        CONFIG_SCHEMA({"haac_bridge": {"entity_config": entity_config}})
+    with pytest.raises(vol.Invalid):
+        CONFIG_SCHEMA(
+            {"haac_bridge": {"users": [{"username": "anton", "entity_config": entity_config}]}}
+        )
+
+
 async def test_missing_section_means_no_users() -> None:
     assert parse_users(CONFIG_SCHEMA({})) == []
     assert parse_users(CONFIG_SCHEMA({"haac_bridge": {}})) == []

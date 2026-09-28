@@ -65,9 +65,10 @@ Lists every module, class and function of the integration with signature, file a
 | `async_report_invalid_config` | `def async_report_invalid_config(hass: HomeAssistant, issue_ids: set[str]) -> None` | `custom_components/haac_bridge/config/repairs.py` | Log HAB-CFG-001 and create its Repairs issue; the previous configuration stays active. |
 | `async_check_users` | `async def async_check_users(hass: HomeAssistant, issue_ids: set[str], entries: list[UserEntry]) -> None` | `custom_components/haac_bridge/config/repairs.py` | Report entries without a matching HA user (HAB-CFG-002) and remove resolved issues. |
 | `haac_bridge.config.schema` | `module` | `custom_components/haac_bridge/config/schema.py` | YAML schema of the haac_bridge section in configuration.yaml (concept 10.2). |
-| `UserEntry` | `class UserEntry` | `custom_components/haac_bridge/config/schema.py` | One validated entry under `users`: who it applies to and its filter settings. |
+| `UserEntry` | `class UserEntry` | `custom_components/haac_bridge/config/schema.py` | One validated entry under `users`: who it applies to, its filter and its entity names. |
 | `UserEntry.label` | `def label(self) -> str` | `custom_components/haac_bridge/config/schema.py` | Return the name used for this entry in logs and Repairs. |
 | `parse_users` | `def parse_users(config: ConfigType) -> list[UserEntry]` | `custom_components/haac_bridge/config/schema.py` | Return the user entries of a validated configuration; empty if the section is missing. |
+| `_names` | `def _names(entity_config: dict[str, dict[str, str]]) -> dict[str, str]` | `custom_components/haac_bridge/config/schema.py` | Return entity ID to configured name for the entities that have a name. |
 | `haac_bridge.config.users` | `module` | `custom_components/haac_bridge/config/users.py` | Matches configured user entries to Home Assistant users (concept 10.2, 10.3). |
 | `normalize_username` | `def normalize_username(username: str) -> str` | `custom_components/haac_bridge/config/users.py` | Return the username in the form HA's own auth provider compares it. |
 | `usernames_of` | `def usernames_of(user: User) -> set[str]` | `custom_components/haac_bridge/config/users.py` | Return the normalized login names of a user from its HA auth provider credentials. |
@@ -80,16 +81,17 @@ Lists every module, class and function of the integration with signature, file a
 | --- | --- | --- | --- |
 | `haac_bridge.exposure.__init__` | `module` | `custom_components/haac_bridge/exposure/__init__.py` | Per-user exposure: entity filters, exposed set and revision. |
 | `haac_bridge.exposure.exposure` | `module` | `custom_components/haac_bridge/exposure/exposure.py` | Per-user set of exposed entities and its revision hash (concept 10.2, 10.3). |
-| `ExposureSnapshot` | `class ExposureSnapshot` | `custom_components/haac_bridge/exposure/exposure.py` | The entities exposed to one user at one moment, with their revision hash. |
+| `ExposureSnapshot` | `class ExposureSnapshot` | `custom_components/haac_bridge/exposure/exposure.py` | The entities exposed to one user at one moment, their configured names and revision. |
 | `_UserRule` | `class _UserRule` | `custom_components/haac_bridge/exposure/exposure.py` | A configured user entry together with its built filter. |
 | `Exposure` | `class Exposure` | `custom_components/haac_bridge/exposure/exposure.py` | Decides which entities a HA user sees; deny by default for users not configured. |
 | `Exposure.__init__` | `def __init__(self, entries: list[UserEntry], filters: FilterFactory) -> None` | `custom_components/haac_bridge/exposure/exposure.py` | Build one filter per configured user entry. |
 | `Exposure.is_exposed` | `def is_exposed(self, user: User, entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/exposure.py` | Return True if the entity is in a v1 domain and passes the user's filter. |
 | `Exposure.filter_exposed` | `def filter_exposed(self, user: User, entity_ids: list[str]) -> list[str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the requested IDs the user may see, sorted and without duplicates. |
 | `Exposure.exposed_entity_ids` | `def exposed_entity_ids(self, hass: HomeAssistant, user: User) -> list[str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the sorted IDs of all current entities exposed to the user. |
-| `Exposure.snapshot` | `def snapshot(self, hass: HomeAssistant, user: User) -> ExposureSnapshot` | `custom_components/haac_bridge/exposure/exposure.py` | Return the user's exposed entities together with their revision. |
+| `Exposure.configured_names` | `def configured_names(self, user: User) -> dict[str, str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the names from `entity_config` that apply to the user (global, then own). |
+| `Exposure.snapshot` | `def snapshot(self, hass: HomeAssistant, user: User) -> ExposureSnapshot` | `custom_components/haac_bridge/exposure/exposure.py` | Return the user's exposed entities with their configured names and revision. |
 | `Exposure._rule_for` | `def _rule_for(self, user: User) -> _UserRule \| None` | `custom_components/haac_bridge/exposure/exposure.py` | Return the first rule whose entry refers to the user. |
-| `compute_revision` | `def compute_revision(entity_ids: list[str]) -> str` | `custom_components/haac_bridge/exposure/exposure.py` | Return a stable hash of an exposed set; it changes when entities are added or removed. |
+| `compute_revision` | `def compute_revision(entity_ids: list[str], names: Mapping[str, str] \| None=None) -> str` | `custom_components/haac_bridge/exposure/exposure.py` | Return a stable hash of an exposed set and its configured names. |
 | `haac_bridge.exposure.filter_factory` | `module` | `custom_components/haac_bridge/exposure/filter_factory.py` | FilterFactory: builds the entity filter of each configured user (concept 10.2, 18.2). |
 | `_deny_all` | `def _deny_all(entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/filter_factory.py` | Expose no entity; used for entries without any include rule. |
 | `FilterFactory` | `class FilterFactory` | `custom_components/haac_bridge/exposure/filter_factory.py` | Creates entity filters with HA's entityfilter helper, so rules match the HomeKit Bridge. |
@@ -105,8 +107,8 @@ Lists every module, class and function of the integration with signature, file a
 | `_sensor_fields` | `def _sensor_fields(state: State, entry: er.RegistryEntry \| None) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return unit, state class and display precision a sensor tile needs (8.3). |
 | `DescriptorFactory` | `class DescriptorFactory` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Creates one descriptor per entity; the only place with per-domain field selection. |
 | `DescriptorFactory.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Keep the registries needed to resolve names and areas. |
-| `DescriptorFactory.create` | `def create(self, state: State) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return the descriptor of an entity including its current state and all attributes. |
-| `DescriptorFactory.create_many` | `def create_many(self, entity_ids: list[str]) -> list[dict[str, Any]]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return descriptors for the given entities, skipping those without a state. |
+| `DescriptorFactory.create` | `def create(self, state: State, configured_name: str \| None=None) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return the descriptor of an entity including its current state and all attributes. |
+| `DescriptorFactory.create_many` | `def create_many(self, entity_ids: list[str], names: Mapping[str, str] \| None=None) -> list[dict[str, Any]]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return descriptors with configured names, skipping entities without a state. |
 | `DescriptorFactory._area_name` | `def _area_name(self, entry: er.RegistryEntry \| None) -> str \| None` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return the HA area of the entity, or of its device if the entity has none. |
 | `haac_bridge.entities.subscription` | `module` | `custom_components/haac_bridge/entities/subscription.py` | Live state subscription of one app connection (concept 9.2, 11.2). |
 | `EntitySubscription` | `class EntitySubscription` | `custom_components/haac_bridge/entities/subscription.py` | Sends state changes of the entities exposed to one user to one WebSocket subscription. |

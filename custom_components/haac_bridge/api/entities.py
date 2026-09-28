@@ -20,7 +20,7 @@ async def ws_entities_list(
     snapshot = data.exposure.snapshot(hass, require_user(connection))
     return {
         "revision": snapshot.revision,
-        "entities": data.descriptors.create_many(snapshot.entity_ids),
+        "entities": data.descriptors.create_many(snapshot.entity_ids, snapshot.names),
     }
 
 
