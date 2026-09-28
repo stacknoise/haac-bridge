@@ -1,6 +1,6 @@
 """DescriptorFactory: builds the entity descriptors sent to the app (concept 11.3, 18.2)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from homeassistant.const import (
@@ -49,14 +49,19 @@ class DescriptorFactory:
         """Keep the registries needed to resolve names and areas."""
         self._hass = hass
 
-    def create(self, state: State) -> dict[str, Any]:
-        """Return the descriptor of an entity including its current state and all attributes."""
+    def create(self, state: State, configured_name: str | None = None) -> dict[str, Any]:
+        """Return the descriptor of an entity including its current state and all attributes.
+
+        `name` is always HA's friendly name; `configured_name` is the name from `entity_config`
+        that the app shows by default (concept 7.3), or None.
+        """
         entry = er.async_get(self._hass).async_get(state.entity_id)
         attributes = state.attributes
         descriptor: dict[str, Any] = {
             "entity_id": state.entity_id,
             "domain": state.domain,
             "name": state.name,
+            "configured_name": configured_name,
             "device_class": attributes.get(ATTR_DEVICE_CLASS),
             "supported_features": attributes.get(ATTR_SUPPORTED_FEATURES, 0),
             "area": self._area_name(entry),
@@ -68,10 +73,15 @@ class DescriptorFactory:
         descriptor.update(_DOMAIN_FIELDS.get(state.domain, _no_fields)(state, entry))
         return descriptor
 
-    def create_many(self, entity_ids: list[str]) -> list[dict[str, Any]]:
-        """Return descriptors for the given entities, skipping those without a state."""
+    def create_many(
+        self, entity_ids: list[str], names: Mapping[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Return descriptors with configured names, skipping entities without a state."""
+        names = names or {}
         states = (self._hass.states.get(entity_id) for entity_id in entity_ids)
-        return [self.create(state) for state in states if state is not None]
+        return [
+            self.create(state, names.get(state.entity_id)) for state in states if state is not None
+        ]
 
     def _area_name(self, entry: er.RegistryEntry | None) -> str | None:
         """Return the HA area of the entity, or of its device if the entity has none."""

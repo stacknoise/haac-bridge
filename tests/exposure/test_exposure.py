@@ -87,3 +87,34 @@ async def test_new_entity_matching_glob_changes_revision(
 async def test_revision_is_order_independent() -> None:
     assert compute_revision(["b.x", "a.y"]) == compute_revision(["a.y", "b.x"])
     assert compute_revision([]) != compute_revision(["a.y"])
+
+
+async def test_revision_covers_configured_names_of_exposed_entities() -> None:
+    bare = compute_revision(["a.y"])
+    assert compute_revision(["a.y"], {}) == bare
+    assert compute_revision(["a.y"], {"b.x": "Other"}) == bare
+    assert compute_revision(["a.y"], {"a.y": "One"}) != bare
+    assert compute_revision(["a.y"], {"a.y": "One"}) != compute_revision(["a.y"], {"a.y": "Two"})
+
+
+@pytest.mark.usefixtures("demo_states")
+async def test_snapshot_holds_names_of_exposed_entities_only(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    yaml = {
+        "haac_bridge": {
+            "entity_config": {
+                "switch.garage_socket": {"name": "Garage"},
+                "switch.office_fan": {"name": "Fan"},
+            },
+            "users": [
+                {"username": "anton", "filter": {"include_entities": ["switch.garage_socket"]}}
+            ],
+        }
+    }
+    anton = add_user("anton")
+    snapshot = Exposure(parse_users(CONFIG_SCHEMA(yaml)), FilterFactory()).snapshot(hass, anton)
+    assert snapshot.names == {"switch.garage_socket": "Garage"}
+    assert snapshot.revision == compute_revision(
+        ["switch.garage_socket"], {"switch.garage_socket": "Garage"}
+    )

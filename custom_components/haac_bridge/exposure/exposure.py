@@ -1,5 +1,6 @@
 """Per-user set of exposed entities and its revision hash (concept 10.2, 10.3)."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import hashlib
 
@@ -14,9 +15,10 @@ from .filter_factory import EntityPredicate, FilterFactory
 
 @dataclass(frozen=True, slots=True)
 class ExposureSnapshot:
-    """The entities exposed to one user at one moment, with their revision hash."""
+    """The entities exposed to one user at one moment, their configured names and revision."""
 
     entity_ids: list[str]
+    names: dict[str, str]
     revision: str
 
 
@@ -58,20 +60,34 @@ class Exposure:
             if rule.predicate(state.entity_id)
         )
 
+    def configured_names(self, user: User) -> dict[str, str]:
+        """Return the names from `entity_config` that apply to the user (global, then own)."""
+        rule = self._rule_for(user)
+        return dict(rule.entry.names) if rule else {}
+
     def snapshot(self, hass: HomeAssistant, user: User) -> ExposureSnapshot:
-        """Return the user's exposed entities together with their revision."""
+        """Return the user's exposed entities with their configured names and revision."""
         entity_ids = self.exposed_entity_ids(hass, user)
-        return ExposureSnapshot(entity_ids, compute_revision(entity_ids))
+        names = self.configured_names(user)
+        exposed = {entity_id: names[entity_id] for entity_id in entity_ids if entity_id in names}
+        return ExposureSnapshot(entity_ids, exposed, compute_revision(entity_ids, names))
 
     def _rule_for(self, user: User) -> _UserRule | None:
         """Return the first rule whose entry refers to the user."""
         return next((rule for rule in self._rules if entry_matches(rule.entry, user)), None)
 
 
-def compute_revision(entity_ids: list[str]) -> str:
-    """Return a stable hash of an exposed set; it changes when entities are added or removed."""
+def compute_revision(entity_ids: list[str], names: Mapping[str, str] | None = None) -> str:
+    """Return a stable hash of an exposed set and its configured names.
+
+    It changes when entities are added or removed or a configured name changes; without
+    names it equals the hash of the bare set.
+    """
+    names = names or {}
     digest = hashlib.sha256()
     for entity_id in sorted(entity_ids):
         digest.update(entity_id.encode())
+        if (name := names.get(entity_id)) is not None:
+            digest.update(b"\t" + name.encode())
         digest.update(b"\n")
     return digest.hexdigest()

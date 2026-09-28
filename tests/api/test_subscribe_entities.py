@@ -109,3 +109,20 @@ async def test_reload_sends_exposure_changed(
     }
     changed = (await client.receive_json())["event"]["exposure_changed"]
     assert changed["revision"] == await _revision(client)
+
+
+async def test_reload_with_new_names_changes_the_revision(
+    hass: HomeAssistant, subscribed: tuple[Any, dict[str, Any]]
+) -> None:
+    client, _ = subscribed
+    before = await _revision(client)
+    new_config = CONFIG_SCHEMA(
+        {"haac_bridge": {**SECTION, "entity_config": {"switch.garage_socket": {"name": "Garage"}}}}
+    )
+    with patch(
+        "custom_components.haac_bridge.async_integration_yaml_config", return_value=new_config
+    ):
+        await hass.services.async_call("haac_bridge", "reload", blocking=True)
+
+    changed = (await client.receive_json())["event"]["exposure_changed"]
+    assert changed["revision"] == await _revision(client) != before

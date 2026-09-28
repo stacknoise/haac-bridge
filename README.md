@@ -23,6 +23,9 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 
 ```yaml
 haac_bridge:
+  entity_config:                     # optional names for all users
+    sensor.outdoor_temperature:
+      name: Outside
   users:
     - username: anton                # HA login name, or user_id: <uuid>
       filter:
@@ -39,6 +42,9 @@ haac_bridge:
       filter:
         include_entities:
           - sensor.outdoor_temperature
+      entity_config:                 # optional names for this user only
+        sensor.outdoor_temperature:
+          name: Temperature outside
 ```
 
 | Key | Meaning |
@@ -47,6 +53,7 @@ haac_bridge:
 | `filter.include_domains` / `exclude_domains` | Whole domains |
 | `filter.include_entities` / `exclude_entities` | Single entity IDs |
 | `filter.include_entity_globs` / `exclude_entity_globs` | Wildcards such as `sensor.*_temperature` |
+| `entity_config.<entity_id>.name` | Name the app shows for the entity instead of the Home Assistant name, until the user renames it in the app. Under `users[]` it overrides the global one for that user. It does not share the entity; the filter decides that. |
 
 Rules:
 
@@ -72,7 +79,7 @@ The app talks to the bridge over Home Assistant's WebSocket API with commands pr
 | --- | --- | --- |
 | `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version |
 | `haac_bridge/exposure/revision` | – | `revision`, `entity_count` |
-| `haac_bridge/entities/list` | – | `revision`, entity descriptors incl. current state |
+| `haac_bridge/entities/list` | – | `revision`, entity descriptors incl. current state; `name` is the Home Assistant name, `configured_name` the name from `entity_config` or `null` |
 | `haac_bridge/subscribe_entities` | – | Empty result, then events: `{"a": {…}}` initial and added states, `{"c": {…}}` changes, `{"r": […]}` removals (Home Assistant's compressed state format), and `{"exposure_changed": {"revision": …}}` whenever the exposed set changes or the configuration is reloaded |
 | `haac_bridge/call_service` | `entity_id`, `service`, `service_data` | Empty result, or an error: `HAB-SVC-001` not exposed, `HAB-ENT-001` entity gone, `HAB-SVC-002` service not in the entity's domain, `HAB-WS-001` target keys in `service_data`, `HAB-SVC-003` Home Assistant failed |
 | `haac_bridge/history` | `entity_ids`, `start`, `end`?, `minimal_response`? | Significant state changes per entity in Home Assistant's compressed state format; `HAB-HIST-001` if the recorder fails |

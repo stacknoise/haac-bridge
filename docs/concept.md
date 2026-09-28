@@ -323,7 +323,7 @@ The app only ever sees entities that the HAAC Bridge exposes to the logged-in HA
 ### 7.1 Loading entities
 
 - After the home structure exists, the user opens *Add entities* in a room or in the global entity list.
-- The app calls `haac_bridge/entities/list` (chapter 11) and receives, per exposed entity: `entity_id`, domain, HA friendly name, device class, unit, icon, supported features, HA area name and the current state with attributes.
+- The app calls `haac_bridge/entities/list` (chapter 11) and receives, per exposed entity: `entity_id`, domain, HA friendly name, the name from the bridge configuration (`configured_name`, 10.2) if the admin set one, device class, unit, icon, supported features, HA area name and the current state with attributes.
 - The picker groups entities by domain (Switches, Sensors, Climate) and optionally by HA area, with search by name or `entity_id`.
 - Entities already assigned to the current room are marked; unassigned entities are highlighted.
 
@@ -341,12 +341,14 @@ The app only ever sees entities that the HAAC Bridge exposes to the logged-in HA
 | Name source | Priority | Stored where |
 | --- | --- | --- |
 | Local alias set in the app | 1 (highest) | Room DB, per server + `entity_id` |
-| HA friendly name | 2 | Delivered by the bridge, cached |
-| `entity_id` | 3 (fallback) | – |
+| Configured name from the bridge (`entity_config` in the YAML, 10.2) | 2 | Delivered by the bridge as `configured_name`, cached |
+| HA friendly name | 3 | Delivered by the bridge, cached |
+| `entity_id` | 4 (fallback) | – |
 
 - Aliases are per entity, so the same alias shows in every room. An optional per-room override is a later feature.
 - Aliases never leave the device and are never written back to HA.
-- Clearing the alias falls back to the HA friendly name; the detail screen always shows the original `entity_id` for reference.
+- The configured name is the default the HA admin sets for the app. The app never copies it into the alias: if the admin changes it, the app shows the new name for every entity without an alias.
+- Clearing the alias falls back to the configured name, else to the HA friendly name; the detail screen always shows the original `entity_id` for reference.
 
 ### 7.4 Entities removed in HA
 
@@ -475,6 +477,9 @@ haac-bridge/                 # GitHub repo stacknoise/haac-bridge (chapter 16)
 
 ```yaml
 haac_bridge:
+  entity_config:                     # optional, for all users
+    sensor.outdoor_temperature:
+      name: Outside
   users:
     - username: anton                # HA login name, or user_id: <uuid>
       filter:
@@ -491,6 +496,9 @@ haac_bridge:
       filter:
         include_entities:
           - sensor.outdoor_temperature
+      entity_config:                 # optional, overrides the global entry for this user
+        sensor.outdoor_temperature:
+          name: Temperature outside
 ```
 
 | Key | Meaning |
@@ -499,12 +507,13 @@ haac_bridge:
 | `filter.include_domains` / `exclude_domains` | Whole domains |
 | `filter.include_entities` / `exclude_entities` | Single entity IDs |
 | `filter.include_entity_globs` / `exclude_entity_globs` | Wildcards such as `sensor.*_temperature` |
+| `entity_config.<entity_id>.name` | Default display name in the app (`configured_name`, 7.3), global or under `users[]`; the per-user entry wins. It never exposes an entity by itself |
 
 - Filters are built with HA's own `entityfilter` helper, so evaluation order is identical to the HomeKit Bridge (explicit exclude beats include).
 - Independently of the filter, only the v1 domains `switch`, `sensor`, `climate` are ever returned.
 - **Deny by default**: a HA user not listed under `users` gets an empty list. Unknown usernames are logged as a warning at startup.
 - A listed user whose filter has no `include_*` rule (empty filter or excludes only) also gets an empty list and a warning in the log. This deliberately deviates from the HomeKit Bridge, where such a filter would expose everything not excluded.
-- Changing the YAML takes effect after the service `haac_bridge.reload` (or a HA restart); reload recomputes all revisions and emits `exposure_changed` to connected apps.
+- Changing the YAML takes effect after the service `haac_bridge.reload` (or a HA restart); reload recomputes all revisions and emits `exposure_changed` to connected apps. The revision also covers the configured names, so a changed name makes the app reload the entity list.
 
 ### 10.3 Runtime behaviour
 
@@ -532,7 +541,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | Command | Request fields | Response |
 | --- | --- | --- |
 | `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version |
-| `haac_bridge/exposure/revision` | – | `revision` (hash), entity count |
+| `haac_bridge/exposure/revision` | – | `revision` (hash over the exposed entity IDs and their configured names), entity count |
 | `haac_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
 | `haac_bridge/subscribe_entities` | – | Empty result, then events: `a` initial and added states, `c` changes, `r` removals (HA's compressed state format) and `exposure_changed` (11.3) |
 | `haac_bridge/call_service` | `entity_id`, `service`, `service_data` (without target keys) | Empty result, or an error reply with a HAB code (18.3) |
@@ -551,6 +560,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
     "entity_id": "climate.living_room",
     "domain": "climate",
     "name": "Living room thermostat",
+    "configured_name": "Thermostat",
     "device_class": null,
     "supported_features": 395,
     "area": "Living room",
@@ -600,6 +610,7 @@ Subscription (`haac_bridge/subscribe_entities`): an empty result, then events in
 ### 11.4 Versioning and robustness
 
 - `haac_bridge/info` returns an integer `api_version`. The app declares the range it supports and shows an "update the integration" hint on mismatch.
+- New optional fields in replies (such as `configured_name`) are additive and keep the `api_version`; the app ignores fields it does not know and treats missing optional fields as `null`.
 - One WebSocket per app session; heartbeat via HA's `ping`/`pong` every 30 s; reconnect with exponential back-off (1 s → 60 s, with jitter).
 - After reconnect: re-auth, revision check, re-subscribe – the same steps as the start sync.
 - The app never sends `service_data` containing `entity_id`; the bridge sets the target itself so a manipulated payload cannot address other entities. `service_data` with `entity_id`, `device_id`, `area_id`, `floor_id` or `label_id` is rejected with `HAB-WS-001`, and the call runs in the context of the calling user.
@@ -614,7 +625,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 | `home` | `id`, `serverId`, `name`, `icon?`, `sortOrder`, `deletedAt?` |  |
 | `floor` | `id`, `homeId` → home, `name`, `level`, `icon?`, `sortOrder`, `deletedAt?` | Cascade on home delete |
 | `room` | `id`, `homeId` → home, `floorId?` → floor, `name`, `icon?`, `sortOrder`, `deletedAt?` | Trigger: floor must belong to same home; `floorId` set null on floor delete |
-| `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `deviceClass?`, `unit?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState` (JSON) | Cache of bridge data |
+| `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `configuredName?`, `deviceClass?`, `unit?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState` (JSON) | Cache of bridge data |
 | `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (1x1/2x1/2x2), `addedAt` | Assignment; cascade on room delete |
 | `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name |
 | notification | id, serverId → server, type (added/removed/error), errorCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results for M-09; purged after 30 days |
@@ -811,7 +822,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 ![M-07 Arrange and rename](mockups/png/M-07-arrange-rename.png)
 
 - Alternative list mode for reordering (*List / Grid preview*): each row with drag handle, name, tile size (1×1, 2×1, 2×2) and pencil.
-- Rename dialog: explanation "Only changes the name in this app. Home Assistant keeps *Floor lamp plug*.", text field with the local alias, `entity_id` below in mono font, actions *Use HA name* (clears the alias), *Cancel*, *Save*.
+- Rename dialog: explanation "Only changes the name in this app. Home Assistant keeps *Floor lamp plug*.", text field with the local alias, `entity_id` below in mono font, actions *Use default name* (clears the alias, so the configured name from the bridge shows, else the HA name; the mockup still says *Use HA name*), *Cancel*, *Save*.
 
 #### M-08 Room grid with an entity removed in HA (7.4)
 

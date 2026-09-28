@@ -11,6 +11,7 @@ import pytest
 SetupBridge = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
 CONFIG = {
+    "entity_config": {"switch.garage_socket": {"name": "Garage"}},
     "users": [
         {
             "username": "anton",
@@ -18,7 +19,7 @@ CONFIG = {
                 "include_entities": ["switch.garage_socket", "sensor.living_room_temperature"],
             },
         }
-    ]
+    ],
 }
 
 
@@ -70,6 +71,9 @@ async def test_entities_list_and_revision(anton_client: Any) -> None:
     assert sensor["state_class"] == "measurement"
     assert sensor["attributes"]["unit_of_measurement"] == "°C"
     assert by_id["switch.garage_socket"]["device_class"] == "outlet"
+    assert by_id["switch.garage_socket"]["name"] == "garage socket"
+    assert by_id["switch.garage_socket"]["configured_name"] == "Garage"
+    assert sensor["configured_name"] is None
 
 
 @pytest.mark.usefixtures("demo_states")

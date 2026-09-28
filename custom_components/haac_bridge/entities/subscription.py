@@ -104,7 +104,9 @@ class EntitySubscription:
 
     def _send_exposure_changed(self) -> None:
         """Tell the app to run its revision check (concept 9.2)."""
-        self._send({EXPOSURE_CHANGED: {"revision": compute_revision(list(self._entity_ids))}})
+        names = self._data.exposure.configured_names(self._user)
+        revision = compute_revision(list(self._entity_ids), names)
+        self._send({EXPOSURE_CHANGED: {"revision": revision}})
 
     def _send(self, payload: dict[str, Any]) -> None:
         """Send one event of this subscription."""
