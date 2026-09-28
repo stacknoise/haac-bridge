@@ -653,6 +653,8 @@ Subscription (`haac_bridge/subscribe_entities`): an empty result, then events in
 - New optional fields in replies (such as `configured_name`) are additive and keep the `api_version`; the app ignores fields it does not know and treats missing optional fields as `null`.
 - One WebSocket per app session; heartbeat via HA's `ping`/`pong` every 30 s; reconnect with exponential back-off (1 s → 60 s, with jitter).
 - After reconnect: re-auth, revision check, re-subscribe – the same steps as the start sync.
+- Errors that a retry at the same address cannot fix (for example `HAAC-AUTH-003`, `HAAC-BRG-001`, `HAAC-BRG-002`, `HAAC-NET-007`, `HAAC-NET-008`) do not use the back-off; the app waits for a network change or *Try again*.
+- In the background the app closes the WebSocket and rebuilds it with the reconnect steps when it returns; this saves battery and data. After the lock timeout the full start sequence runs instead (5.5, 9.2).
 - The app never sends `service_data` containing `entity_id`; the bridge sets the target itself so a manipulated payload cannot address other entities. `service_data` with `entity_id`, `device_id`, `area_id`, `floor_id` or `label_id` is rejected with `HAB-WS-001`, and the call runs in the context of the calling user.
 
 ## 12. Local data model
@@ -1086,6 +1088,7 @@ Whenever the kind of object depends on a type or on runtime data, it is created 
 | `TileFactory` | Tile spec with default size per domain (7.2) | Tile rules in one place |
 | `ServiceCallFactory` | Typed `haac_bridge/call_service` requests, checked against `supported_features` | Only valid service calls leave the app (8) |
 | `BridgeMessageFactory` | WebSocket commands with message IDs | Message format and ID sequence in one place (11) |
+| `HaWebSocketFactory` | WebSocket to `/api/websocket` of one address | Cleartext rule (4.3) and socket setup in one place; replaceable in tests |
 | `KeyFactory` / `CipherFactory` | Keystore keys (plain, biometric, unlock window) and ciphers | Key parameters from 5.3 and 5.4 in one place |
 | `InstanceSessionFactory` | Per-instance session: HTTP client, WebSocket, token store for one `serverId` | Strict instance isolation (4.4) |
 | `EndpointSelector` | The address of an instance to connect to, from its addresses, the home network check and the probes | Selection rules of 4.5 in one place |
