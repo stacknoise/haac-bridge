@@ -502,6 +502,7 @@ haac_bridge:
 - Filters are built with HA's own `entityfilter` helper, so evaluation order is identical to the HomeKit Bridge (explicit exclude beats include).
 - Independently of the filter, only the v1 domains `switch`, `sensor`, `climate` are ever returned.
 - **Deny by default**: a HA user not listed under `users` gets an empty list. Unknown usernames are logged as a warning at startup.
+- A listed user whose filter has no `include_*` rule (empty filter or excludes only) also gets an empty list and a warning in the log. This deliberately deviates from the HomeKit Bridge, where such a filter would expose everything not excluded.
 - Changing the YAML takes effect after the service `haac_bridge.reload` (or a HA restart); reload recomputes all revisions and emits `exposure_changed` to connected apps.
 
 ### 10.3 Runtime behaviour

@@ -1,0 +1,2 @@
+# Pinned to the minimum supported Home Assistant version (hacs.json: 2026.9.0).
+pytest-homeassistant-custom-component==0.13.363
