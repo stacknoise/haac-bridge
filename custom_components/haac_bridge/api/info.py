@@ -10,17 +10,19 @@ from ..const import API_VERSION, SUPPORTED_DOMAINS
 from ..core.caller import require_user
 from ..core.command import bridge_command
 from ..core.runtime import get_data
+from ..instance.addresses import async_instance_identity
 
 
 @bridge_command("haac_bridge/info")
 async def ws_info(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> dict[str, Any]:
-    """Return bridge version, API version, supported domains and HA version."""
+    """Return bridge, API and HA version, supported domains, instance ID and addresses."""
     require_user(connection)
     return {
         "bridge_version": get_data(hass).version,
         "api_version": API_VERSION,
         "domains": list(SUPPORTED_DOMAINS),
         "ha_version": HA_VERSION,
+        **await async_instance_identity(hass),
     }

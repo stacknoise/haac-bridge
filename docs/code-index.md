@@ -164,6 +164,15 @@ Lists every module, class and function of the integration with signature, file a
 | `ws_history` | `async def ws_history(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/history.py` | Return the state history of the requested entities that are exposed to the caller. |
 | `ws_statistics` | `async def ws_statistics(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/history.py` | Return long-term statistics of the requested entities that are exposed to the caller. |
 | `haac_bridge.api.info` | `module` | `custom_components/haac_bridge/api/info.py` | Command haac_bridge/info (concept 11.2, 11.4). |
-| `ws_info` | `async def ws_info(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/info.py` | Return bridge version, API version, supported domains and HA version. |
+| `ws_info` | `async def ws_info(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/info.py` | Return bridge, API and HA version, supported domains, instance ID and addresses. |
 | `haac_bridge.api.services` | `module` | `custom_components/haac_bridge/api/services.py` | Command haac_bridge/call_service (concept 10.3, 11.2, 11.4). |
 | `ws_call_service` | `async def ws_call_service(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/services.py` | Call a service of an exposed entity's domain on that entity only. |
+
+## instance
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.instance.__init__` | `module` | `custom_components/haac_bridge/instance/__init__.py` | Identity of the Home Assistant instance: instance ID and the addresses it is reachable at. |
+| `haac_bridge.instance.addresses` | `module` | `custom_components/haac_bridge/instance/addresses.py` | Instance ID and configured addresses of this Home Assistant instance (concept 4.3, 11.2). |
+| `async_instance_identity` | `async def async_instance_identity(hass: HomeAssistant) -> dict[str, Any]` | `custom_components/haac_bridge/instance/addresses.py` | Return the instance ID and the internal, external and cloud address (each `None` if unset). |
+| `_url_or_none` | `def _url_or_none(resolve: Callable[[], str]) -> str \| None` | `custom_components/haac_bridge/instance/addresses.py` | Return the URL `resolve` finds, or `None` if Home Assistant has none of that kind. |
