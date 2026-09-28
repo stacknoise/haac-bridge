@@ -1,0 +1,50 @@
+{
+  "exceptions": {
+    "cfg_invalid": {
+      "message": "The haac_bridge configuration in configuration.yaml is invalid."
+    },
+    "cfg_unknown_user": {
+      "message": "A user in the haac_bridge configuration does not exist in Home Assistant."
+    },
+    "auth_no_user": {
+      "message": "The request has no signed-in Home Assistant user."
+    },
+    "svc_not_allowed": {
+      "message": "You are not allowed to control this device."
+    },
+    "svc_not_available": {
+      "message": "This action is not available for this device."
+    },
+    "svc_failed": {
+      "message": "Home Assistant could not carry out the action."
+    },
+    "ent_not_found": {
+      "message": "This device no longer exists in Home Assistant."
+    },
+    "hist_unavailable": {
+      "message": "History is not available on this server."
+    },
+    "ws_invalid_request": {
+      "message": "The request could not be understood."
+    },
+    "int_unexpected": {
+      "message": "Something went wrong in HAAC Bridge."
+    }
+  },
+  "issues": {
+    "cfg_invalid": {
+      "title": "HAAC Bridge configuration is invalid (HAB-CFG-001)",
+      "description": "The haac_bridge section in configuration.yaml could not be loaded, so the previous configuration stays active. Check the Home Assistant log for details, fix the configuration and run the action `haac_bridge.reload`."
+    },
+    "cfg_unknown_user": {
+      "title": "HAAC Bridge user not found (HAB-CFG-002)",
+      "description": "The haac_bridge configuration refers to the user `{user}`, which does not exist in Home Assistant. This entry exposes nothing. Correct the `username` or `user_id` and run the action `haac_bridge.reload`."
+    }
+  },
+  "services": {
+    "reload": {
+      "name": "Reload",
+      "description": "Reloads the haac_bridge configuration from configuration.yaml."
+    }
+  }
+}

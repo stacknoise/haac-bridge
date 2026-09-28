@@ -4,7 +4,115 @@
 
 Lists every module, class and function of the integration with signature, file and a one-line summary, grouped by topic. Read it before writing code to reuse existing functions instead of duplicating them.
 
-_No code yet. The first run of `scripts/code_index.py` replaces this placeholder._
+## (root)
 
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
+| `haac_bridge.__init__` | `module` | `custom_components/haac_bridge/__init__.py` | HAAC Bridge: per-user entity exposure for the HA Android Client (concept 10). |
+| `async_setup` | `async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool` | `custom_components/haac_bridge/__init__.py` | Create the factories and exposure, register the commands and the reload action. |
+| `async_setup._async_reload` | `async def _async_reload(call: ServiceCall) -> None` | `custom_components/haac_bridge/__init__.py` | Handle the haac_bridge.reload action. |
+| `async_reload` | `async def async_reload(hass: HomeAssistant) -> None` | `custom_components/haac_bridge/__init__.py` | Re-read the YAML configuration and rebuild the exposure of all users. |
+| `haac_bridge.const` | `module` | `custom_components/haac_bridge/const.py` | Constants shared by all topics of HAAC Bridge. |
+
+## core
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.core.__init__` | `module` | `custom_components/haac_bridge/core/__init__.py` | Shared building blocks: errors, factories for errors and replies, command wrapper, runtime data. |
+| `haac_bridge.core.caller` | `module` | `custom_components/haac_bridge/core/caller.py` | Resolves the calling HA user of a WebSocket request (concept 10.3). |
+| `require_user` | `def require_user(connection: ActiveConnection) -> User` | `custom_components/haac_bridge/core/caller.py` | Return the HA user bound to the connection's access token, never a user named by the client. |
+| `haac_bridge.core.command` | `module` | `custom_components/haac_bridge/core/command.py` | Command wrapper: every haac_bridge/* command runs through it (concept 18.3). |
+| `BridgeCommand` | `class BridgeCommand` | `custom_components/haac_bridge/core/command.py` | A haac_bridge/* command: its type, request fields and handler. |
+| `bridge_command` | `def bridge_command(command_type: str, fields: dict[Any, Any] \| None=None) -> Callable[[CommandHandler], BridgeCommand]` | `custom_components/haac_bridge/core/command.py` | Declare a handler as haac_bridge/* command with optional request fields. |
+| `bridge_command.decorator` | `def decorator(handler: CommandHandler) -> BridgeCommand` | `custom_components/haac_bridge/core/command.py` | Wrap the handler into a BridgeCommand. |
+| `async_register_commands` | `def async_register_commands(hass: HomeAssistant, commands: Iterable[BridgeCommand]) -> None` | `custom_components/haac_bridge/core/command.py` | Register all commands with HA's WebSocket API, each inside the wrapper. |
+| `_wrap` | `def _wrap(command: BridgeCommand) -> websocket_api.WebSocketCommandHandler` | `custom_components/haac_bridge/core/command.py` | Build the HA handler that validates, runs and answers one command. |
+| `_wrap._handle` | `async def _handle(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/core/command.py` | Run the command and send exactly one reply. |
+| `_log_error` | `def _log_error(command_type: str, connection: ActiveConnection, code: ErrorCode, err: Exception) -> None` | `custom_components/haac_bridge/core/command.py` | Log a failed command once with its HAB code; tracebacks only for unexpected errors. |
+| `haac_bridge.core.error_factory` | `module` | `custom_components/haac_bridge/core/error_factory.py` | ErrorFactory: turns any caught exception into a HaacBridgeError (concept 18.2, 18.3). |
+| `ErrorFactory` | `class ErrorFactory` | `custom_components/haac_bridge/core/error_factory.py` | Maps exceptions to HaacBridgeError; the only place that decides an error's code. |
+| `ErrorFactory.from_exception` | `def from_exception(self, err: Exception) -> HaacBridgeError` | `custom_components/haac_bridge/core/error_factory.py` | Return a HaacBridgeError for `err`; unknown exceptions become HAB-INT-000. |
+| `haac_bridge.core.errors` | `module` | `custom_components/haac_bridge/core/errors.py` | All HAB error codes and the exception hierarchy of HAAC Bridge (concept 18.3). |
+| `ErrorCode` | `class ErrorCode(StrEnum)` | `custom_components/haac_bridge/core/errors.py` | HAB error code; the value is the code, the lowercase name is the translation key. |
+| `ErrorCode.translation_key` | `def translation_key(self) -> str` | `custom_components/haac_bridge/core/errors.py` | Return the key of the user text in translations/en.json. |
+| `ErrorCode.area` | `def area(self) -> str` | `custom_components/haac_bridge/core/errors.py` | Return the area part of the code, e.g. `SVC` for `HAB-SVC-001`. |
+| `HaacBridgeError` | `class HaacBridgeError(HomeAssistantError)` | `custom_components/haac_bridge/core/errors.py` | Base of every exception raised by HAAC Bridge; carries an ErrorCode. |
+| `HaacBridgeError.__init__` | `def __init__(self, code: ErrorCode \| None=None, placeholders: dict[str, str] \| None=None) -> None` | `custom_components/haac_bridge/core/errors.py` | Create the error with its code and optional translation placeholders. |
+| `ConfigError` | `class ConfigError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | Error in the haac_bridge YAML configuration (area CFG). |
+| `NotAllowedError` | `class NotAllowedError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | The caller could not be identified (area AUTH). |
+| `InvalidServiceError` | `class InvalidServiceError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A service call was rejected or failed (area SVC). |
+| `EntityNotFoundError` | `class EntityNotFoundError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A requested entity does not exist (area ENT). |
+| `HistoryError` | `class HistoryError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | History or statistics could not be read (area HIST). |
+| `RequestError` | `class RequestError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A WebSocket request has an invalid format (area WS). |
+| `InternalError` | `class InternalError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | Unexpected error inside the bridge (area INT). |
+| `haac_bridge.core.response_factory` | `module` | `custom_components/haac_bridge/core/response_factory.py` | ResponseFactory: builds every WebSocket reply of HAAC Bridge (concept 11, 18.2). |
+| `ResponseFactory` | `class ResponseFactory` | `custom_components/haac_bridge/core/response_factory.py` | Creates result and error messages in HA's WebSocket reply format. |
+| `ResponseFactory.result` | `def result(self, msg_id: int, payload: Any) -> dict[str, Any]` | `custom_components/haac_bridge/core/response_factory.py` | Return a success reply carrying `payload`. |
+| `ResponseFactory.error` | `def error(self, msg_id: int, error: HaacBridgeError) -> dict[str, Any]` | `custom_components/haac_bridge/core/response_factory.py` | Return an error reply whose `code` is the HAB code of `error`. |
+| `haac_bridge.core.runtime` | `module` | `custom_components/haac_bridge/core/runtime.py` | Runtime data of HAAC Bridge stored in hass.data (concept 18.2). |
+| `HaacBridgeData` | `class HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Factories and current exposure, created in async_setup and replaced on reload. |
+| `get_data` | `def get_data(hass: HomeAssistant) -> HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Return the runtime data of HAAC Bridge. |
+
+## config
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.config.__init__` | `module` | `custom_components/haac_bridge/config/__init__.py` | YAML configuration: schema, matching entries to HA users, Repairs issues. |
+| `haac_bridge.config.repairs` | `module` | `custom_components/haac_bridge/config/repairs.py` | Reports configuration errors (HAB-CFG-*) in the log and in HA Repairs (concept 18.4). |
+| `async_report_invalid_config` | `def async_report_invalid_config(hass: HomeAssistant, issue_ids: set[str]) -> None` | `custom_components/haac_bridge/config/repairs.py` | Log HAB-CFG-001 and create its Repairs issue; the previous configuration stays active. |
+| `async_check_users` | `async def async_check_users(hass: HomeAssistant, issue_ids: set[str], entries: list[UserEntry]) -> None` | `custom_components/haac_bridge/config/repairs.py` | Report entries without a matching HA user (HAB-CFG-002) and remove resolved issues. |
+| `haac_bridge.config.schema` | `module` | `custom_components/haac_bridge/config/schema.py` | YAML schema of the haac_bridge section in configuration.yaml (concept 10.2). |
+| `UserEntry` | `class UserEntry` | `custom_components/haac_bridge/config/schema.py` | One validated entry under `users`: who it applies to and its filter settings. |
+| `UserEntry.label` | `def label(self) -> str` | `custom_components/haac_bridge/config/schema.py` | Return the name used for this entry in logs and Repairs. |
+| `parse_users` | `def parse_users(config: ConfigType) -> list[UserEntry]` | `custom_components/haac_bridge/config/schema.py` | Return the user entries of a validated configuration; empty if the section is missing. |
+| `haac_bridge.config.users` | `module` | `custom_components/haac_bridge/config/users.py` | Matches configured user entries to Home Assistant users (concept 10.2, 10.3). |
+| `normalize_username` | `def normalize_username(username: str) -> str` | `custom_components/haac_bridge/config/users.py` | Return the username in the form HA's own auth provider compares it. |
+| `usernames_of` | `def usernames_of(user: User) -> set[str]` | `custom_components/haac_bridge/config/users.py` | Return the normalized login names of a user from its HA auth provider credentials. |
+| `entry_matches` | `def entry_matches(entry: UserEntry, user: User) -> bool` | `custom_components/haac_bridge/config/users.py` | Return True if the configuration entry refers to this HA user. |
+| `async_find_unknown_entries` | `async def async_find_unknown_entries(hass: HomeAssistant, entries: list[UserEntry]) -> list[UserEntry]` | `custom_components/haac_bridge/config/users.py` | Return the entries that match no existing HA user. |
+
+## exposure
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.exposure.__init__` | `module` | `custom_components/haac_bridge/exposure/__init__.py` | Per-user exposure: entity filters, exposed set and revision. |
+| `haac_bridge.exposure.exposure` | `module` | `custom_components/haac_bridge/exposure/exposure.py` | Per-user set of exposed entities and its revision hash (concept 10.2, 10.3). |
+| `ExposureSnapshot` | `class ExposureSnapshot` | `custom_components/haac_bridge/exposure/exposure.py` | The entities exposed to one user at one moment, with their revision hash. |
+| `_UserRule` | `class _UserRule` | `custom_components/haac_bridge/exposure/exposure.py` | A configured user entry together with its built filter. |
+| `Exposure` | `class Exposure` | `custom_components/haac_bridge/exposure/exposure.py` | Decides which entities a HA user sees; deny by default for users not configured. |
+| `Exposure.__init__` | `def __init__(self, entries: list[UserEntry], filters: FilterFactory) -> None` | `custom_components/haac_bridge/exposure/exposure.py` | Build one filter per configured user entry. |
+| `Exposure.is_exposed` | `def is_exposed(self, user: User, entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/exposure.py` | Return True if the entity is in a v1 domain and passes the user's filter. |
+| `Exposure.exposed_entity_ids` | `def exposed_entity_ids(self, hass: HomeAssistant, user: User) -> list[str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the sorted IDs of all current entities exposed to the user. |
+| `Exposure.snapshot` | `def snapshot(self, hass: HomeAssistant, user: User) -> ExposureSnapshot` | `custom_components/haac_bridge/exposure/exposure.py` | Return the user's exposed entities together with their revision. |
+| `Exposure._rule_for` | `def _rule_for(self, user: User) -> _UserRule \| None` | `custom_components/haac_bridge/exposure/exposure.py` | Return the first rule whose entry refers to the user. |
+| `compute_revision` | `def compute_revision(entity_ids: list[str]) -> str` | `custom_components/haac_bridge/exposure/exposure.py` | Return a stable hash of an exposed set; it changes when entities are added or removed. |
+| `haac_bridge.exposure.filter_factory` | `module` | `custom_components/haac_bridge/exposure/filter_factory.py` | FilterFactory: builds the entity filter of each configured user (concept 10.2, 18.2). |
+| `_deny_all` | `def _deny_all(entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/filter_factory.py` | Expose no entity; used for entries without any include rule. |
+| `FilterFactory` | `class FilterFactory` | `custom_components/haac_bridge/exposure/filter_factory.py` | Creates entity filters with HA's entityfilter helper, so rules match the HomeKit Bridge. |
+| `FilterFactory.create` | `def create(self, entry: UserEntry) -> EntityPredicate` | `custom_components/haac_bridge/exposure/filter_factory.py` | Return the filter for one user entry; without an include rule it exposes nothing. |
+
+## entities
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.entities.__init__` | `module` | `custom_components/haac_bridge/entities/__init__.py` | Entity descriptors sent to the app. |
+| `haac_bridge.entities.descriptor_factory` | `module` | `custom_components/haac_bridge/entities/descriptor_factory.py` | DescriptorFactory: builds the entity descriptors sent to the app (concept 11.3, 18.2). |
+| `_no_fields` | `def _no_fields(state: State, entry: er.RegistryEntry \| None) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return no domain-specific fields (switch, climate: everything is in attributes). |
+| `_sensor_fields` | `def _sensor_fields(state: State, entry: er.RegistryEntry \| None) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return unit, state class and display precision a sensor tile needs (8.3). |
+| `DescriptorFactory` | `class DescriptorFactory` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Creates one descriptor per entity; the only place with per-domain field selection. |
+| `DescriptorFactory.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Keep the registries needed to resolve names and areas. |
+| `DescriptorFactory.create` | `def create(self, state: State) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return the descriptor of an entity including its current state and all attributes. |
+| `DescriptorFactory.create_many` | `def create_many(self, entity_ids: list[str]) -> list[dict[str, Any]]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return descriptors for the given entities, skipping those without a state. |
+| `DescriptorFactory._area_name` | `def _area_name(self, entry: er.RegistryEntry \| None) -> str \| None` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return the HA area of the entity, or of its device if the entity has none. |
+
+## api
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.api.__init__` | `module` | `custom_components/haac_bridge/api/__init__.py` | The haac_bridge/* WebSocket commands, one module per command group (concept 11.2). |
+| `haac_bridge.api.entities` | `module` | `custom_components/haac_bridge/api/entities.py` | Command haac_bridge/entities/list (concept 11.2, 11.3). |
+| `ws_entities_list` | `async def ws_entities_list(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/entities.py` | Return the revision and the descriptors of all entities exposed to the caller. |
+| `haac_bridge.api.exposure` | `module` | `custom_components/haac_bridge/api/exposure.py` | Command haac_bridge/exposure/revision (concept 11.2). |
+| `ws_exposure_revision` | `async def ws_exposure_revision(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/exposure.py` | Return the revision hash and entity count of the caller's exposed set. |
+| `haac_bridge.api.info` | `module` | `custom_components/haac_bridge/api/info.py` | Command haac_bridge/info (concept 11.2, 11.4). |
+| `ws_info` | `async def ws_info(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/info.py` | Return bridge version, API version, supported domains and HA version. |
