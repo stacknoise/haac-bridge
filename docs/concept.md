@@ -130,7 +130,7 @@ On first start – or whenever no server is bound – the app shows the server s
 
 ### 4.2 Server URL entry
 
-**LAN discovery (M-01).** While the server screen is open, the app browses the local network via Android `NsdManager` for the service `_home-assistant._tcp`, which HA announces over zeroconf. Found servers are listed with host name and `IP:port`; the TXT record supplies base URL and HA version. Discovery needs the permission `NEARBY_WIFI_DEVICES` (Android 13+) or runs without it on older versions; if nothing is found, manual entry (*Other address…*) is always available.
+**LAN discovery (M-01).** While the server screen is open, the app browses the local network via Android `NsdManager` for the service `_home-assistant._tcp`, which HA announces over zeroconf. Found servers are listed with host name and `IP:port`; the TXT record supplies base URL and HA version. If nothing is found, manual entry (*Other address…*) is always available. With targetSdk 36 neither discovery nor connections to local addresses need a runtime permission. From targetSdk 37 on, Android blocks all local network traffic by default: the app then has to request `ACCESS_LOCAL_NETWORK` (needed anyway, because the app talks to HA on local addresses) or use the `NsdManager` system picker (`DiscoveryRequest.FLAG_SHOW_PICKER`), which grants access to the chosen server only. This must be decided before raising targetSdk to 37.
 
 1. User enters a URL, e.g. `https://ha.example.com` or `http://192.168.1.10:8123`.
 2. The app normalises it: adds `https://` if no scheme is given, removes trailing slashes and paths such as `/lovelace`.
@@ -140,7 +140,7 @@ On first start – or whenever no server is bound – the app shows the server s
 
 ### 4.3 Transport security
 
-- **HTTPS is the default.** Plain `http://` is only accepted for private address ranges (RFC 1918, `.local`) after an explicit warning dialog; the network security config allows cleartext only when the user has opted in.
+- **HTTPS is the default.** Plain `http://` is only accepted for private addresses (RFC 1918, loopback, link-local, IPv6 unique/link-local, `.local`) after an explicit warning dialog. Android's network security config cannot express address ranges and OkHttp refuses cleartext entirely when the config forbids it, so the config permits cleartext and the rule is enforced in code (`CleartextPolicy`) before every request; public hosts over `http://` fail with `HAAC-NET-006`.
 - Self-signed certificates: the user can trust the certificate on first use (TOFU). The app then pins its SHA-256 public-key hash for that server and shows the fingerprint for manual comparison. A later certificate change triggers a blocking warning.
 - Optional second URL (internal/external) with automatic selection is a later feature; v1 has one URL.
 
@@ -657,7 +657,7 @@ Mitigations:
 ### 13.3 Standards and checks
 
 - Aligned with **OWASP MASVS** (storage, crypto, auth, network, platform) and OAuth 2.0 for Native Apps (RFC 8252) incl. PKCE for the browser fallback.
-- Release builds: R8 obfuscation, `debuggable=false`, no cleartext by default in the network security config.
+- Release builds: R8 obfuscation, `debuggable=false`; cleartext only to private addresses, enforced by `CleartextPolicy` (4.3); only system CAs are trusted (self-signed certificates via per-instance pinning).
 - Dependency scanning (Dependabot/Renovate) and static analysis (Android Lint security checks, Detekt) in CI; `bandit` and `ruff` for the integration.
 
 ## 14. Error handling, testing, roadmap and open points
@@ -1068,9 +1068,14 @@ enum class ErrorCode(
 | HAAC-NET-001 | The server is not reachable. Check your connection and try again. | Retry |
 | HAAC-NET-002 | The connection to the server was lost. Reconnecting… | None |
 | HAAC-NET-003 | The server's certificate has changed. For your safety the connection was blocked. | Open settings |
+| HAAC-NET-004 | This address is not a Home Assistant server. Check the address and try again. | None |
+| HAAC-NET-005 | This is not a valid address. Check it and try again. | None |
+| HAAC-NET-006 | Unencrypted connections are only allowed in your home network. Use an https address. | None |
+| HAAC-NET-007 | The server's certificate is not trusted, so the connection was blocked. | None |
 | HAAC-AUTH-001 | Username or password is wrong. | None |
 | HAAC-AUTH-002 | The verification code is wrong. | None |
 | HAAC-AUTH-003 | Your sign-in has expired. Please sign in again. | Sign in |
+| HAAC-AUTH-004 | This server does not allow sign-in with username and password. | None |
 | HAAC-SEC-001 | Your fingerprints have changed. Please sign in with your password. | Sign in |
 | HAAC-SEC-002 | Secure storage on this device is not available. | None |
 | HAAC-BRG-001 | HAAC Bridge is not installed on this server. | Open settings |
