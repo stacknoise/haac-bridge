@@ -130,19 +130,19 @@ On first start – or whenever no server is bound – the app shows the server s
 
 ### 4.2 Server URL entry
 
-**LAN discovery (M-01).** While the server screen is open, the app browses the local network via Android `NsdManager` for the service `_home-assistant._tcp`, which HA announces over zeroconf. Found servers are listed with host name and `IP:port`; the TXT record supplies base URL and HA version. If nothing is found, manual entry (*Other address…*) is always available. With targetSdk 36 neither discovery nor connections to local addresses need a runtime permission. From targetSdk 37 on, Android blocks all local network traffic by default: the app then has to request `ACCESS_LOCAL_NETWORK` (needed anyway, because the app talks to HA on local addresses) or use the `NsdManager` system picker (`DiscoveryRequest.FLAG_SHOW_PICKER`), which grants access to the chosen server only. This must be decided before raising targetSdk to 37.
+**LAN discovery (M-01).** While the server screen is open, the app browses the local network via Android `NsdManager` for the service `_home-assistant._tcp`, which HA announces over zeroconf. Found servers are listed with host name and `IP:port`; the TXT record supplies base URL and HA version. If nothing is found, manual entry (*Other address…*) is always available. With targetSdk 36 neither discovery nor connections to local addresses need a runtime permission. From targetSdk 37 on, Android blocks all local network traffic by default; the app then requests `ACCESS_LOCAL_NETWORK` when the server screen opens and before the first home network check of an instance with an internal address (4.5). The `NsdManager` system picker (`DiscoveryRequest.FLAG_SHOW_PICKER`) is not enough, because it grants access to the chosen server only and not to the repeated discovery of 4.5. Without the permission, discovery and internal addresses are skipped and the app uses the external address.
 
 1. User enters a URL, e.g. `https://ha.example.com` or `http://192.168.1.10:8123`.
 2. The app normalises it: adds `https://` if no scheme is given, removes trailing slashes and paths such as `/lovelace`.
 3. Validation request `GET <url>/auth/providers`: a JSON list of auth providers confirms a HA instance and tells the app whether the `homeassistant` (username/password) provider is enabled.
 4. Check that the HAAC Bridge integration is installed: after login, the WebSocket command `haac_bridge/info` must succeed (see chapter 11). If not, show an install hint with the HACS repository link. The instance is stored only after a successful check; until then the new tokens stay in memory, so *Try again* repeats the check without a new login, and *Start over* revokes them.
-5. The URL is stored in the `server` table (chapter 12); it is not sensitive and not encrypted.
+5. Duplicate check (4.5): if an instance with the same `instance_id` and the same HA user already exists, the address is offered as an additional address of that instance instead of creating a new one.
+6. The instance ID and the addresses are stored in the `server` table (chapter 12): the entered URL, plus the internal and external address `haac_bridge/info` reports for the slot that is still empty (4.5). Addresses are not sensitive and not encrypted.
 
 ### 4.3 Transport security
 
 - **HTTPS is the default.** Plain `http://` is only accepted for private addresses (RFC 1918, loopback, link-local, IPv6 unique/link-local, `.local`) after an explicit warning dialog. Android's network security config cannot express address ranges and OkHttp refuses cleartext entirely when the config forbids it, so the config permits cleartext and the rule is enforced in code (`CleartextPolicy`) before every request; public hosts over `http://` fail with `HAAC-NET-006`.
-- Self-signed certificates: the user can trust the certificate on first use (TOFU). The app then pins its SHA-256 public-key hash for that server and shows the fingerprint for manual comparison. A later certificate change triggers a blocking warning.
-- Optional second URL (internal/external) with automatic selection is a later feature; v1 has one URL.
+- Self-signed certificates: the user can trust the certificate on first use (TOFU). The app then pins its SHA-256 public-key hash for that address and shows the fingerprint for manual comparison. A later certificate change triggers a blocking warning. Each address of an instance (4.5) has its own pin.
 
 ### 4.4 Multiple HA instances and switching
 
@@ -155,9 +155,9 @@ The app can hold any number of HA instances; exactly one is active, and the user
 - refresh token and Keystore key (chapter 5),
 - exposure cache and revision (chapter 9),
 - homes, floors, rooms, room assignments and aliases (chapters 6, 7),
-- certificate pin and transport settings (4.3).
+- addresses, certificate pins and transport settings (4.3, 4.5).
 
-Nothing is shared between instances. The same server may be added twice with different HA users (e.g. a family account and a guest account); such entries are labelled with the HA user name.
+Nothing is shared between instances. The same server (same `instance_id`) may be added twice with different HA users (e.g. a family account and a guest account); such entries are labelled with the HA user name. The same server with the same HA user is always one instance, whatever address was used (4.5).
 
 **Switching**
 
@@ -176,7 +176,7 @@ sequenceDiagram
   A->>U: home view of new instance
 ```
 
-- The switcher (dropdown in the top app bar, also reachable via a long-press on the app icon shortcut) lists all instances with name, colour, URL and last connection status.
+- The switcher (dropdown in the top app bar, also reachable via a long-press on the app icon shortcut) lists all instances with name, colour, current address and last connection status.
 - Only the active instance holds a live WebSocket connection; inactive instances keep no connection, which saves battery and data.
 - UI state of the old instance (open screen, scroll position) is discarded; the new instance opens on its home view.
 - The last active instance is remembered and opened on the next app start.
@@ -189,9 +189,37 @@ With an active unlock window (5.4), the fingerprint step of the switch is skippe
 | Action | Effect |
 | --- | --- |
 | Rename / change colour | Local only |
-| Change URL (e.g. new domain) | Re-validation; login only if HA rejects the existing refresh token; layout stays |
+| Add, change or remove an address (4.5) | Re-validation and `instance_id` check; login only if HA rejects the existing refresh token; layout stays. At least one address remains |
 | Remove instance | Confirmation dialog; refresh token revoked on the server (if reachable), token and Keystore key deleted, cache, layout, assignments and aliases of that instance deleted |
 | Remove last instance | App returns to the first-start screen |
+
+### 4.5 Internal and external address
+
+A HA instance is often reachable under two addresses: in the home network, e.g. `http://192.168.1.10:8123`, and from outside, e.g. via Home Assistant Cloud (`https://….ui.nabu.casa`) or the user's own domain. A HA refresh token belongs to the instance, not to an address, so it is one instance with up to two addresses; token, keys and layout stay one unit.
+
+**Identity.** Every HA installation has a fixed `instance_id` (a UUID HA creates on first start; zeroconf announces it as TXT `uuid`). `haac_bridge/info` returns it together with the addresses configured in HA (11.2). The app stores it as `instanceUuid` of the instance (12).
+
+**Addresses.** Each instance has an *internal* and an *external* address; at least one is set.
+
+- On sign-in, the entered URL goes into the internal slot if its host is private (4.3), otherwise into the external slot. The other slot is filled from `haac_bridge/info`: internal ← `urls.internal`; external ← `urls.external`, else `urls.cloud`. Only addresses that `CleartextPolicy` allows are taken.
+- *Settings → Addresses* shows both addresses of the active instance. The user can edit or remove each one (one address always remains) and take them over from HA again (*Use addresses from Home Assistant*). A changed address is probed and must report the same `instance_id`; the access token for this check is refreshed at the working address, so the refresh token never goes to the new address while another one answers.
+
+**Choosing the address.** The app picks the address on app start, on an instance switch and when the network changes (`ConnectivityManager.NetworkCallback`). A change of the chosen address rebuilds the WebSocket like a reconnect (11.4).
+
+| Internal address | Used when |
+| --- | --- |
+| `https://` with a certificate the system trusts or a pinned key (4.3) | Always tried first; a device that is not this server cannot complete the TLS handshake |
+| `http://` | Only when the home network check confirms it, or the user turned on *Always use the internal address* for this instance |
+| not set | Never |
+
+- **Home network check (mDNS):** the app browses `_home-assistant._tcp` (4.2) for up to 2 s. The check passes if a service with TXT `uuid` equal to `instanceUuid` is found and the host of the internal address equals the IP address of that service or the host of its TXT `base_url`/`internal_url`. Nothing has to be configured and no location permission is needed. In networks without mDNS (VLANs, some routers, the emulator) the check fails; there the user can turn on *Always use the internal address*, with a warning that the app then sends its sign-in to whatever device answers at this address in any network.
+- Otherwise the app uses the external address. If both candidates fail, the error of the last attempt is shown (e.g. `HAAC-NET-001`).
+- Each candidate is probed with `GET /auth/providers` and a short timeout (3 s) before any token is sent.
+- An instance stored before `instanceUuid` existed (schema v1) has no instance ID; it uses its stored address as before until the first successful connection saves the ID.
+
+**Identity check after connecting.** After every WebSocket connection the app compares the `instance_id` from `haac_bridge/info` with `instanceUuid`. On a mismatch it closes the connection at once, does not delete the refresh token and reports `HAAC-NET-008`.
+
+**Duplicate detection.** When a sign-in returns an `instance_id` that already belongs to a stored instance with the same HA user, no new instance is created. A dialog asks: *"This address belongs to «Home». Add it as its internal (or external) address?"* If that slot is already set, the dialog says which address it replaces. *Add* stores the address in the existing instance and revokes the tokens of the new sign-in (they replace the token only if the instance has none); *Cancel* revokes them too. The same `instance_id` with a different HA user is a separate instance (4.4).
 
 ## 5. Authentication, credential storage and biometric login
 
@@ -238,7 +266,7 @@ sequenceDiagram
 ### 5.3 Encryption at rest
 
 - One AES-256-GCM key per HA instance, generated in the **Android Keystore**, StrongBox-backed when the device has it; the key material never leaves secure hardware.
-- Ciphertext + IV of the refresh token are stored in a file under `noBackupFilesDir`; the Room database contains no secrets.
+- Ciphertext + IV of the refresh token are stored in a file under `noBackupFilesDir`; the Room database contains no secrets. A header records which key protects the token: the device-bound key of this section or a fingerprint key (5.4) with its generation and unlock window.
 - Key properties: `setUnlockedDeviceRequired(true)`, no export, purpose `ENCRYPT|DECRYPT` only.
 - `android:allowBackup="false"` plus data-extraction rules excluding all app data from cloud backup and device transfer.
 
@@ -247,11 +275,11 @@ sequenceDiagram
 Fingerprint login is an unlock of the stored refresh token, not a separate account system. HA never learns about the fingerprint.
 
 1. Fingerprint unlock is optional and off by default. The user can enable it per instance under Settings → Security (only if `BiometricManager.canAuthenticate(BIOMETRIC_STRONG)` succeeds).
-2. On enabling, a **second** Keystore key is generated with `setUserAuthenticationRequired(true)`, `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)` (auth per use) and `setInvalidatedByBiometricEnrollment(true)`. The refresh token is re-encrypted with it and the old key is deleted.
-3. On app start, `BiometricPrompt` is shown with a `CryptoObject` wrapping a `Cipher` in decrypt mode. Only a successful Class-3 biometric authentication unlocks the cipher, so the token cannot be decrypted without the finger – a UI-only check would not be sufficient.
-4. The decrypted refresh token is used immediately to obtain an access token and then discarded from memory.
+2. On enabling, a **second** Keystore key is generated with `setUserAuthenticationRequired(true)`, `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)` (auth per use) and `setInvalidatedByBiometricEnrollment(true)`. The refresh token is re-encrypted with it and the old key is deleted. Every new fingerprint key gets the next generation number; the old key is deleted only after the new token file is written, so a cancelled prompt changes nothing.
+3. On app start, `BiometricPrompt` is shown with a `CryptoObject` wrapping a `Cipher` in decrypt mode. Only a successful Class-3 biometric authentication unlocks the cipher, so the token cannot be decrypted without the finger – a UI-only check would not be sufficient. With an unlock window the key is time-bound; see below.
+4. The decrypted refresh token stays in memory only, never in plaintext on disk, until the app locks (5.5), the user signs out or the token is replaced. The access token is refreshed from it without a new prompt; discarding it right away would require a fingerprint about every 30 minutes, whenever the access token expires.
 5. If fingers are added or removed, the key is permanently invalidated (`KeyPermanentlyInvalidatedException`); the app deletes it and asks for the HA password again.
-6. "Use password" on the prompt leads to the HA login (5.1); a new token is issued and the old one revoked.
+6. "Use password" on the prompt leads to the HA login (5.1). The new token is stored with the device-bound key (5.3), so fingerprint unlock is off until the user enables it again. The old refresh token cannot be revoked without the fingerprint; it expires in HA after a period of inactivity.
 
 With several instances, fingerprint unlock is a per-instance setting and each instance has its own biometric-bound key, so a token of one instance can never be decrypted with the key of another.
 
@@ -264,7 +292,9 @@ With several instances, fingerprint unlock is a per-instance setting and each in
 
 - The window is enforced by the Keystore in secure hardware, not by the app: after it expires, the keys cannot be used until the next successful fingerprint.
 - The Keystore tracks the time of the last strong authentication per device user, not per key; that is why a single fingerprint covers all instances.
-- The key parameter is fixed at key creation. Changing the window therefore needs one fingerprint check, after which the app re-creates the keys of all fingerprint-enabled instances and re-encrypts their tokens.
+- A time-bound key cannot be wrapped in a `CryptoObject`, because its cipher can only be created after a strong biometric. The prompt is therefore shown without one; the Keystore still refuses the key without a Class-3 biometric inside the window.
+- Before Android 11, time-bound keys also accept the device PIN (`setUserAuthenticationValidityDurationSeconds`). The unlock window is therefore offered only from Android 11 on; older devices always use *Off*.
+- The key parameter is fixed at key creation. Changing the window therefore needs one fingerprint check, after which the app re-creates the key of the active instance, whose token is unlocked, and re-encrypts its token. Other fingerprint-enabled instances get a key for the new window at their next unlock.
 - With `setUnlockedDeviceRequired(true)`, locking the phone makes all keys unusable immediately, even inside the window.
 - The app lock (5.5) still applies on top: after the background timeout the app shows its lock screen again, even if the window is still open.
 
@@ -272,7 +302,7 @@ Disabling fingerprint unlock in the settings requires one last successful biomet
 
 ### 5.5 App lock behaviour
 
-- Re-lock after the app has been in the background longer than a configurable timeout (default 5 minutes).
+- Re-lock after the app has been in the background longer than a configurable timeout (Settings → Security: immediately, 1, 5, 15 or 30 minutes; default 5). The lock drops all unlocked refresh tokens and runs the start routing (4.1) again: instances with fingerprint unlock show the unlock screen, the others open directly.
 - `FLAG_SECURE` on login and settings screens to keep them out of screenshots and the recent-apps preview.
 - Root/emulator detection is informational only (warning), not a hard block.
 
@@ -420,7 +450,7 @@ On every start and on every instance switch (after unlock) the app compares the 
 
 ### 9.1 Sequence
 
-1. Unlock → obtain access token → open WebSocket → `auth` message.
+1. Unlock → choose the address (4.5) → obtain access token → open WebSocket → `auth` message → `haac_bridge/info` (API version and `instance_id` check).
 2. `haac_bridge/exposure/revision` → returns `revision` (SHA-256 over the sorted list of exposed `entity_id`s for this user).
 3. If `revision` equals the stored value: no changes, go to 5.
 4. Otherwise `haac_bridge/entities/list` → full list; the app computes the diff:
@@ -540,7 +570,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 
 | Command | Request fields | Response |
 | --- | --- | --- |
-| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version |
+| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version, `instance_id`, and `urls` with the `internal`, `external` and `cloud` address configured in HA (each `null` if not set) (4.5) |
 | `haac_bridge/exposure/revision` | – | `revision` (hash over the exposed entity IDs and their configured names), entity count |
 | `haac_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
 | `haac_bridge/subscribe_entities` | – | Empty result, then events: `a` initial and added states, `c` changes, `r` removals (HA's compressed state format) and `exposure_changed` (11.3) |
@@ -552,6 +582,16 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 ### 11.3 Message examples
 
 ```json
+{"id": 11, "type": "haac_bridge/info"}
+
+{"id": 11, "type": "result", "success": true, "result": {
+  "bridge_version": "0.1.0", "api_version": 1,
+  "domains": ["climate", "sensor", "switch"], "ha_version": "2026.9.0",
+  "instance_id": "1f0c6e2a9b3d4c55a7e8d9f0b1c2d3e4",
+  "urls": {"internal": "http://192.168.1.10:8123", "external": null,
+           "cloud": "https://abc123.ui.nabu.casa"}
+}}
+
 {"id": 12, "type": "haac_bridge/entities/list"}
 
 {"id": 12, "type": "result", "success": true, "result": {
@@ -621,7 +661,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `server` | `id` (UUID), `baseUrl`, `haVersion`, `bridgeApiVersion`, `pinnedKeyHash?`, `exposureRevision`, `lastSyncAt` | One row per HA instance, plus `displayName`, `accentColor`, `haUserName`, `lastActiveAt`; no credentials |
+| `server` | `id` (UUID), `instanceUuid?`, `internalUrl?`, `externalUrl?`, `internalPinnedKeyHash?`, `externalPinnedKeyHash?`, `alwaysUseInternal`, `haVersion`, `bridgeApiVersion`, `exposureRevision`, `lastSyncAt` | One row per HA instance and HA user, plus `displayName`, `accentColor`, `haUserName`, `lastActiveAt`; at least one address is set (4.5); no credentials |
 | `home` | `id`, `serverId`, `name`, `icon?`, `sortOrder`, `deletedAt?` |  |
 | `floor` | `id`, `homeId` → home, `name`, `level`, `icon?`, `sortOrder`, `deletedAt?` | Cascade on home delete |
 | `room` | `id`, `homeId` → home, `floorId?` → floor, `name`, `icon?`, `sortOrder`, `deletedAt?` | Trigger: floor must belong to same home; `floorId` set null on floor delete |
@@ -630,9 +670,9 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 | `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name |
 | notification | id, serverId → server, type (added/removed/error), errorCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results for M-09; purged after 30 days |
 
-- Schema migrations are versioned and tested with Room's `MigrationTestHelper`; destructive migration is never enabled.
+- Schema migrations are versioned and tested with Room's `MigrationTestHelper`; destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5).
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
-- Non-sensitive preferences (theme, lock timeout, biometric enabled flag) live in a typed DataStore (JSON via kotlinx.serialization).
+- Non-sensitive preferences (theme, unlock window, lock timeout) live in a typed DataStore (JSON via kotlinx.serialization). Whether an instance uses fingerprint unlock is not a separate flag: it follows from the key that protects its token file (5.3).
 
 The active instance is stored as `activeServerId` in DataStore. `home`, `exposed_entity` and `entity_alias` reference `server.id` with cascade delete, so removing an instance removes all of its data in one transaction.
 
@@ -660,6 +700,8 @@ Mitigations:
 | Fingerprint check bypassed by patched app | Key only usable after `BiometricPrompt` with `CryptoObject` (Class 3); no UI-only check |
 | New fingerprint added by attacker | `setInvalidatedByBiometricEnrollment(true)` → password required |
 | Man-in-the-middle | HTTPS by default; cleartext only on private networks after warning; key pinning for self-signed certs |
+| Foreign device at the internal address (another Wi-Fi uses the same private IP) and receives the token | An `http://` internal address is used only after the home network check (mDNS `uuid` of this instance at this host, 4.5); `https://` addresses need a trusted or pinned certificate; `instance_id` is checked after every connection (`HAAC-NET-008`) |
+| Faked mDNS announcement with the instance's `uuid` | Needs the `uuid`, which is only announced in the home network, and an attacker in the same network; residual risk of cleartext, documented in the warning dialog. *Always use the internal address* skips the check and warns about it |
 | Access to other users' entities via the bridge | Bridge resolves user from token (`connection.user`), ignores any user field from the client, deny by default |
 | Manipulated service call to a non-exposed entity | Bridge checks `entity_id` against exposure and service against domain before calling HA |
 | Credentials in logs or crash reports | No logging of `/auth/*`; crash reporting (if any) strips headers and bodies |
@@ -699,10 +741,10 @@ Every error in this table is raised as a `HaacException` with an error code from
 
 | Phase | Content |
 | --- | --- |
-| MVP (v1.0) | Onboarding, login + fingerprint, homes/floors/rooms, switch/sensor/climate, per-user exposure, start sync, multiple HA instances with switching |
+| MVP (v1.0) | Onboarding, login + fingerprint, homes/floors/rooms, switch/sensor/climate, per-user exposure, start sync, multiple HA instances with switching, internal/external address per instance |
 | v1.1 | HA area import wizard, per-room aliases, home-screen widgets and quick-settings tiles |
 | v1.2 | More domains (`light`, `cover`, `binary_sensor`, `lock`, `media_player`) |
-| v2.0 | Internal/external URL switching per instance, encrypted layout backup/export, UI config flow for the bridge |
+| v2.0 | Encrypted layout backup/export, UI config flow for the bridge |
 
 ### 14.4 Distribution
 
@@ -851,6 +893,7 @@ Until mockups exist, Claude Code builds these with the tokens from 15.2 and stan
 | Screen | Concept chapter |
 | --- | --- |
 | Instance switcher and *Add instance* | 4.4 |
+| Addresses of an instance and the *Add as address* dialog | 4.5 |
 | Fingerprint prompt, unlock and lock screen | 5.4, 5.5 |
 | Settings (instances, fingerprint toggle, unlock window, lock timeout, logout, diagnostics) | 4.4, 5.4, 5.5, 9.3 |
 | Entity detail: switch, sensor, climate incl. history | 8 |
@@ -1017,10 +1060,10 @@ com.stacknoise.haac
 │   ├── common               # shared helpers, dispatchers, time, result types
 │   ├── error                # ErrorCode, HaacException hierarchy, ErrorFactory, ErrorReporter (17.3)
 │   ├── security             # keystore, crypto, biometric
-│   ├── network              # http, websocket, auth, bridge
+│   ├── network              # http, websocket, auth, bridge, LAN discovery, address selection (4.5)
 │   └── database             # Room database, DAOs, entities
 └── feature
-    ├── onboarding           # server entry, LAN discovery, login
+    ├── onboarding           # server entry, login
     ├── instance             # instances, switching
     ├── layout               # homes, floors, rooms
     ├── entities             # picker, room grid, controls (switch, sensor, climate), sync
@@ -1045,6 +1088,7 @@ Whenever the kind of object depends on a type or on runtime data, it is created 
 | `BridgeMessageFactory` | WebSocket commands with message IDs | Message format and ID sequence in one place (11) |
 | `KeyFactory` / `CipherFactory` | Keystore keys (plain, biometric, unlock window) and ciphers | Key parameters from 5.3 and 5.4 in one place |
 | `InstanceSessionFactory` | Per-instance session: HTTP client, WebSocket, token store for one `serverId` | Strict instance isolation (4.4) |
+| `EndpointSelector` | The address of an instance to connect to, from its addresses, the home network check and the probes | Selection rules of 4.5 in one place |
 | `ErrorFactory` | `HaacException` from any caught `Throwable` | Error mapping in one place (17.3) |
 | ViewModel factories (`@AssistedFactory`) | ViewModels with runtime parameters (`roomId`, `entityId`) | Hilt standard for runtime arguments |
 
@@ -1092,6 +1136,8 @@ enum class ErrorCode(
 | HAAC-AUTH-006 | Home Assistant does not let this user sign in here. Ask your administrator. | None |
 | HAAC-SEC-001 | Your fingerprints have changed. Please sign in with your password. | Sign in |
 | HAAC-SEC-002 | Secure storage on this device is not available. | None |
+| HAAC-SEC-003 | The app is locked. Unlock it with your fingerprint. | None |
+| HAAC-SEC-004 | Fingerprint unlock is not available right now. Try again later or sign in with your password. | None |
 | HAAC-BRG-001 | HAAC Bridge is not installed on this server. | Open settings |
 | HAAC-BRG-002 | HAAC Bridge on the server needs an update. | None |
 | HAAC-BRG-003 | You are not allowed to control this device. | None |
@@ -1101,6 +1147,7 @@ enum class ErrorCode(
 | HAAC-BRG-004 | This action is not available for this device. | None |
 | HAAC-BRG-005 | Home Assistant could not carry out the action. Please try again. | Retry |
 | HAAC-BRG-006 | History is not available on this server. | None |
+| HAAC-NET-008 | A different server answers at this address. The connection was closed for your safety. | Open settings |
 
 ### 17.4 Errors in the notification list
 
@@ -1153,6 +1200,7 @@ custom_components/haac_bridge/
 ├── config/                  # YAML schema, resolving usernames to HA users
 ├── exposure/                # filter_factory.py, per-user exposed set, revision hash
 ├── entities/                # descriptor_factory.py, state subscription
+├── instance/                # instance ID and addresses for haac_bridge/info
 ├── services/                # call_factory.py: validated service calls
 ├── history/                 # filtered history and statistics
 └── api/                     # haac_bridge/* WebSocket commands, one module per command group
