@@ -570,7 +570,7 @@ Error reply (format of HA's WebSocket API, `code` = HAB code from 18.3):
 
 ```json
 {"id": 13, "type": "result", "success": false,
- "error": {"code": "HAB-SVC-001", "message": "You are not allowed to control this device."}}
+ "error": {"code": "HAB-SVC-001", "message": "You are not allowed to control this device"}}
 ```
 
 ### 11.4 Versioning and robustness
