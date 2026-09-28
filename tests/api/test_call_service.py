@@ -32,14 +32,16 @@ async def client(
     return await client_for(anton)
 
 
-async def _call_service(client: Any, entity_id: str, service: str, **data: Any) -> dict[str, Any]:
+async def _call_service(
+    client: Any, entity_id: str, service: str, service_data: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Send haac_bridge/call_service and return the reply."""
     await client.send_json_auto_id(
         {
             "type": "haac_bridge/call_service",
             "entity_id": entity_id,
             "service": service,
-            "service_data": data,
+            "service_data": service_data or {},
         }
     )
     return await client.receive_json()
@@ -83,7 +85,7 @@ async def test_target_in_service_data_is_rejected(
 ) -> None:
     calls = async_mock_service(hass, "switch", "turn_off")
     reply = await _call_service(
-        client, "switch.garage_socket", "turn_off", **{key: "switch.office_fan"}
+        client, "switch.garage_socket", "turn_off", {key: "switch.office_fan"}
     )
 
     assert reply["error"]["code"] == "HAB-WS-001"
