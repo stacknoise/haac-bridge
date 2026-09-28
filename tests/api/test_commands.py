@@ -6,6 +6,7 @@ from typing import Any
 from homeassistant.auth.models import User
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import instance_id
 import pytest
 
 SetupBridge = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
@@ -43,7 +44,11 @@ async def anton_client(
     return await hass_ws_client(hass, await access_token_for(anton))
 
 
-async def test_info(anton_client: Any) -> None:
+async def test_info(hass: HomeAssistant, anton_client: Any) -> None:
+    await hass.config.async_update(
+        internal_url="http://192.168.1.10:8123", external_url="https://ha.example.com"
+    )
+
     reply = await _call(anton_client, "haac_bridge/info")
     assert reply["success"]
     assert reply["result"] == {
@@ -51,7 +56,20 @@ async def test_info(anton_client: Any) -> None:
         "api_version": 1,
         "domains": ["climate", "sensor", "switch"],
         "ha_version": HA_VERSION,
+        "instance_id": await instance_id.async_get(hass),
+        "urls": {
+            "internal": "http://192.168.1.10:8123",
+            "external": "https://ha.example.com",
+            "cloud": None,
+        },
     }
+
+
+async def test_info_without_external_address(hass: HomeAssistant, anton_client: Any) -> None:
+    await hass.config.async_update(internal_url="http://192.168.1.10:8123", external_url=None)
+
+    urls = (await _call(anton_client, "haac_bridge/info"))["result"]["urls"]
+    assert urls == {"internal": "http://192.168.1.10:8123", "external": None, "cloud": None}
 
 
 @pytest.mark.usefixtures("demo_states")

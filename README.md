@@ -77,7 +77,7 @@ The app talks to the bridge over Home Assistant's WebSocket API with commands pr
 
 | Command | Request fields | Reply |
 | --- | --- | --- |
-| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version |
+| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version, `instance_id` (Home Assistant's unique ID, also announced via zeroconf as `uuid`) and `urls` with the `internal`, `external` and `cloud` (Home Assistant Cloud remote UI) address, each `null` if not configured |
 | `haac_bridge/exposure/revision` | – | `revision`, `entity_count` |
 | `haac_bridge/entities/list` | – | `revision`, entity descriptors incl. current state; `name` is the Home Assistant name, `configured_name` the name from `entity_config` or `null` |
 | `haac_bridge/subscribe_entities` | – | Empty result, then events: `{"a": {…}}` initial and added states, `{"c": {…}}` changes, `{"r": […]}` removals (Home Assistant's compressed state format), and `{"exposure_changed": {"revision": …}}` whenever the exposed set changes or the configuration is reloaded |
@@ -88,6 +88,8 @@ The app talks to the bridge over Home Assistant's WebSocket API with commands pr
 History and statistics only include requested entities that are exposed to the caller; others are left out silently. Times are ISO 8601; a period in the future returns an empty result.
 
 The bridge sets the service target itself and runs the call in the context of the signed-in user.
+
+The app uses `instance_id` to recognise the same Home Assistant under different addresses and switches between the internal and the external address automatically. Set the addresses under *Settings → System → Network* in Home Assistant.
 
 ## Development
 
