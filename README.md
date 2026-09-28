@@ -66,7 +66,17 @@ The exposure limits what the app shows and controls through the `haac_bridge/*` 
 
 ## WebSocket API
 
-The app talks to the bridge over Home Assistant's WebSocket API with commands prefixed `haac_bridge/`. Available in this version: `haac_bridge/info`, `haac_bridge/exposure/revision`, `haac_bridge/entities/list`. Errors carry a code `HAB-<AREA>-<NNN>`, listed in [docs/error-codes.md](docs/error-codes.md).
+The app talks to the bridge over Home Assistant's WebSocket API with commands prefixed `haac_bridge/`. Errors carry a code `HAB-<AREA>-<NNN>`, listed in [docs/error-codes.md](docs/error-codes.md).
+
+| Command | Request fields | Reply |
+| --- | --- | --- |
+| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version |
+| `haac_bridge/exposure/revision` | – | `revision`, `entity_count` |
+| `haac_bridge/entities/list` | – | `revision`, entity descriptors incl. current state |
+| `haac_bridge/subscribe_entities` | – | Empty result, then events: `{"a": {…}}` initial and added states, `{"c": {…}}` changes, `{"r": […]}` removals (Home Assistant's compressed state format), and `{"exposure_changed": {"revision": …}}` whenever the exposed set changes or the configuration is reloaded |
+| `haac_bridge/call_service` | `entity_id`, `service`, `service_data` | Empty result, or an error: `HAB-SVC-001` not exposed, `HAB-ENT-001` entity gone, `HAB-SVC-002` service not in the entity's domain, `HAB-WS-001` target keys in `service_data`, `HAB-SVC-003` Home Assistant failed |
+
+The bridge sets the service target itself and runs the call in the context of the signed-in user.
 
 ## Development
 

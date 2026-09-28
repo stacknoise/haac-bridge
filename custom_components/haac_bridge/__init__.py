@@ -1,6 +1,7 @@
 """HAAC Bridge: per-user entity exposure for the HA Android Client (concept 10)."""
 
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.reload import async_integration_yaml_config
 from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.typing import ConfigType
@@ -9,13 +10,14 @@ from homeassistant.loader import async_get_integration
 from .api import COMMANDS
 from .config.repairs import async_check_users, async_report_invalid_config
 from .config.schema import CONFIG_SCHEMA, parse_users
-from .const import DOMAIN, SERVICE_RELOAD
+from .const import DOMAIN, SERVICE_RELOAD, SIGNAL_EXPOSURE_CHANGED
 from .core.command import async_register_commands
 from .core.errors import ConfigError, ErrorCode
 from .core.runtime import DATA_KEY, HaacBridgeData, get_data
 from .entities.descriptor_factory import DescriptorFactory
 from .exposure.exposure import Exposure
 from .exposure.filter_factory import FilterFactory
+from .services.call_factory import ServiceCallFactory
 
 __all__ = ["CONFIG_SCHEMA", "DOMAIN"]
 
@@ -29,6 +31,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         version=str(integration.version),
         filters=filters,
         descriptors=DescriptorFactory(hass),
+        services=ServiceCallFactory(hass),
         exposure=Exposure(entries, filters),
     )
     hass.data[DATA_KEY] = data
@@ -53,4 +56,4 @@ async def async_reload(hass: HomeAssistant) -> None:
     entries = parse_users(config)
     data.exposure = Exposure(entries, data.filters)
     await async_check_users(hass, data.issue_ids, entries)
-    # TODO(subscribe_entities): emit exposure_changed to connected apps (concept 10.2).
+    async_dispatcher_send(hass, SIGNAL_EXPOSURE_CHANGED)
