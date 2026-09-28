@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from ..entities.descriptor_factory import DescriptorFactory
     from ..exposure.exposure import Exposure
     from ..exposure.filter_factory import FilterFactory
+    from ..services.call_factory import ServiceCallFactory
 
 
 @dataclass(slots=True)
@@ -25,6 +26,7 @@ class HaacBridgeData:
     version: str
     filters: FilterFactory
     descriptors: DescriptorFactory
+    services: ServiceCallFactory
     exposure: Exposure
     errors: ErrorFactory = field(default_factory=ErrorFactory)
     responses: ResponseFactory = field(default_factory=ResponseFactory)

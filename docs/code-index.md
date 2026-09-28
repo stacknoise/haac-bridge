@@ -22,12 +22,13 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.core.caller` | `module` | `custom_components/haac_bridge/core/caller.py` | Resolves the calling HA user of a WebSocket request (concept 10.3). |
 | `require_user` | `def require_user(connection: ActiveConnection) -> User` | `custom_components/haac_bridge/core/caller.py` | Return the HA user bound to the connection's access token, never a user named by the client. |
 | `haac_bridge.core.command` | `module` | `custom_components/haac_bridge/core/command.py` | Command wrapper: every haac_bridge/* command runs through it (concept 18.3). |
+| `SubscriptionStarted` | `class SubscriptionStarted` | `custom_components/haac_bridge/core/command.py` | Returned by a subscription handler: reply with an empty result, then send `initial` as first event. |
 | `BridgeCommand` | `class BridgeCommand` | `custom_components/haac_bridge/core/command.py` | A haac_bridge/* command: its type, request fields and handler. |
 | `bridge_command` | `def bridge_command(command_type: str, fields: dict[Any, Any] \| None=None) -> Callable[[CommandHandler], BridgeCommand]` | `custom_components/haac_bridge/core/command.py` | Declare a handler as haac_bridge/* command with optional request fields. |
 | `bridge_command.decorator` | `def decorator(handler: CommandHandler) -> BridgeCommand` | `custom_components/haac_bridge/core/command.py` | Wrap the handler into a BridgeCommand. |
 | `async_register_commands` | `def async_register_commands(hass: HomeAssistant, commands: Iterable[BridgeCommand]) -> None` | `custom_components/haac_bridge/core/command.py` | Register all commands with HA's WebSocket API, each inside the wrapper. |
 | `_wrap` | `def _wrap(command: BridgeCommand) -> websocket_api.WebSocketCommandHandler` | `custom_components/haac_bridge/core/command.py` | Build the HA handler that validates, runs and answers one command. |
-| `_wrap._handle` | `async def _handle(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/core/command.py` | Run the command and send exactly one reply. |
+| `_wrap._handle` | `async def _handle(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/core/command.py` | Run the command and send exactly one reply (plus the first event of a subscription). |
 | `_log_error` | `def _log_error(command_type: str, connection: ActiveConnection, code: ErrorCode, err: Exception) -> None` | `custom_components/haac_bridge/core/command.py` | Log a failed command once with its HAB code; tracebacks only for unexpected errors. |
 | `haac_bridge.core.error_factory` | `module` | `custom_components/haac_bridge/core/error_factory.py` | ErrorFactory: turns any caught exception into a HaacBridgeError (concept 18.2, 18.3). |
 | `ErrorFactory` | `class ErrorFactory` | `custom_components/haac_bridge/core/error_factory.py` | Maps exceptions to HaacBridgeError; the only place that decides an error's code. |
@@ -48,6 +49,8 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.core.response_factory` | `module` | `custom_components/haac_bridge/core/response_factory.py` | ResponseFactory: builds every WebSocket reply of HAAC Bridge (concept 11, 18.2). |
 | `ResponseFactory` | `class ResponseFactory` | `custom_components/haac_bridge/core/response_factory.py` | Creates result and error messages in HA's WebSocket reply format. |
 | `ResponseFactory.result` | `def result(self, msg_id: int, payload: Any) -> dict[str, Any]` | `custom_components/haac_bridge/core/response_factory.py` | Return a success reply carrying `payload`. |
+| `ResponseFactory.event` | `def event(self, msg_id: int, payload: Any) -> dict[str, Any]` | `custom_components/haac_bridge/core/response_factory.py` | Return an event message of the subscription `msg_id`. |
+| `ResponseFactory.state_diff` | `def state_diff(self, msg_id: int, event: Event[EventStateChangedData]) -> bytes` | `custom_components/haac_bridge/core/response_factory.py` | Return a state change as HA's compressed diff event, serialized once for all subscribers. |
 | `ResponseFactory.error` | `def error(self, msg_id: int, error: HaacBridgeError) -> dict[str, Any]` | `custom_components/haac_bridge/core/response_factory.py` | Return an error reply whose `code` is the HAB code of `error`. |
 | `haac_bridge.core.runtime` | `module` | `custom_components/haac_bridge/core/runtime.py` | Runtime data of HAAC Bridge stored in hass.data (concept 18.2). |
 | `HaacBridgeData` | `class HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Factories and current exposure, created in async_setup and replaced on reload. |
@@ -104,15 +107,41 @@ Lists every module, class and function of the integration with signature, file a
 | `DescriptorFactory.create` | `def create(self, state: State) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return the descriptor of an entity including its current state and all attributes. |
 | `DescriptorFactory.create_many` | `def create_many(self, entity_ids: list[str]) -> list[dict[str, Any]]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return descriptors for the given entities, skipping those without a state. |
 | `DescriptorFactory._area_name` | `def _area_name(self, entry: er.RegistryEntry \| None) -> str \| None` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return the HA area of the entity, or of its device if the entity has none. |
+| `haac_bridge.entities.subscription` | `module` | `custom_components/haac_bridge/entities/subscription.py` | Live state subscription of one app connection (concept 9.2, 11.2). |
+| `EntitySubscription` | `class EntitySubscription` | `custom_components/haac_bridge/entities/subscription.py` | Sends state changes of the entities exposed to one user to one WebSocket subscription. |
+| `EntitySubscription.__init__` | `def __init__(self, hass: HomeAssistant, connection: ActiveConnection, msg_id: int, user: User) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Keep everything needed to filter and send events; nothing is subscribed yet. |
+| `EntitySubscription.async_start` | `def async_start(self) -> dict[str, Any]` | `custom_components/haac_bridge/entities/subscription.py` | Start listening and return the initial event with the states of all exposed entities. |
+| `EntitySubscription.async_stop` | `def async_stop(self) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Stop listening; called by HA when the app unsubscribes or the connection closes. |
+| `EntitySubscription._async_is_relevant` | `def _async_is_relevant(self, event_data: EventStateChangedData) -> bool` | `custom_components/haac_bridge/entities/subscription.py` | Return True for entities already sent to the app or exposed to its user. |
+| `EntitySubscription._async_on_state_changed` | `def _async_on_state_changed(self, event: Event[EventStateChangedData]) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Forward a change, or report an entity that appeared in or left the exposed set. |
+| `EntitySubscription._async_on_exposure_changed` | `def _async_on_exposure_changed(self) -> None` | `custom_components/haac_bridge/entities/subscription.py` | After a reload: send entities added to or removed from the set, then the new revision. |
+| `EntitySubscription._send_exposure_changed` | `def _send_exposure_changed(self) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Tell the app to run its revision check (concept 9.2). |
+| `EntitySubscription._send` | `def _send(self, payload: dict[str, Any]) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Send one event of this subscription. |
+| `EntitySubscription._compressed_states` | `def _compressed_states(self, entity_ids: set[str]) -> dict[str, Any]` | `custom_components/haac_bridge/entities/subscription.py` | Return HA's compressed state for each entity that still has a state. |
+
+## services
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.services.__init__` | `module` | `custom_components/haac_bridge/services/__init__.py` | Service calls: validated against the caller's exposure and executed with the caller's context. |
+| `haac_bridge.services.call_factory` | `module` | `custom_components/haac_bridge/services/call_factory.py` | ServiceCallFactory: validated service calls for haac_bridge/call_service (concept 10.3, 11.4, 18.2). |
+| `ValidatedServiceCall` | `class ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | A service call that passed all checks; the target is always exactly one entity. |
+| `ServiceCallFactory` | `class ServiceCallFactory` | `custom_components/haac_bridge/services/call_factory.py` | Creates service calls only for exposed entities and services of the entity's own domain. |
+| `ServiceCallFactory.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/services/call_factory.py` | Keep hass for state and service lookups. |
+| `ServiceCallFactory.create` | `def create(self, exposure: Exposure, user: User, entity_id: str, service: str, data: dict[str, Any]) -> ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | Return the validated call or raise the matching HAB error (SVC-001, ENT-001, SVC-002, WS-001). |
+| `async_execute` | `async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall) -> None` | `custom_components/haac_bridge/services/call_factory.py` | Run the call as the calling user, targeting only its entity; map HA errors to HAB codes. |
 
 ## api
 
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
 | `haac_bridge.api.__init__` | `module` | `custom_components/haac_bridge/api/__init__.py` | The haac_bridge/* WebSocket commands, one module per command group (concept 11.2). |
-| `haac_bridge.api.entities` | `module` | `custom_components/haac_bridge/api/entities.py` | Command haac_bridge/entities/list (concept 11.2, 11.3). |
+| `haac_bridge.api.entities` | `module` | `custom_components/haac_bridge/api/entities.py` | Commands haac_bridge/entities/list and haac_bridge/subscribe_entities (concept 11.2, 11.3). |
 | `ws_entities_list` | `async def ws_entities_list(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/entities.py` | Return the revision and the descriptors of all entities exposed to the caller. |
+| `ws_subscribe_entities` | `async def ws_subscribe_entities(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> SubscriptionStarted` | `custom_components/haac_bridge/api/entities.py` | Subscribe to the live states of the caller's exposed entities. |
 | `haac_bridge.api.exposure` | `module` | `custom_components/haac_bridge/api/exposure.py` | Command haac_bridge/exposure/revision (concept 11.2). |
 | `ws_exposure_revision` | `async def ws_exposure_revision(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/exposure.py` | Return the revision hash and entity count of the caller's exposed set. |
 | `haac_bridge.api.info` | `module` | `custom_components/haac_bridge/api/info.py` | Command haac_bridge/info (concept 11.2, 11.4). |
 | `ws_info` | `async def ws_info(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/info.py` | Return bridge version, API version, supported domains and HA version. |
+| `haac_bridge.api.services` | `module` | `custom_components/haac_bridge/api/services.py` | Command haac_bridge/call_service (concept 10.3, 11.2, 11.4). |
+| `ws_call_service` | `async def ws_call_service(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/services.py` | Call a service of an exposed entity's domain on that entity only. |

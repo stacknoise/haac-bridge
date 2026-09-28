@@ -20,6 +20,13 @@ CommandHandler = Callable[[HomeAssistant, ActiveConnection, dict[str, Any]], Awa
 
 
 @dataclass(frozen=True, slots=True)
+class SubscriptionStarted:
+    """Returned by a subscription handler: reply with an empty result, then send `initial` as first event."""
+
+    initial: Any
+
+
+@dataclass(frozen=True, slots=True)
 class BridgeCommand:
     """A haac_bridge/* command: its type, request fields and handler."""
 
@@ -67,7 +74,7 @@ def _wrap(command: BridgeCommand) -> websocket_api.WebSocketCommandHandler:
     async def _handle(
         hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
     ) -> None:
-        """Run the command and send exactly one reply."""
+        """Run the command and send exactly one reply (plus the first event of a subscription)."""
         data = get_data(hass)
         try:
             payload = await command.handler(hass, connection, request_schema(msg))
@@ -75,6 +82,10 @@ def _wrap(command: BridgeCommand) -> websocket_api.WebSocketCommandHandler:
             error = data.errors.from_exception(err)
             _log_error(command.type, connection, error.code, err)
             connection.send_message(data.responses.error(msg["id"], error))
+            return
+        if isinstance(payload, SubscriptionStarted):
+            connection.send_message(data.responses.result(msg["id"], None))
+            connection.send_message(data.responses.event(msg["id"], payload.initial))
             return
         connection.send_message(data.responses.result(msg["id"], payload))
 
@@ -92,4 +103,5 @@ def _log_error(
     if code is ErrorCode.INT_UNEXPECTED:
         _LOGGER.error("%s in %s (user %s)", code, command_type, user_id, exc_info=err)
     else:
-        _LOGGER.warning("%s in %s (user %s): %s", code, command_type, user_id, err)
+        cause = f" (cause: {err.__cause__!r})" if err.__cause__ else ""
+        _LOGGER.warning("%s in %s (user %s): %s%s", code, command_type, user_id, err, cause)

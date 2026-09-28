@@ -48,6 +48,20 @@ def access_token_for(hass: HomeAssistant) -> Callable[[User], Coroutine[Any, Any
 
 
 @pytest.fixture
+def client_for(
+    hass: HomeAssistant,
+    hass_ws_client: Callable[..., Coroutine[Any, Any, Any]],
+    access_token_for: Callable[[User], Coroutine[Any, Any, str]],
+) -> Callable[[User], Coroutine[Any, Any, Any]]:
+    """Return a helper that opens a WebSocket client signed in as the given user."""
+
+    async def _client(user: User) -> Any:
+        return await hass_ws_client(hass, await access_token_for(user))
+
+    return _client
+
+
+@pytest.fixture
 def setup_bridge(hass: HomeAssistant) -> Callable[[dict[str, Any]], Coroutine[Any, Any, None]]:
     """Return a helper that sets up haac_bridge with the given `haac_bridge:` section."""
 

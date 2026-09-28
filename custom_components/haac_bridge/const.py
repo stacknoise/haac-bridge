@@ -16,3 +16,9 @@ CONF_USER_ID: Final = "user_id"
 CONF_FILTER: Final = "filter"
 
 SERVICE_RELOAD: Final = "reload"
+
+SIGNAL_EXPOSURE_CHANGED: Final = f"{DOMAIN}_exposure_changed"
+"""Dispatcher signal sent after a reload replaced the exposure of all users."""
+
+TARGET_KEYS: Final = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
+"""Keys a client must not put into service_data; the bridge sets the target itself (11.4)."""
