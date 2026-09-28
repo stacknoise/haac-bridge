@@ -105,7 +105,7 @@ Package names, the factory pattern, error codes and the code index follow chapte
 | Language | Kotlin (latest stable), coroutines and Flow |
 | UI | Jetpack Compose, Material 3, Navigation Compose |
 | DI | Hilt |
-| Persistence | Room (SQLite) for layout and cache; DataStore (Proto) for non-sensitive settings |
+| Persistence | Room (SQLite) for layout and cache; typed DataStore (JSON via kotlinx.serialization) for non-sensitive settings |
 | Networking | OkHttp (HTTPS + WebSocket), kotlinx.serialization for JSON |
 | Security | Android Keystore, AndroidX Biometric (`BiometricPrompt`), Google Tink for AEAD where needed |
 | Background work | WorkManager (optional periodic re-sync) |
@@ -135,8 +135,8 @@ On first start – or whenever no server is bound – the app shows the server s
 1. User enters a URL, e.g. `https://ha.example.com` or `http://192.168.1.10:8123`.
 2. The app normalises it: adds `https://` if no scheme is given, removes trailing slashes and paths such as `/lovelace`.
 3. Validation request `GET <url>/auth/providers`: a JSON list of auth providers confirms a HA instance and tells the app whether the `homeassistant` (username/password) provider is enabled.
-4. Check that the HAAC Bridge integration is installed: after login, the WebSocket command `haac_bridge/info` must succeed (see chapter 11). If not, show an install hint with the HACS repository link.
-5. The URL is persisted in DataStore (not sensitive, not encrypted).
+4. Check that the HAAC Bridge integration is installed: after login, the WebSocket command `haac_bridge/info` must succeed (see chapter 11). If not, show an install hint with the HACS repository link. The instance is stored only after a successful check; until then the new tokens stay in memory, so *Try again* repeats the check without a new login, and *Start over* revokes them.
+5. The URL is stored in the `server` table (chapter 12); it is not sensitive and not encrypted.
 
 ### 4.3 Transport security
 
@@ -219,6 +219,7 @@ sequenceDiagram
 
 - **client\_id and redirect\_uri**: HA requires the `client_id` to be a URL. The app uses `client_id` = `https://stacknoise.com/haac/` and `redirect_uri` = `https://stacknoise.com/haac/auth-callback`. Because both share scheme and host, HA accepts the redirect URI without fetching anything from stacknoise.com, so login also works for HA instances without internet access. In the native flow the redirect is never opened; the app reads the authorization code from the flow result. HA shows the `client_id` as the app's identity in the login dialog and in the user's list of refresh tokens (16.8).
 - **Fallback**: if the server has no `homeassistant` provider (e.g. only trusted networks or command-line auth), the app opens `/auth/authorize` in a Chrome Custom Tab. HA then redirects to `https://stacknoise.com/haac/auth-callback`, which Android hands to the app as a verified App Link; this requires `https://stacknoise.com/.well-known/assetlinks.json` (16.8).
+- If the user has several MFA modules, HA first asks for one (`select_mfa_module`); the app picks the first module offered and then asks only for its code.
 - The password lives only in a `CharArray` for the duration of the request and is overwritten afterwards; it is never logged, persisted, put in a `String` constant or sent anywhere except to the configured HA server over TLS.
 - HTTP logging is disabled for all `/auth/*` requests, also in debug builds.
 
@@ -620,7 +621,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 
 - Schema migrations are versioned and tested with Room's `MigrationTestHelper`; destructive migration is never enabled.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
-- Non-sensitive preferences (theme, lock timeout, biometric enabled flag) live in Proto DataStore.
+- Non-sensitive preferences (theme, lock timeout, biometric enabled flag) live in a typed DataStore (JSON via kotlinx.serialization).
 
 The active instance is stored as `activeServerId` in DataStore. `home`, `exposed_entity` and `entity_alias` reference `server.id` with cascade delete, so removing an instance removes all of its data in one transaction.
 
@@ -1076,6 +1077,8 @@ enum class ErrorCode(
 | HAAC-AUTH-002 | The verification code is wrong. | None |
 | HAAC-AUTH-003 | Your sign-in has expired. Please sign in again. | Sign in |
 | HAAC-AUTH-004 | This server does not allow sign-in with username and password. | None |
+| HAAC-AUTH-005 | Sign-in took too long or had too many wrong codes. Please start again. | None |
+| HAAC-AUTH-006 | Home Assistant does not let this user sign in here. Ask your administrator. | None |
 | HAAC-SEC-001 | Your fingerprints have changed. Please sign in with your password. | Sign in |
 | HAAC-SEC-002 | Secure storage on this device is not available. | None |
 | HAAC-BRG-001 | HAAC Bridge is not installed on this server. | Open settings |
