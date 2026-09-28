@@ -46,7 +46,7 @@ async def test_wrapper_replies_and_maps_errors(
     await client.send_json_auto_id({"type": "haac_bridge/test/rejected"})
     reply = await client.receive_json()
     assert reply["error"]["code"] == "HAB-SVC-001"
-    assert reply["error"]["message"] == "You are not allowed to control this device."
+    assert reply["error"]["message"] == "You are not allowed to control this device"
 
     await client.send_json_auto_id({"type": "haac_bridge/test/crash"})
     reply = await client.receive_json()

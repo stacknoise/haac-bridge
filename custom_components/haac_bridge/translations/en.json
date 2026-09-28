@@ -1,34 +1,34 @@
 {
   "exceptions": {
     "cfg_invalid": {
-      "message": "The haac_bridge configuration in configuration.yaml is invalid."
+      "message": "The haac_bridge configuration in configuration.yaml is invalid"
     },
     "cfg_unknown_user": {
-      "message": "A user in the haac_bridge configuration does not exist in Home Assistant."
+      "message": "A user in the haac_bridge configuration does not exist in Home Assistant"
     },
     "auth_no_user": {
-      "message": "The request has no signed-in Home Assistant user."
+      "message": "The request has no signed-in Home Assistant user"
     },
     "svc_not_allowed": {
-      "message": "You are not allowed to control this device."
+      "message": "You are not allowed to control this device"
     },
     "svc_not_available": {
-      "message": "This action is not available for this device."
+      "message": "This action is not available for this device"
     },
     "svc_failed": {
-      "message": "Home Assistant could not carry out the action."
+      "message": "Home Assistant could not carry out the action"
     },
     "ent_not_found": {
-      "message": "This device no longer exists in Home Assistant."
+      "message": "This device no longer exists in Home Assistant"
     },
     "hist_unavailable": {
-      "message": "History is not available on this server."
+      "message": "History is not available on this server"
     },
     "ws_invalid_request": {
-      "message": "The request could not be understood."
+      "message": "The request could not be understood"
     },
     "int_unexpected": {
-      "message": "Something went wrong in HAAC Bridge."
+      "message": "Something went wrong in HAAC Bridge"
     }
   },
   "issues": {

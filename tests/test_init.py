@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 import pytest
 
+from custom_components.haac_bridge.config.schema import CONFIG_SCHEMA
 from custom_components.haac_bridge.core.errors import ConfigError
 from custom_components.haac_bridge.core.runtime import get_data
 
@@ -17,12 +18,17 @@ YAML_CONFIG = "custom_components.haac_bridge.async_integration_yaml_config"
 
 
 def _config(*entities: str) -> dict[str, Any]:
-    """Return a haac_bridge config exposing the given entities to anton."""
-    return {
-        "haac_bridge": {
-            "users": [{"username": "anton", "filter": {"include_entities": list(entities)}}]
+    """Return a validated haac_bridge config exposing the given entities to anton.
+
+    Validated like the real async_integration_yaml_config result, so filter defaults are set.
+    """
+    return CONFIG_SCHEMA(
+        {
+            "haac_bridge": {
+                "users": [{"username": "anton", "filter": {"include_entities": list(entities)}}]
+            }
         }
-    }
+    )
 
 
 @pytest.mark.usefixtures("demo_states")
