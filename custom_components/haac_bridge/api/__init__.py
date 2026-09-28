@@ -2,6 +2,7 @@
 
 from .entities import ws_entities_list, ws_subscribe_entities
 from .exposure import ws_exposure_revision
+from .history import ws_history, ws_statistics
 from .info import ws_info
 from .services import ws_call_service
 
@@ -11,4 +12,6 @@ COMMANDS = (
     ws_entities_list,
     ws_subscribe_entities,
     ws_call_service,
+    ws_history,
+    ws_statistics,
 )

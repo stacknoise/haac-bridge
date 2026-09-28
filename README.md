@@ -75,6 +75,10 @@ The app talks to the bridge over Home Assistant's WebSocket API with commands pr
 | `haac_bridge/entities/list` | – | `revision`, entity descriptors incl. current state |
 | `haac_bridge/subscribe_entities` | – | Empty result, then events: `{"a": {…}}` initial and added states, `{"c": {…}}` changes, `{"r": […]}` removals (Home Assistant's compressed state format), and `{"exposure_changed": {"revision": …}}` whenever the exposed set changes or the configuration is reloaded |
 | `haac_bridge/call_service` | `entity_id`, `service`, `service_data` | Empty result, or an error: `HAB-SVC-001` not exposed, `HAB-ENT-001` entity gone, `HAB-SVC-002` service not in the entity's domain, `HAB-WS-001` target keys in `service_data`, `HAB-SVC-003` Home Assistant failed |
+| `haac_bridge/history` | `entity_ids`, `start`, `end`?, `minimal_response`? | Significant state changes per entity in Home Assistant's compressed state format; `HAB-HIST-001` if the recorder fails |
+| `haac_bridge/statistics` | `entity_ids`, `start`, `end`?, `period` (`hour`, `day`, `week`, `month`), `types` (`mean`, `min`, `max`, `sum`) | Long-term statistics rows per entity; `start`/`end` of each row in milliseconds |
+
+History and statistics only include requested entities that are exposed to the caller; others are left out silently. Times are ISO 8601; a period in the future returns an empty result.
 
 The bridge sets the service target itself and runs the call in the context of the signed-in user.
 

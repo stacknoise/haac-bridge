@@ -43,6 +43,10 @@ class Exposure:
         domain = split_entity_id(entity_id)[0]
         return domain in SUPPORTED_DOMAINS and rule.predicate(entity_id)
 
+    def filter_exposed(self, user: User, entity_ids: list[str]) -> list[str]:
+        """Return the requested IDs the user may see, sorted and without duplicates."""
+        return sorted({entity_id for entity_id in entity_ids if self.is_exposed(user, entity_id)})
+
     def exposed_entity_ids(self, hass: HomeAssistant, user: User) -> list[str]:
         """Return the sorted IDs of all current entities exposed to the user."""
         rule = self._rule_for(user)

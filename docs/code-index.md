@@ -85,6 +85,7 @@ Lists every module, class and function of the integration with signature, file a
 | `Exposure` | `class Exposure` | `custom_components/haac_bridge/exposure/exposure.py` | Decides which entities a HA user sees; deny by default for users not configured. |
 | `Exposure.__init__` | `def __init__(self, entries: list[UserEntry], filters: FilterFactory) -> None` | `custom_components/haac_bridge/exposure/exposure.py` | Build one filter per configured user entry. |
 | `Exposure.is_exposed` | `def is_exposed(self, user: User, entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/exposure.py` | Return True if the entity is in a v1 domain and passes the user's filter. |
+| `Exposure.filter_exposed` | `def filter_exposed(self, user: User, entity_ids: list[str]) -> list[str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the requested IDs the user may see, sorted and without duplicates. |
 | `Exposure.exposed_entity_ids` | `def exposed_entity_ids(self, hass: HomeAssistant, user: User) -> list[str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the sorted IDs of all current entities exposed to the user. |
 | `Exposure.snapshot` | `def snapshot(self, hass: HomeAssistant, user: User) -> ExposureSnapshot` | `custom_components/haac_bridge/exposure/exposure.py` | Return the user's exposed entities together with their revision. |
 | `Exposure._rule_for` | `def _rule_for(self, user: User) -> _UserRule \| None` | `custom_components/haac_bridge/exposure/exposure.py` | Return the first rule whose entry refers to the user. |
@@ -131,6 +132,21 @@ Lists every module, class and function of the integration with signature, file a
 | `ServiceCallFactory.create` | `def create(self, exposure: Exposure, user: User, entity_id: str, service: str, data: dict[str, Any]) -> ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | Return the validated call or raise the matching HAB error (SVC-001, ENT-001, SVC-002, WS-001). |
 | `async_execute` | `async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall) -> None` | `custom_components/haac_bridge/services/call_factory.py` | Run the call as the calling user, targeting only its entity; map HA errors to HAB codes. |
 
+## history
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.history.__init__` | `module` | `custom_components/haac_bridge/history/__init__.py` | History and long-term statistics, read from the recorder for exposed entities only. |
+| `haac_bridge.history.queries` | `module` | `custom_components/haac_bridge/history/queries.py` | Recorder queries for haac_bridge/history and haac_bridge/statistics (concept 8.1, 8.3, 10.3). |
+| `utc_datetime` | `def utc_datetime(value: Any) -> datetime` | `custom_components/haac_bridge/history/queries.py` | Voluptuous validator: parse an ISO 8601 string into an aware UTC datetime. |
+| `TimeRange` | `class TimeRange` | `custom_components/haac_bridge/history/queries.py` | Requested period in UTC; `end` None means up to now. |
+| `TimeRange.__post_init__` | `def __post_init__(self) -> None` | `custom_components/haac_bridge/history/queries.py` | Reject a period that ends before it starts (HAB-WS-001). |
+| `TimeRange.in_future` | `def in_future(self) -> bool` | `custom_components/haac_bridge/history/queries.py` | Return True if the period starts after now, so there is nothing recorded. |
+| `async_history` | `async def async_history(hass: HomeAssistant, entity_ids: list[str], period: TimeRange, minimal_response: bool) -> dict[str, list[dict[str, Any]]]` | `custom_components/haac_bridge/history/queries.py` | Return significant state changes per entity in HA's compressed state format. |
+| `async_statistics` | `async def async_statistics(hass: HomeAssistant, entity_ids: list[str], period: TimeRange, resolution: str, types: list[str]) -> dict[str, list[dict[str, Any]]]` | `custom_components/haac_bridge/history/queries.py` | Return long-term statistics per entity; `start` and `end` of each row in milliseconds. |
+| `_statistics_in_ms` | `def _statistics_in_ms(hass: HomeAssistant, statistic_ids: set[str], period: TimeRange, resolution: Any, types: Any) -> dict[str, list[dict[str, Any]]]` | `custom_components/haac_bridge/history/queries.py` | Query statistics in the executor and convert row timestamps to ms, as HA's own API does. |
+| `_async_run` | `async def _async_run(hass: HomeAssistant, query: Callable[[], Any]) -> Any` | `custom_components/haac_bridge/history/queries.py` | Run a recorder query in its executor; database or recorder errors become HAB-HIST-001. |
+
 ## api
 
 | Symbol | Signature | File | Description |
@@ -141,6 +157,10 @@ Lists every module, class and function of the integration with signature, file a
 | `ws_subscribe_entities` | `async def ws_subscribe_entities(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> SubscriptionStarted` | `custom_components/haac_bridge/api/entities.py` | Subscribe to the live states of the caller's exposed entities. |
 | `haac_bridge.api.exposure` | `module` | `custom_components/haac_bridge/api/exposure.py` | Command haac_bridge/exposure/revision (concept 11.2). |
 | `ws_exposure_revision` | `async def ws_exposure_revision(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/exposure.py` | Return the revision hash and entity count of the caller's exposed set. |
+| `haac_bridge.api.history` | `module` | `custom_components/haac_bridge/api/history.py` | Commands haac_bridge/history and haac_bridge/statistics (concept 10.3, 11.2). |
+| `_exposed_request` | `def _exposed_request(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> tuple[list[str], TimeRange]` | `custom_components/haac_bridge/api/history.py` | Return the requested entities the caller may see (none for a future period) and the period. |
+| `ws_history` | `async def ws_history(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/history.py` | Return the state history of the requested entities that are exposed to the caller. |
+| `ws_statistics` | `async def ws_statistics(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/history.py` | Return long-term statistics of the requested entities that are exposed to the caller. |
 | `haac_bridge.api.info` | `module` | `custom_components/haac_bridge/api/info.py` | Command haac_bridge/info (concept 11.2, 11.4). |
 | `ws_info` | `async def ws_info(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/info.py` | Return bridge version, API version, supported domains and HA version. |
 | `haac_bridge.api.services` | `module` | `custom_components/haac_bridge/api/services.py` | Command haac_bridge/call_service (concept 10.3, 11.2, 11.4). |
