@@ -401,7 +401,7 @@ Which controls appear is driven by the entity's `supported_features` bitmask and
 ### 8.1 Common to all domains
 
 - Live state via WebSocket subscription (chapter 11), including `unavailable` and `unknown`.
-- Detail screen: state, `last_changed`, `last_updated`, full attribute list, HA friendly name, `entity_id`, local alias editor.
+- Detail screen: state, `last_changed`, `last_updated`, full attribute list, HA friendly name, `entity_id`, local alias editor. As built: it opens with a tap on a tile without a toggle, or with *Details* in the long-press menu; it shows the name with a pencil for *Rename* (M-07), `entity_id`, the current state, the readings of 8.4, every control of the domain (disabled without a connection), the names from HA and the bridge, both times relative and absolute, and all attributes sorted by name. History follows in its own step.
 - History: chart or timeline for 24 h / 7 days / custom range via the bridge's history command.
 - Optimistic UI for service calls with rollback if the confirmed state from HA differs or the call fails. The tile shows the requested state at once and keeps it until HA confirms it, at most 5 s; after that, or when the call fails, it shows HA's state again. A newer request of the same entity replaces the older one. Controls are disabled while there is no connection (14.1).
 
@@ -444,6 +444,7 @@ Sensors are read-only; the app renders them by `device_class` and `state_class`.
 - Always displayed when present: `current_temperature`, `current_humidity`, `hvac_action` (heating, cooling, idle, …).
 - Temperature input is debounced (about 800 ms) so dragging the dial or tapping − / + several times sends one service call, not dozens. The tile's − / + change the target by `target_temp_step` (default 0.5) within `min_temp` and `max_temp` (defaults 7 and 35); they need flag 1 and a target from HA (none in mode `off`).
 - History shows current vs. target temperature and heating/cooling phases.
+- As built: the detail screen shows the controls in the order of the table: power (turns off when on, on when off, as far as flags 128/256 allow), HVAC modes (segmented control up to four modes, chips for more), − / + target, a two-handle slider for the range, a humidity slider (defaults 30–99 %), and chips for fan, preset and swing modes. Mode names from HA are shown with their first letter capitalised and underscores as spaces (`fan_only` → *Fan only*).
 
 ## 9. Synchronization on app start
 
@@ -854,7 +855,7 @@ These values were read from the rendered mockups and are the basis of the Compos
   - Switch (1×1): icon, name, state, toggle; "on" tiles use `primaryContainer`.
   - Sensor (1×1): icon, value with unit, name.
 - Tap on a tile toggles a switch; tap on the tile body of other types opens the detail screen (15.4).
-- As built: switch tiles have a toggle (a tap on the tile toggles too), the climate tile shows the target on an arc from `min_temp` to `max_temp` with − and +; the detail screen (15.4) follows. A failed call shows a snackbar with the message and the code (14.1, 17.4). The header holds *Home · Level* with a menu of all levels (and each home's rooms without a level), the notification bell and *Add entities*; the pencil (M-06) follows with the edit layout. A long press on a tile opens *Rename* (dialog of M-07) and *Remove from this room*. Without rooms the tab points to Places.
+- As built: switch tiles have a toggle (a tap on the tile toggles too), the climate tile shows the target on an arc from `min_temp` to `max_temp` with − and +; a tap on any other tile opens the detail screen (8.1, 15.4). A failed call shows a snackbar with the message and the code (14.1, 17.4). The header holds *Home · Level* with a menu of all levels (and each home's rooms without a level), the notification bell and *Add entities*; the pencil (M-06) follows with the edit layout. A long press on a tile opens *Details*, *Rename* (dialog of M-07) and *Remove from this room*. Without rooms the tab points to Places.
 
 #### M-06 Edit layout: drag, rename, remove (7.2, 7.3)
 
