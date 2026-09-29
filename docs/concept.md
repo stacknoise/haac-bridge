@@ -477,7 +477,7 @@ Errors appear in the same list, each with its error code (17.4).
 
 - The sync never adds entities to rooms automatically; new entities only appear in the picker.
 - If the server is unreachable, the app starts in offline mode with cached data and repeats the sync when the connection returns (chapter 14).
-- Sync result and timestamp are shown under *Settings → Diagnostics*.
+- Sync result and timestamp are shown under *Settings → Diagnostics*. As built, the section lists the live connection state (with the error code while reconnecting or failed), the time of the last sync, the HA version, the bridge API version and the first eight characters of the exposure revision, all read from the `server` row and the connection; what a single sync changed (new, withdrawn, restored entities) is reported in the notification list (9.1) instead.
 
 The sync always covers only the active instance. Inactive instances are synced when they become active, so changes made in their `configuration.yaml` in the meantime are reported at the first switch.
 
@@ -733,6 +733,8 @@ Mitigations:
 | Service call rejected by the bridge (`HAB-SVC-001`, `HAB-SVC-002`) | Error snackbar, state rolled back, triggers a revision check |
 | Entity `unavailable` | Tile greyed out, controls disabled, last value shown with timestamp |
 | Entity deleted in HA or no longer shared | Warning icon on the tile, entity inactive and not assignable; stays in its rooms until the user removes it (7.4) |
+
+**As built ("stale")** – once the live connection has been down for 3 seconds, the Rooms tab shows the banner "Offline: showing the last known states", dims the tiles and keeps the controls disabled; the delay keeps the marking away while the app is still connecting after a start. The marking ends as soon as the connection is open again.
 
 Every error in this table is raised as a `HaacException` with an error code from 17.3 and appears in the notification list (17.4).
 
