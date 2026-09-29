@@ -855,7 +855,7 @@ These values were read from the rendered mockups and are the basis of the Compos
   - Switch (1×1): icon, name, state, toggle; "on" tiles use `primaryContainer`.
   - Sensor (1×1): icon, value with unit, name.
 - Tap on a tile toggles a switch; tap on the tile body of other types opens the detail screen (15.4).
-- As built: switch tiles have a toggle (a tap on the tile toggles too), the climate tile shows the target on an arc from `min_temp` to `max_temp` with − and +; a tap on any other tile opens the detail screen (8.1, 15.4). A failed call shows a snackbar with the message and the code (14.1, 17.4). The header holds *Home · Level* with a menu of all levels (and each home's rooms without a level), the notification bell and *Add entities*; the pencil (M-06) follows with the edit layout. A long press on a tile opens *Details*, *Rename* (dialog of M-07) and *Remove from this room*. Without rooms the tab points to Places.
+- As built: switch tiles have a toggle (a tap on the tile toggles too), the climate tile shows the target on an arc from `min_temp` to `max_temp` with − and +; a tap on any other tile opens the detail screen (8.1, 15.4). A failed call shows a snackbar with the message and the code (14.1, 17.4). The header holds *Home · Level* with a menu of all levels (and each home's rooms without a level), the notification bell, the pencil for the edit layout (M-06) and *Add entities*. A long press on a tile opens *Details*, *Rename* (dialog of M-07) and *Remove from this room*. Without rooms the tab points to Places.
 
 #### M-06 Edit layout: drag, rename, remove (7.2, 7.3)
 
@@ -864,6 +864,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 - Edit mode title "Edit Living room" with *Done*; hint "Drag tiles to reorder. Tap a name to rename."
 - Every tile shows a drag handle, a remove badge (−) and a pencil next to the name; the dragged tile is lifted and the drop target shown hatched.
 - *Add entities* tile at the end of the grid.
+- As built: a tile is lifted with a long press and follows the finger; the others make room as soon as its centre is over another tile. The size label under the name opens a menu with 1×1, 2×1 and 2×2. Order, sizes and removed tiles stay a draft until *Done*, which saves them in one transaction; the close button (and Back) discards the draft, after *Discard changes?* if something changed. *Rename* is saved at once. Screen readers get *Move earlier* / *Move later* on every tile, because dragging needs a pointer.
 
 #### M-07 Arrange as list and rename dialog (7.2, 7.3)
 
@@ -871,6 +872,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 
 - Alternative list mode for reordering (*List / Grid preview*): each row with drag handle, name, tile size (1×1, 2×1, 2×2) and pencil.
 - Rename dialog: explanation "Only changes the name in this app. Home Assistant keeps *Floor lamp plug*.", text field with the local alias, `entity_id` below in mono font, actions *Use default name* (clears the alias, so the configured name from the bridge shows, else the HA name; the mockup still says *Use HA name*), *Cancel*, *Save*.
+- As built: *Grid* and *List* are a segmented control under the title bar of the edit layout, which keeps *Close*, "Edit Living room" and *Done* in both modes. In the list, a row moves by dragging its handle at once (no long press); the size label opens the same menu as in the grid.
 
 #### M-08 Room grid with an entity removed in HA (7.4)
 
