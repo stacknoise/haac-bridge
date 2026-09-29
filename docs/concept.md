@@ -365,7 +365,7 @@ The app only ever sees entities that the HAAC Bridge exposes to the logged-in HA
 - Remove via swipe or long-press → *Remove from room*. This only deletes the local assignment; nothing changes in HA.
 - Entities can be reordered within a room (drag-and-drop in edit mode).
 
-**Tile sizes and arrangement (M-05 to M-07).** Each assignment has a tile size: 1×1 (default for switches and sensors), 2×1, or 2×2 (default for climate). The room grid has two columns and places tiles in `sortOrder`, filling gaps densely. Order and size are changed in the edit layout (drag and drop) or in the list arrange mode.
+**Tile sizes and arrangement (M-05 to M-07).** Each assignment has a tile size: 1×1 (default for switches and sensors), 2×1, or 2×2 (default for climate). The room grid has two columns and places tiles in `sortOrder`, filling gaps densely: each tile takes the first free spot, row by row, where it fits. As in the mockups, 1×1 is one column and one row, 2×1 is both columns and one row, and 2×2 is one column and two rows (the climate tile of M-05); the database stores them as `SMALL`, `WIDE` and `LARGE`. Order and size are changed in the edit layout (drag and drop) or in the list arrange mode.
 
 ### 7.3 Local display names
 
@@ -389,7 +389,7 @@ If an entity is deleted in HA or no longer shared with the user, it stays in eve
 - **Display**: tile greyed out with a warning icon in the error colour and the label "No longer available in Home Assistant". Tapping it opens a sheet with the reason (deleted in HA or no longer shared) and the actions *Remove from this room* and *Remove from all rooms*.
 - **Inactive**: no controls, no service calls, no history requests; the last known state is shown with its timestamp.
 - **Not assignable**: the entity no longer appears in the entity picker and cannot be added to further rooms.
-- **No automatic removal**: room assignments and alias stay until the user removes them. The home view shows a counter "N unavailable entities" that opens a list for bulk removal.
+- **No automatic removal**: room assignments and alias stay until the user removes them. The home view shows a counter "N unavailable entities" that opens a list for bulk removal. As built, the room grid shows this as the banner of M-08; *Review* lists the room's inactive tiles with *Remove all from this room* and *Remove all from every room*.
 - If the same `entity_id` is shared again later, it becomes active again in its rooms with its alias.
 
 ## 8. Entity functionality per domain
@@ -461,7 +461,7 @@ On every start and on every instance switch (after unlock) the app compares the 
 5. `haac_bridge/subscribe_entities` → live states for all exposed entities.
 6. Store new `revision` and timestamp.
 
-**Notification list (M-09).** Every sync result is also written as an entry to a local notification list: *entity added* (actions *Add to room*, *Dismiss*), *entity removed* (actions *Remove tile*, *Keep*) and combined entries for several entities of one sync. The first sync of an instance creates no entries, since every entity is new then. *Dismiss* and *Keep* leave the entry in the list without actions. Entries are per instance, grouped by day, marked read individually or all at once, and purged after 30 days. The bell icon in the room header shows an unread dot. These are in-app notifications only; Android system notifications are not used in v1.
+**Notification list (M-09).** Every sync result is also written as an entry to a local notification list: *entity added* (actions *Add to room*, *Dismiss*), *entity removed* (actions *Remove tile*, *Keep*) and combined entries for several entities of one sync. The first sync of an instance creates no entries, since every entity is new then. *Dismiss* and *Keep* leave the entry in the list without actions. *Add to room* (one entity) and *Review N entities* (several) open a room chooser that adds all of them to the chosen room; the entry counts as handled when the chooser opens. *Remove tile* removes the entities from every room of the instance. Entries are per instance, grouped by day, marked read individually or all at once, and purged after 30 days. The bell icon in the room header shows an unread dot. These are in-app notifications only; Android system notifications are not used in v1.
 
 Errors appear in the same list, each with its error code (17.4).
 
@@ -669,11 +669,11 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 | `floor` | `id`, `homeId` → home, `name`, `level`, `icon?`, `sortOrder`, `deletedAt?` | Cascade on home delete |
 | `room` | `id`, `homeId` → home, `floorId?` → floor, `name`, `icon?`, `sortOrder`, `deletedAt?` | Trigger: floor must belong to same home; `floorId` set null on floor delete |
 | `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `configuredName?`, `deviceClass?`, `unit?`, `stateClass?`, `displayPrecision?`, `area?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState?` (JSON: state, attributes, last changed/updated) | Cache of bridge data; filled by the sync (9.1), states kept current by the subscription |
-| `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (1x1/2x1/2x2), `addedAt` | Assignment; cascade on room delete |
-| `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name |
+| `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (`SMALL` 1×1, `WIDE` 2×1, `LARGE` 2×2; 7.2), `addedAt` | Assignment; cascade on room delete; the instance follows from the room's home |
+| `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name; cascade on server delete |
 | notification | id, serverId? → server, type (added/removed/error), errorCode?, bridgeCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results and errors for M-09 (17.4); serverId is empty for errors without an instance; count = entities, or occurrences of the same error within 10 minutes; purged after 30 days |
 
-- Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync. Migration 3 → 4 creates `notification`. Migration 4 → 5 creates `home`, `floor` and `room` (ids are random UUIDs, `sortOrder` leaves gaps of 1024) and the two triggers that reject a room whose floor belongs to another home; Room cannot declare triggers, so a new database gets them from a database callback.
+- Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync. Migration 3 → 4 creates `notification`. Migration 4 → 5 creates `home`, `floor` and `room` (ids are random UUIDs, `sortOrder` leaves gaps of 1024) and the two triggers that reject a room whose floor belongs to another home; Room cannot declare triggers, so a new database gets them from a database callback. Migration 5 → 6 creates `room_entity` and `entity_alias`.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
 - Non-sensitive preferences (theme, unlock window, lock timeout) live in a typed DataStore (JSON via kotlinx.serialization). Whether an instance uses fingerprint unlock is not a separate flag: it follows from the key that protects its token file (5.3).
 
@@ -854,6 +854,7 @@ These values were read from the rendered mockups and are the basis of the Compos
   - Switch (1×1): icon, name, state, toggle; "on" tiles use `primaryContainer`.
   - Sensor (1×1): icon, value with unit, name.
 - Tap on a tile toggles a switch; tap on the tile body of other types opens the detail screen (15.4).
+- As built (before chapter 8): tiles show live states but no controls yet (no toggle, no climate dial or ±). The header holds *Home · Level* with a menu of all levels (and each home's rooms without a level), the notification bell and *Add entities*; the pencil (M-06) follows with the edit layout. A long press on a tile opens *Rename* (dialog of M-07) and *Remove from this room*. Without rooms the tab points to Places.
 
 #### M-06 Edit layout: drag, rename, remove (7.2, 7.3)
 
