@@ -401,8 +401,8 @@ Which controls appear is driven by the entity's `supported_features` bitmask and
 ### 8.1 Common to all domains
 
 - Live state via WebSocket subscription (chapter 11), including `unavailable` and `unknown`.
-- Detail screen: state, `last_changed`, `last_updated`, full attribute list, HA friendly name, `entity_id`, local alias editor. As built: it opens with a tap on a tile without a toggle, or with *Details* in the long-press menu; it shows the name with a pencil for *Rename* (M-07), `entity_id`, the current state, the readings of 8.4, every control of the domain (disabled without a connection), the names from HA and the bridge, both times relative and absolute, and all attributes sorted by name. History follows in its own step.
-- History: chart or timeline for 24 h / 7 days / custom range via the bridge's history command.
+- Detail screen: state, `last_changed`, `last_updated`, full attribute list, HA friendly name, `entity_id`, local alias editor. As built: it opens with a tap on a tile without a toggle, or with *Details* in the long-press menu; it shows the name with a pencil for *Rename* (M-07), `entity_id`, the current state, the readings of 8.4, every control of the domain (disabled without a connection), the names from HA and the bridge, both times relative and absolute, and all attributes sorted by name.
+- History: chart or timeline for 24 h / 7 days / custom range via the bridge's history command. As built: *Custom* picks whole days (Material date range picker), up to now. Switches and sensors without unit or `state_class` show a timeline (`on` green, `off` neutral, gaps for `unavailable`/`unknown`, other states in categorical order); numeric sensors a line; `measurement` sensors beyond two days the hourly mean with a min/max band from `haac_bridge/statistics` (daily beyond 31 days); `total`/`total_increasing` sensors bars of the growth of `sum` per hour (per day beyond two days); climate entities current and target temperature with heating and cooling phases. A tap or horizontal drag shows the values at that time above the chart. Chart colours are checked for colour-vision deficiencies against the background; the brand green is too light for a chart series, so charts use a darker green. The history loads once the connection is open and does not update live.
 - Optimistic UI for service calls with rollback if the confirmed state from HA differs or the call fails. The tile shows the requested state at once and keeps it until HA confirms it, at most 5 s; after that, or when the call fails, it shows HA's state again. A newer request of the same entity replaces the older one. Controls are disabled while there is no connection (14.1).
 
 ### 8.2 Switch (`switch`)
@@ -1090,6 +1090,7 @@ Whenever the kind of object depends on a type or on runtime data, it is created 
 | --- | --- | --- |
 | `EntityControlFactory` | Control model and UI spec per entity domain (switch, sensor, climate) | New domains (v1.2) are added in one place instead of `when (domain)` checks across the app |
 | `TileFactory` | Tile spec with default size per domain (7.2) | Tile rules in one place |
+| `HistoryChartFactory` | History query (states or statistics) and chart kind per entity (8.1 – 8.4) | Chart rules per domain and `state_class` in one place |
 | `ServiceCallFactory` | Typed `haac_bridge/call_service` requests, checked against `supported_features` | Only valid service calls leave the app (8) |
 | `BridgeMessageFactory` | WebSocket commands with message IDs | Message format and ID sequence in one place (11) |
 | `HaWebSocketFactory` | WebSocket to `/api/websocket` of one address | Cleartext rule (4.3) and socket setup in one place; replaceable in tests |
