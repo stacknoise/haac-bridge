@@ -403,14 +403,14 @@ Which controls appear is driven by the entity's `supported_features` bitmask and
 - Live state via WebSocket subscription (chapter 11), including `unavailable` and `unknown`.
 - Detail screen: state, `last_changed`, `last_updated`, full attribute list, HA friendly name, `entity_id`, local alias editor.
 - History: chart or timeline for 24 h / 7 days / custom range via the bridge's history command.
-- Optimistic UI for service calls with rollback if the confirmed state from HA differs or the call fails.
+- Optimistic UI for service calls with rollback if the confirmed state from HA differs or the call fails. The tile shows the requested state at once and keeps it until HA confirms it, at most 5 s; after that, or when the call fails, it shows HA's state again. A newer request of the same entity replaces the older one. Controls are disabled while there is no connection (14.1).
 
 ### 8.2 Switch (`switch`)
 
 | Function | HA service / data |
 | --- | --- |
 | Turn on / off | `switch.turn_on`, `switch.turn_off` |
-| Toggle (tap on tile) | `switch.toggle` |
+| Toggle (tap on tile or its switch) | `switch.turn_on` / `switch.turn_off` for the state opposite to the one shown, not `switch.toggle`, so a stale state never inverts the intent |
 | Device class icon (`outlet`, `switch`) | attribute `device_class` |
 | On/off history timeline | history command |
 
@@ -442,7 +442,7 @@ Sensors are read-only; the app renders them by `device_class` and `state_class`.
 | HVAC mode (always) | Segmented control from `hvac_modes` | `climate.set_hvac_mode` |
 
 - Always displayed when present: `current_temperature`, `current_humidity`, `hvac_action` (heating, cooling, idle, …).
-- Temperature input is debounced (about 800 ms) so dragging the dial sends one service call, not dozens.
+- Temperature input is debounced (about 800 ms) so dragging the dial or tapping − / + several times sends one service call, not dozens. The tile's − / + change the target by `target_temp_step` (default 0.5) within `min_temp` and `max_temp` (defaults 7 and 35); they need flag 1 and a target from HA (none in mode `off`).
 - History shows current vs. target temperature and heating/cooling phases.
 
 ## 9. Synchronization on app start
@@ -854,7 +854,7 @@ These values were read from the rendered mockups and are the basis of the Compos
   - Switch (1×1): icon, name, state, toggle; "on" tiles use `primaryContainer`.
   - Sensor (1×1): icon, value with unit, name.
 - Tap on a tile toggles a switch; tap on the tile body of other types opens the detail screen (15.4).
-- As built (before chapter 8): tiles show live states but no controls yet (no toggle, no climate dial or ±). The header holds *Home · Level* with a menu of all levels (and each home's rooms without a level), the notification bell and *Add entities*; the pencil (M-06) follows with the edit layout. A long press on a tile opens *Rename* (dialog of M-07) and *Remove from this room*. Without rooms the tab points to Places.
+- As built: switch tiles have a toggle (a tap on the tile toggles too), the climate tile shows the target on an arc from `min_temp` to `max_temp` with − and +; the detail screen (15.4) follows. A failed call shows a snackbar with the message and the code (14.1, 17.4). The header holds *Home · Level* with a menu of all levels (and each home's rooms without a level), the notification bell and *Add entities*; the pencil (M-06) follows with the edit layout. A long press on a tile opens *Rename* (dialog of M-07) and *Remove from this room*. Without rooms the tab points to Places.
 
 #### M-06 Edit layout: drag, rename, remove (7.2, 7.3)
 
@@ -1148,6 +1148,7 @@ enum class ErrorCode(
 | HAAC-BRG-002 | HAAC Bridge on the server needs an update. | None |
 | HAAC-BRG-003 | You are not allowed to control this device. | None |
 | HAAC-ENT-001 | This device no longer exists in Home Assistant. | None |
+| HAAC-ENT-002 | This device does not support this action. | None |
 | HAAC-DB-001 | Your changes could not be saved. Please try again. | Retry |
 | HAAC-APP-000 | Something went wrong. | None |
 | HAAC-BRG-004 | This action is not available for this device. | None |
