@@ -339,7 +339,8 @@ erDiagram
 | Delete home | Confirmation dialog listing affected floors, rooms and assignments; cascade delete |
 
 - All structural changes run in one Room transaction.
-- Deletions offer an "Undo" snackbar for 5 seconds (soft delete, then purge).
+- Deletions offer an "Undo" snackbar for 5 seconds (soft delete, then purge). A deletion marks all its rows with the same `deletedAt`, which is what *Undo* restores. Only the latest deletion can be undone: a new deletion or the end of the window purges it, and rows left marked when the app was closed during the window are purged on the next start of the Places screen.
+- Deleting a room needs no confirmation (the snackbar is enough); deleting a level with rooms asks whether they stay in the home (default) or go too; deleting a home lists its levels and rooms first.
 - Drag-and-drop reordering in edit mode; sort order stored as integer with gaps.
 
 ### 6.3 Optional import from HA
@@ -672,7 +673,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 | `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name |
 | notification | id, serverId? → server, type (added/removed/error), errorCode?, bridgeCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results and errors for M-09 (17.4); serverId is empty for errors without an instance; count = entities, or occurrences of the same error within 10 minutes; purged after 30 days |
 
-- Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync.
+- Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync. Migration 3 → 4 creates `notification`. Migration 4 → 5 creates `home`, `floor` and `room` (ids are random UUIDs, `sortOrder` leaves gaps of 1024) and the two triggers that reject a room whose floor belongs to another home; Room cannot declare triggers, so a new database gets them from a database callback.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
 - Non-sensitive preferences (theme, unlock window, lock timeout) live in a typed DataStore (JSON via kotlinx.serialization). Whether an instance uses fingerprint unlock is not a separate flag: it follows from the key that protects its token file (5.3).
 
@@ -831,6 +832,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 - *Rooms on this level*: checkbox list of existing rooms with their current link ("directly in Main house", "moves from First floor"); only rooms of the selected home are listed; *New room on …* creates a room directly.
 - Summary line above the button ("Saving creates Attic in Main house with 1 room."), then *Create level*.
 - The same pattern applies to *New home* (link levels and rooms) and *New room* (link level or home), see 15.5 item 1.
+- As built: the level form adds *Level number* (− / +, new levels start above the highest level of the home). *New home* lists the rooms of other homes (*moves from Main house*; they lose their level) and can create rooms; levels do not move between homes (6.2). *New room* offers *No level* and the levels of the chosen home. The same form edits an existing place, with *Save* instead of the summary and a delete button in the header.
 
 #### M-04 Add entities to a room (7.1, 7.2)
 
@@ -1151,6 +1153,8 @@ enum class ErrorCode(
 | HAAC-BRG-005 | Home Assistant could not carry out the action. Please try again. | Retry |
 | HAAC-BRG-006 | History is not available on this server. | None |
 | HAAC-NET-008 | A different server answers at this address. The connection was closed for your safety. | Open settings |
+| HAAC-LAY-001 | This home, level or room no longer exists. Please check your places. | None |
+| HAAC-LAY-002 | Please enter a name. | None |
 
 ### 17.4 Errors in the notification list
 
