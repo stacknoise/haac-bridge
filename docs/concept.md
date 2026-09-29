@@ -460,7 +460,7 @@ On every start and on every instance switch (after unlock) the app compares the 
 5. `haac_bridge/subscribe_entities` → live states for all exposed entities.
 6. Store new `revision` and timestamp.
 
-**Notification list (M-09).** Every sync result is also written as an entry to a local notification list: *entity added* (actions *Add to room*, *Dismiss*), *entity removed* (actions *Remove tile*, *Keep*) and combined entries for several entities of one sync. Entries are per instance, grouped by day, marked read individually or all at once, and purged after 30 days. The bell icon in the room header shows an unread dot. These are in-app notifications only; Android system notifications are not used in v1.
+**Notification list (M-09).** Every sync result is also written as an entry to a local notification list: *entity added* (actions *Add to room*, *Dismiss*), *entity removed* (actions *Remove tile*, *Keep*) and combined entries for several entities of one sync. The first sync of an instance creates no entries, since every entity is new then. *Dismiss* and *Keep* leave the entry in the list without actions. Entries are per instance, grouped by day, marked read individually or all at once, and purged after 30 days. The bell icon in the room header shows an unread dot. These are in-app notifications only; Android system notifications are not used in v1.
 
 Errors appear in the same list, each with its error code (17.4).
 
@@ -670,7 +670,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 | `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `configuredName?`, `deviceClass?`, `unit?`, `stateClass?`, `displayPrecision?`, `area?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState?` (JSON: state, attributes, last changed/updated) | Cache of bridge data; filled by the sync (9.1), states kept current by the subscription |
 | `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (1x1/2x1/2x2), `addedAt` | Assignment; cascade on room delete |
 | `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name |
-| notification | id, serverId → server, type (added/removed/error), errorCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results for M-09; purged after 30 days |
+| notification | id, serverId? → server, type (added/removed/error), errorCode?, bridgeCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results and errors for M-09 (17.4); serverId is empty for errors without an instance; count = entities, or occurrences of the same error within 10 minutes; purged after 30 days |
 
 - Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
