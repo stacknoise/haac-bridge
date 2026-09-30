@@ -846,7 +846,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 
 ![M-04 Add entities](mockups/png/M-04-add-entities.png)
 
-- Header with room name; domain tabs *Switch / Sensor / Climate* with counts; filter field.
+- Header with room name; domain tabs *Switch / Sensor / Climate* with counts (with only one kind of entity shared, a plain caption such as *Switch · 2* replaces the tabs); filter field.
 - Rows: checkbox, local or HA name, live state on the right (ON/OFF, value).
 - Entities already in another room show "in Kitchen" as a hint but stay selectable (15.5 item 2).
 - Bottom button summarises the selection across tabs: "Add 2 switches · +1 sensor, +1 climate".
