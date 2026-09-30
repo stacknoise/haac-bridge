@@ -46,12 +46,15 @@ def users_of(options: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def parse_ui_users(options: Mapping[str, Any]) -> list[UserEntry]:
-    """Return the user entries of the entry options; they never carry a username, only the stable user ID."""
+    """Return the user entries of the entry options, with all six filter rules present as HA's filter expects.
+
+    They never carry a username, only the stable user ID.
+    """
     return [
         UserEntry(
             username=None,
             user_id=record[CONF_USER_ID],
-            filter={key: list(values) for key, values in record.get(CONF_FILTER, {}).items()},
+            filter={key: list(record.get(CONF_FILTER, {}).get(key, [])) for key in FILTER_KEYS},
             names=dict(record.get(CONF_NAMES, {})),
         )
         for record in users_of(options)
