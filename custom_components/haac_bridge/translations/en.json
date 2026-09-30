@@ -1,4 +1,67 @@
 {
+  "config": {
+    "step": {
+      "user": {
+        "title": "HAAC Bridge",
+        "description": "Adds HAAC Bridge, which gives the HA Android Client a filtered view of your entities. After adding it, choose which users may see which entities under the options of the integration."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Users of the app",
+        "description": "Choose which Home Assistant users the HA Android Client may show entities to. Users configured in configuration.yaml are not listed here and keep their YAML settings.",
+        "menu_options": {
+          "add_user": "Add a user",
+          "edit_user": "Change a user",
+          "remove_user": "Remove a user"
+        }
+      },
+      "add_user": {
+        "title": "Add a user",
+        "data": {
+          "user_id": "User"
+        }
+      },
+      "edit_user": {
+        "title": "Change a user",
+        "data": {
+          "user_id": "User"
+        }
+      },
+      "remove_user": {
+        "title": "Remove a user",
+        "description": "The app will show this user no entities.",
+        "data": {
+          "user_id": "User"
+        }
+      },
+      "filter": {
+        "title": "What may this user see?",
+        "description": "Only switches, sensors and climate devices are ever shown. Include at least one domain, entity or wildcard. An exclusion always wins over an inclusion. Wildcards look like `sensor.*_humidity`.",
+        "data": {
+          "include_domains": "Include domains",
+          "include_entities": "Include entities",
+          "include_entity_globs": "Include wildcards",
+          "exclude_domains": "Exclude domains",
+          "exclude_entities": "Exclude entities",
+          "exclude_entity_globs": "Exclude wildcards"
+        }
+      },
+      "names": {
+        "title": "Names in the app",
+        "description": "Optional names for the entities you included one by one. Leave a field empty to keep the Home Assistant name."
+      }
+    },
+    "error": {
+      "no_include": "Choose at least one domain, entity or wildcard to include",
+      "invalid_glob": "A wildcard must look like `domain.pattern`, for example `sensor.*_humidity`"
+    },
+    "abort": {
+      "unknown": "Something went wrong, please start again"
+    }
+  },
   "exceptions": {
     "cfg_invalid": {
       "message": "The haac_bridge configuration in configuration.yaml is invalid"

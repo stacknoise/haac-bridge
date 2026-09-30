@@ -21,6 +21,18 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 
 ## Configuration
 
+You can configure the users in the Home Assistant UI, in `configuration.yaml`, or both.
+
+### In the UI
+
+1. Open *Settings → Devices & services → Add integration* and add **HAAC Bridge** (once).
+2. Open the integration and choose *Configure*. Add a Home Assistant user, then choose what that user may see: domains, single entities and wildcards to include, and the same to exclude (an exclusion always wins). Include at least one rule, otherwise the user sees nothing.
+3. Optionally give the entities you included one by one a name for the app.
+
+Changes take effect at once, no restart or reload needed. Advanced or shared setups can still use YAML. If a user is configured in both places, the YAML entry is used and the UI entry for that user is ignored. The UI identifies users by their stable user ID, so renaming a Home Assistant user does not break the entry.
+
+### In `configuration.yaml`
+
 ```yaml
 haac_bridge:
   entity_config:                     # optional names for all users
@@ -57,7 +69,7 @@ haac_bridge:
 
 Rules:
 
-- **Deny by default.** A user who is not listed sees no entities. A listed user without any `include_*` rule also sees none.
+- **Deny by default.** A user who is not configured (in the UI or in YAML) sees no entities. A listed user without any `include_*` rule also sees none.
 - An explicit exclude beats an include, as in the HomeKit Bridge.
 - Only `switch`, `sensor` and `climate` entities are ever shared, whatever the filter says.
 - New entities that match a filter (for example via a glob) are shared automatically.

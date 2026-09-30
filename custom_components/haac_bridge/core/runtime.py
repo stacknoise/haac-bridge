@@ -13,6 +13,7 @@ from .error_factory import ErrorFactory
 from .response_factory import ResponseFactory
 
 if TYPE_CHECKING:
+    from ..config.schema import UserEntry
     from ..entities.descriptor_factory import DescriptorFactory
     from ..exposure.exposure import Exposure
     from ..exposure.filter_factory import FilterFactory
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class HaacBridgeData:
-    """Factories and current exposure, created in async_setup and replaced on reload."""
+    """Factories, current exposure and the user entries of YAML and UI; created in async_setup."""
 
     version: str
     filters: FilterFactory
@@ -31,6 +32,8 @@ class HaacBridgeData:
     errors: ErrorFactory = field(default_factory=ErrorFactory)
     responses: ResponseFactory = field(default_factory=ResponseFactory)
     issue_ids: set[str] = field(default_factory=set)
+    yaml_entries: list[UserEntry] = field(default_factory=list)
+    ui_entries: list[UserEntry] = field(default_factory=list)
 
 
 DATA_KEY: HassKey[HaacBridgeData] = HassKey(DOMAIN)

@@ -16,6 +16,7 @@ CONF_USER_ID: Final = "user_id"
 CONF_FILTER: Final = "filter"
 CONF_ENTITY_CONFIG: Final = "entity_config"
 CONF_NAME: Final = "name"
+CONF_NAMES: Final = "names"
 
 SERVICE_RELOAD: Final = "reload"
 

@@ -12,6 +12,29 @@ Lists every module, class and function of the integration with signature, file a
 | `async_setup` | `async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool` | `custom_components/haac_bridge/__init__.py` | Create the factories and exposure, register the commands and the reload action. |
 | `async_setup._async_reload` | `async def _async_reload(call: ServiceCall) -> None` | `custom_components/haac_bridge/__init__.py` | Handle the haac_bridge.reload action. |
 | `async_reload` | `async def async_reload(hass: HomeAssistant) -> None` | `custom_components/haac_bridge/__init__.py` | Re-read the YAML configuration and rebuild the exposure of all users. |
+| `_async_apply` | `async def _async_apply(hass: HomeAssistant) -> None` | `custom_components/haac_bridge/__init__.py` | Rebuild the exposure from the YAML and UI entries and tell connected apps. |
+| `async_setup_entry` | `async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool` | `custom_components/haac_bridge/__init__.py` | Take over the users configured in the UI and follow later changes of the options. |
+| `_async_options_updated` | `async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None` | `custom_components/haac_bridge/__init__.py` | Apply changed options of the entry without reloading the integration. |
+| `async_unload_entry` | `async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool` | `custom_components/haac_bridge/__init__.py` | Drop the UI users; the YAML users stay. |
+| `haac_bridge.config_flow` | `module` | `custom_components/haac_bridge/config_flow.py` | Config flow and options flow: set up HAAC Bridge and choose per user what the app may see (concept 10.2). |
+| `HaacBridgeConfigFlow` | `class HaacBridgeConfigFlow(ConfigFlow)` | `custom_components/haac_bridge/config_flow.py` | Adds HAAC Bridge once; the users are chosen afterwards in the options. |
+| `HaacBridgeConfigFlow.async_step_user` | `async def async_step_user(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Ask for a confirmation, then create the entry without any user. |
+| `HaacBridgeConfigFlow.async_get_options_flow` | `def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow` | `custom_components/haac_bridge/config_flow.py` | Return the options flow that edits the users of this entry. |
+| `HaacBridgeOptionsFlow` | `class HaacBridgeOptionsFlow(OptionsFlow)` | `custom_components/haac_bridge/config_flow.py` | Menu to add, change and remove the users the app may show entities to (concept 10.2). |
+| `HaacBridgeOptionsFlow.__init__` | `def __init__(self) -> None` | `custom_components/haac_bridge/config_flow.py` | Start without a user selected. |
+| `HaacBridgeOptionsFlow.async_step_init` | `async def async_step_init(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Show the menu; changing or removing needs an already configured user. |
+| `HaacBridgeOptionsFlow.async_step_add_user` | `async def async_step_add_user(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Choose a Home Assistant user that has no entry yet. |
+| `HaacBridgeOptionsFlow.async_step_edit_user` | `async def async_step_edit_user(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Choose one of the configured users to change. |
+| `HaacBridgeOptionsFlow.async_step_remove_user` | `async def async_step_remove_user(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Remove a configured user; the app then shows this user no entities. |
+| `HaacBridgeOptionsFlow.async_step_filter` | `async def async_step_filter(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Choose which entities the user may see: domains, entities and wildcards to include or exclude. |
+| `HaacBridgeOptionsFlow.async_step_names` | `async def async_step_names(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Give the explicitly included entities display names for the app; empty keeps the Home Assistant name. |
+| `HaacBridgeOptionsFlow._save` | `def _save(self, names: dict[str, str]) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Store the selected user's rules and names, replacing an earlier entry of this user. |
+| `HaacBridgeOptionsFlow._record` | `def _record(self, user_id: str \| None) -> dict[str, Any]` | `custom_components/haac_bridge/config_flow.py` | Return the stored record of a user, or an empty one. |
+| `HaacBridgeOptionsFlow._async_users` | `async def _async_users(self) -> list[SelectOptionDict]` | `custom_components/haac_bridge/config_flow.py` | Return every active, non-system Home Assistant user as a select option. |
+| `HaacBridgeOptionsFlow._async_configured_users` | `async def _async_configured_users(self) -> list[SelectOptionDict]` | `custom_components/haac_bridge/config_flow.py` | Return the users that already have an entry. |
+| `HaacBridgeOptionsFlow._async_free_users` | `async def _async_free_users(self) -> list[SelectOptionDict]` | `custom_components/haac_bridge/config_flow.py` | Return the users that have no entry yet. |
+| `_user_schema` | `def _user_schema(users: list[SelectOptionDict]) -> vol.Schema` | `custom_components/haac_bridge/config_flow.py` | Return the form with one required choice of a user. |
+| `_globs_valid` | `def _globs_valid(rules: dict[str, list[str]]) -> bool` | `custom_components/haac_bridge/config_flow.py` | Return True if every wildcard has the form `domain.pattern`. |
 | `haac_bridge.const` | `module` | `custom_components/haac_bridge/const.py` | Constants shared by all topics of HAAC Bridge. |
 
 ## core
@@ -53,7 +76,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ResponseFactory.state_diff` | `def state_diff(self, msg_id: int, event: Event[EventStateChangedData]) -> bytes` | `custom_components/haac_bridge/core/response_factory.py` | Return a state change as HA's compressed diff event, serialized once for all subscribers. |
 | `ResponseFactory.error` | `def error(self, msg_id: int, error: HaacBridgeError) -> dict[str, Any]` | `custom_components/haac_bridge/core/response_factory.py` | Return an error reply whose `code` is the HAB code of `error`. |
 | `haac_bridge.core.runtime` | `module` | `custom_components/haac_bridge/core/runtime.py` | Runtime data of HAAC Bridge stored in hass.data (concept 18.2). |
-| `HaacBridgeData` | `class HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Factories and current exposure, created in async_setup and replaced on reload. |
+| `HaacBridgeData` | `class HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Factories, current exposure and the user entries of YAML and UI; created in async_setup. |
 | `get_data` | `def get_data(hass: HomeAssistant) -> HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Return the runtime data of HAAC Bridge. |
 
 ## config
@@ -69,6 +92,10 @@ Lists every module, class and function of the integration with signature, file a
 | `UserEntry.label` | `def label(self) -> str` | `custom_components/haac_bridge/config/schema.py` | Return the name used for this entry in logs and Repairs. |
 | `parse_users` | `def parse_users(config: ConfigType) -> list[UserEntry]` | `custom_components/haac_bridge/config/schema.py` | Return the user entries of a validated configuration; empty if the section is missing. |
 | `_names` | `def _names(entity_config: dict[str, dict[str, str]]) -> dict[str, str]` | `custom_components/haac_bridge/config/schema.py` | Return entity ID to configured name for the entities that have a name. |
+| `haac_bridge.config.ui_users` | `module` | `custom_components/haac_bridge/config/ui_users.py` | Users configured in the Home Assistant UI, stored in the options of the config entry (concept 10.2). |
+| `user_options` | `def user_options(user_id: str, rules: Mapping[str, Any], names: Mapping[str, str]) -> dict[str, Any]` | `custom_components/haac_bridge/config/ui_users.py` | Return the options record of one user: its ID, the non-empty filter rules and the display names. |
+| `users_of` | `def users_of(options: Mapping[str, Any]) -> list[dict[str, Any]]` | `custom_components/haac_bridge/config/ui_users.py` | Return the user records of the entry options; empty if none were configured. |
+| `parse_ui_users` | `def parse_ui_users(options: Mapping[str, Any]) -> list[UserEntry]` | `custom_components/haac_bridge/config/ui_users.py` | Return the user entries of the entry options, with all six filter rules present as HA's filter expects. |
 | `haac_bridge.config.users` | `module` | `custom_components/haac_bridge/config/users.py` | Matches configured user entries to Home Assistant users (concept 10.2, 10.3). |
 | `normalize_username` | `def normalize_username(username: str) -> str` | `custom_components/haac_bridge/config/users.py` | Return the username in the form HA's own auth provider compares it. |
 | `usernames_of` | `def usernames_of(user: User) -> set[str]` | `custom_components/haac_bridge/config/users.py` | Return the normalized login names of a user from its HA auth provider credentials. |
