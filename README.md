@@ -3,7 +3,7 @@
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://img.shields.io/badge/HACS-Add%20repository-41BDF5?logo=homeassistantcommunitystore&logoColor=white)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stacknoise&repository=haac-bridge&category=integration)
 
-Home Assistant custom integration that gives the **HA Android Client (HAAC)** a filtered, per-user view of your entities. Which entities each Home Assistant user sees in the app is configured in `configuration.yaml`, with the same filter syntax as the HomeKit Bridge.
+Home Assistant custom integration that gives the **HA Android Client (HAAC)** a filtered, per-user view of your entities. Unlike the official Companion App, which shows a user everything they can reach, HAAC only ever sees the entities **you share with that user, one by one**.
 
 > This project is not affiliated with or endorsed by Home Assistant, the Open Home Foundation or Nabu Casa.
 
@@ -11,13 +11,34 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 - Supported entity domains in v1: `switch`, `sensor`, `climate`.
 - App: [stacknoise/haac-android](https://github.com/stacknoise/haac-android)
 
+## Features
+
+**Sharing entities per user**
+- Choose, per Home Assistant user, which entities the app may show and control: whole domains, single entities and wildcards such as `sensor.*_humidity`, each to include or to exclude. An explicit exclusion always wins, as in the HomeKit Bridge (the filter is built with Home Assistant's own `entityfilter` helper).
+- **Deny by default:** a user who is not configured, or has no include rule, sees nothing. Only `switch`, `sensor` and `climate` are ever shared, whatever the filter says.
+- Configure it in the **Home Assistant UI** (config and options flow, changes apply at once) or in `configuration.yaml`, or both; YAML entries win for a user who is in both. Users are identified by login name or by the stable user ID.
+- Optional display names per entity, global or per user; the app shows them until the user renames the entity locally. A name never shares an entity by itself.
+- New entities that match a filter are shared automatically, and connected apps are told at once (`exposure_changed`), also after a configuration change.
+
+**What the app can do through the bridge**
+- Read the shared entities with their current state, and follow their live changes.
+- Call services on shared entities only: the entity must be shared with the caller, the service must belong to the entity's domain, and the bridge sets the target itself, so a client cannot add other targets.
+- Read history and long-term statistics of shared entities only, filtered before the recorder is queried.
+- Read the Home Assistant floors and areas that hold shared entities, so the app can offer an import of levels and rooms (no entity IDs are sent).
+- Report the Home Assistant version, the bridge and API version, the instance ID and the internal, external and cloud address, so the app can recognise the same Home Assistant under different addresses.
+
+**Safety and operations**
+- The caller is always the Home Assistant user behind the access token; the app cannot ask for another user's entities.
+- Stable error codes (`HAB-…`) with plain-language messages, configuration problems and unknown users as *Repairs* issues, and the action `haac_bridge.reload` to re-read the YAML.
+- Distributed through HACS; CI runs hassfest, HACS validation, ruff, bandit, CodeQL and the tests.
+
 ## Installation (HACS)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stacknoise&repository=haac-bridge&category=integration)
 
 1. Click the button above to open the repository in HACS, or in HACS open *Custom repositories* and add `https://github.com/stacknoise/haac-bridge` with category **Integration**.
 2. Install **HAAC Bridge** and restart Home Assistant.
-3. Add the configuration below to `configuration.yaml` and restart once more.
+3. Choose which users may see which entities, in the Home Assistant UI or in `configuration.yaml` (see *Configuration* below).
 
 ## Configuration
 
