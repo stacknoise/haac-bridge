@@ -964,7 +964,7 @@ Both repositories are licensed under the **Apache License 2.0**: anyone may use,
 - Source files get no individual license headers; the `LICENSE` file at the root applies to the whole repository.
 - The license grants no trademark rights: forks must not present themselves as "HA Android Client" or "HAAC".
 - The README of both repositories states that the project is not affiliated with or endorsed by Home Assistant, the Open Home Foundation or Nabu Casa.
-- The app shows its own license and the licenses of all bundled libraries in *Settings → About → Open-source licenses*, generated at build time (e.g. with the AboutLibraries Gradle plugin), as Apache-2.0 and the libraries' licenses require.
+- The app shows its own license and the licenses of all bundled libraries in *Settings → About → Open-source licenses*, generated at build time (e.g. with the AboutLibraries Gradle plugin), as Apache-2.0 and the libraries' licenses require. As built, *Settings → About* shows the app version and the Apache-2.0 notice; *Open-source licenses* opens a screen in `:app` that renders the `aboutlibraries.json` the Android plugin `com.mikepenz.aboutlibraries.plugin.android` generates for the `:app` module (library list with license texts, `aboutlibraries-compose-m3`).
 - Dependencies must use licenses compatible with Apache-2.0 (Apache-2.0, MIT, BSD); GPL-licensed libraries are not used.
 - The license does not remove statutory liability that cannot be excluded (under Austrian law, intent and gross negligence); an additional liability notice belongs in the app's terms and privacy policy (14.4).
 
