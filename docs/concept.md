@@ -351,6 +351,8 @@ erDiagram
 
 HA itself has floors and areas. As a convenience, the setup wizard can offer to pre-fill floors and rooms from HA's floor/area registry, if the HAAC Bridge exposes it. The result is an ordinary local structure that the user can then edit freely; there is no ongoing sync back to HA.
 
+**As built (v1.1).** *Places → + → Import from Home Assistant* opens a wizard that needs the live connection and a bridge with `haac_bridge/areas` (an older bridge answers HAAC-BRG-001 *update the bridge*). It lists the areas that hold at least one entity exposed to the user, grouped by HA floor (areas without a floor under *No level*), all checked; the user picks the target home (an existing one or a new home with a name) and unchecks what they do not want. The import creates one level per HA floor that has checked areas (level number from HA, 0 if HA has none) and one room per area, in one transaction. Areas whose name (case-insensitive) already exists as a room of the target home are skipped and counted; a level with the name of an HA floor is reused. Entities are not assigned: the user adds them to the rooms afterwards (7.2). Nothing is synchronised later, and the import can be run again for new areas.
+
 ## 7. Entity management
 
 The app only ever sees entities that the HAAC Bridge exposes to the logged-in HA user; the user picks from these, places them in rooms and can name them locally.
@@ -583,7 +585,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/call_service` | `entity_id`, `service`, `service_data` (without target keys) | Empty result, or an error reply with a HAB code (18.3) |
 | `haac_bridge/history` | `entity_ids[]`, `start`, `end`, `minimal_response` | State history per entity |
 | `haac_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
-| `haac_bridge/areas` (optional) | – | HA floors and areas of exposed entities for the import wizard |
+| `haac_bridge/areas` | – | `floors` (`floor_id`, `name`, `level`, `null` if HA has none) and `areas` (`area_id`, `name`, `floor_id` or `null`, `entity_count`), limited to areas that hold at least one entity exposed to the caller and to the floors of those areas; no entity IDs (6.3) |
 
 ### 11.3 Message examples
 
