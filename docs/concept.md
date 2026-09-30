@@ -840,7 +840,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 - *Rooms on this level*: checkbox list of existing rooms with their current link ("directly in Main house", "moves from First floor"); only rooms of the selected home are listed; *New room on …* creates a room directly.
 - Summary line above the button ("Saving creates Attic in Main house with 1 room."), then *Create level*.
 - The same pattern applies to *New home* (link levels and rooms) and *New room* (link level or home), see 15.5 item 1.
-- As built: the level form adds *Level number* (− / +, new levels start above the highest level of the home). *New home* lists the rooms of other homes (*moves from Main house*; they lose their level) and can create rooms; levels do not move between homes (6.2). *New room* offers *No level* and the levels of the chosen home. The same form edits an existing place, with *Save* instead of the summary and a delete button in the header.
+- As built: the level form adds *Level number* (− / +, new levels start above the highest level of the home). *New home* lists the rooms of other homes (*moves from Main house*; they lose their level) and can create rooms; the form of an existing home first shows the home's own rooms, fixed, with their level or *directly in* the home; levels do not move between homes (6.2). *New room* offers *No level* and the levels of the chosen home. The same form edits an existing place, with *Save* instead of the summary and a delete button in the header.
 
 #### M-04 Add entities to a room (7.1, 7.2)
 
@@ -1178,7 +1178,7 @@ Every error passed to `ErrorReporter` appears as an entry in the in-app notifica
 - The same code within 10 minutes is grouped into one entry with a counter instead of new entries.
 - Errors belong to the active instance (`serverId`); errors without an instance (e.g. during onboarding) are global entries.
 - Errors that block the current screen are additionally shown there (field error, dialog or snackbar), always with the code.
-- Uncaught exceptions are recorded as `HAAC-APP-000` and shown as an entry after the next app start.
+- Uncaught exceptions are recorded as `HAAC-APP-000` and shown as an entry after the next app start. As built, a handler installed at app start writes only a marker file while the process dies (no stack trace and no exception message, which can contain addresses or tokens; the trace stays in logcat and in Play's crash reports); the next start turns the marker into a global entry with the time of that start and deletes it.
 
 ### 17.5 Code index against duplicate functions
 
