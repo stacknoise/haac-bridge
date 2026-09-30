@@ -144,6 +144,8 @@ On first start – or whenever no server is bound – the app shows the server s
 - **HTTPS is the default.** Plain `http://` is only accepted for private addresses (RFC 1918, loopback, link-local, IPv6 unique/link-local, `.local`) after an explicit warning dialog. Android's network security config cannot express address ranges and OkHttp refuses cleartext entirely when the config forbids it, so the config permits cleartext and the rule is enforced in code (`CleartextPolicy`) before every request; public hosts over `http://` fail with `HAAC-NET-006`.
 - Self-signed certificates: the user can trust the certificate on first use (TOFU). The app then pins its SHA-256 public-key hash for that address and shows the fingerprint for manual comparison. A later certificate change triggers a blocking warning. Each address of an instance (4.5) has its own pin.
 
+**As built (TOFU)** – one OkHttp client serves the whole app; its trust manager decides per `host:port`. An address with a pin is trusted exactly when the server's public key (SHA-256 of the SubjectPublicKeyInfo, lower-case hex) is the pinned one, whatever the system thinks of the certificate, and the host name is not checked for it; a different key fails the handshake with `HAAC-NET-003`. Every other address needs a certificate the system trusts, otherwise `HAAC-NET-007`. Both codes are also found when OkHttp tried several addresses of a host and only reports the last failure. If an `https` address fails with `HAAC-NET-007`, the sign-in (and a new address in *Settings → Addresses*) reads the certificate with a bare TLS handshake that the app itself aborts, so no credentials or tokens are sent, and shows its SHA-256 fingerprint (the value browsers show), owner and expiry; *Trust* pins the key in memory, and it is stored in the `server` row when the instance or address is saved. *Settings → Addresses → Certificate* shows what an address presents now: the pinned certificate (with *Remove pin*), a changed one (*Trust new certificate*) or an unpinned one (*Trust*). Pins live in the `server` table, follow an address and are dropped when the address changes. `HAAC-NET-003` and `HAAC-NET-007` now offer *Open settings* as their action.
+
 ### 4.4 Multiple HA instances and switching
 
 The app can hold any number of HA instances; exactly one is active, and the user can switch to another one at any time from the top app bar.
@@ -1141,7 +1143,7 @@ enum class ErrorCode(
 | HAAC-NET-004 | This address is not a Home Assistant server. Check the address and try again. | None |
 | HAAC-NET-005 | This is not a valid address. Check it and try again. | None |
 | HAAC-NET-006 | Unencrypted connections are only allowed in your home network. Use an https address. | None |
-| HAAC-NET-007 | The server's certificate is not trusted, so the connection was blocked. | None |
+| HAAC-NET-007 | The server's certificate is not trusted, so the connection was blocked. | Open settings |
 | HAAC-AUTH-001 | Username or password is wrong. | None |
 | HAAC-AUTH-002 | The verification code is wrong. | None |
 | HAAC-AUTH-003 | Your sign-in has expired. Please sign in again. | Sign in |
