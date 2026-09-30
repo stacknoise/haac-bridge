@@ -817,7 +817,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 ![M-01 Scan and sign in](mockups/png/M-01-sign-in.png)
 
 - Heading "Hello." and a short intro.
-- Section *On this network* with live scan indicator: HA servers found via mDNS/zeroconf (service `_home-assistant._tcp`), each with host name and `IP:port`; the selected server is marked with an accent bar and a check mark.
+- Section *On this network* with live scan indicator (it ends after 10 seconds and turns into *Scan again*, which restarts the search): HA servers found via mDNS/zeroconf (service `_home-assistant._tcp`), each with host name and `IP:port`; the selected server is marked with an accent bar and a check mark.
 - *Other address…* opens manual URL entry (4.2).
 - Username and password fields on the same screen, then *Sign in* (outlined, with arrow).
 - The same screen is used for *Add instance* (4.4).
