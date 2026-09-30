@@ -856,7 +856,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 ![M-05 Room grid](mockups/png/M-05-room-grid.png)
 
 - Breadcrumb *Home · Level* with dropdown to switch; room name as title; icons *Edit layout* and *Add entities*.
-- Room chips for quick switching between rooms of the level; a level with a single room shows none, the room name in the title is enough. Tile rows are 120 dp high (a 1×1 tile holds icon, switch, name and state without clipping).
+- Room chips for quick switching between rooms of the level; the chip of the shown room is left out, because its name is the title (a level with a single room has no chips). Tile rows are 120 dp high (a 1×1 tile holds icon, switch, name and state without clipping).
 - Grid with two columns and tile sizes 1×1, 2×1 and 2×2:
   - Climate (2×2): name, heating indicator, target temperature on an arc, current temperature ("now 20.8°"), − and + buttons.
   - Switch (1×1): icon, name, state, toggle; "on" tiles use `primaryContainer`.
