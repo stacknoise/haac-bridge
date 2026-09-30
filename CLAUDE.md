@@ -1,6 +1,6 @@
 # HAAC Bridge – HACS integration for HAAC (repo: stacknoise/haac-bridge)
 
-Home Assistant custom integration (domain `haac_bridge`) that gives the HA Android Client (HAAC, repo `stacknoise/haac-android`) a filtered, per-user view of HA entities over dedicated WebSocket commands. Exposure is configured per HA user in `configuration.yaml`, similar to the HomeKit Bridge filter syntax. Distributed via HACS.
+Home Assistant custom integration (domain `haac_bridge`) that gives the HA Android Client (HAAC, repo `stacknoise/haac-android`) a filtered, per-user view of HA entities over dedicated WebSocket commands. Exposure is configured per HA user in the HA UI (options flow) or in `configuration.yaml`, similar to the HomeKit Bridge filter syntax. Distributed via HACS.
 
 ## Source of truth
 
@@ -20,8 +20,8 @@ docs/code-index.md        # GENERATED: every module, class and function with a o
 docs/error-codes.md       # GENERATED: every HAB error code (concept 18.3)
 scripts/code_index.py     # generator for the two files above
 custom_components/haac_bridge/
-  __init__.py  manifest.json  const.py  services.yaml
-  translations/en.json    # user texts of all exceptions
+  __init__.py  config_flow.py  manifest.json  const.py  services.yaml
+  translations/en.json    # user texts of exceptions, issues and the config/options flow
   core/  config/  exposure/  entities/  services/  history/  api/   # modules by topic (concept 18.1)
 tests/                    # same topic structure
 .github/workflows/        # validate.yml, tests.yml, release.yml (concept 16.5)
@@ -56,7 +56,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 ## Non-negotiable rules
 
 - Resolve the caller only from `connection.user`; never accept a user name or id from the client (10.3).
-- Deny by default: a HA user not listed in the YAML sees no entities.
+- Deny by default: a HA user not configured (YAML or UI) sees no entities. YAML entries win over UI entries for the same user (10.2).
 - Only domains `switch`, `sensor`, `climate` are ever returned in v1, regardless of the filter.
 - `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service belongs to the entity's domain; the bridge sets the target itself (11.4).
 - History and statistics are filtered with the same exposure before querying the recorder.

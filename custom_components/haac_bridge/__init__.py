@@ -1,5 +1,6 @@
 """HAAC Bridge: per-user entity exposure for the HA Android Client (concept 10)."""
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.reload import async_integration_yaml_config
@@ -10,6 +11,7 @@ from homeassistant.loader import async_get_integration
 from .api import COMMANDS
 from .config.repairs import async_check_users, async_report_invalid_config
 from .config.schema import CONFIG_SCHEMA, parse_users
+from .config.ui_users import parse_ui_users
 from .const import DOMAIN, SERVICE_RELOAD, SIGNAL_EXPOSURE_CHANGED
 from .core.command import async_register_commands
 from .core.errors import ConfigError, ErrorCode
@@ -33,6 +35,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         descriptors=DescriptorFactory(hass),
         services=ServiceCallFactory(hass),
         exposure=Exposure(entries, filters),
+        yaml_entries=entries,
     )
     hass.data[DATA_KEY] = data
     await async_check_users(hass, data.issue_ids, entries)
@@ -53,7 +56,38 @@ async def async_reload(hass: HomeAssistant) -> None:
     if config is None:
         async_report_invalid_config(hass, data.issue_ids)
         raise ConfigError(ErrorCode.CFG_INVALID)
-    entries = parse_users(config)
+    data.yaml_entries = parse_users(config)
+    await _async_apply(hass)
+
+
+async def _async_apply(hass: HomeAssistant) -> None:
+    """Rebuild the exposure from the YAML and UI entries and tell connected apps.
+
+    YAML entries come first, so a user who is configured in both places gets the YAML entry (concept 10.2).
+    """
+    data = get_data(hass)
+    entries = [*data.yaml_entries, *data.ui_entries]
     data.exposure = Exposure(entries, data.filters)
     await async_check_users(hass, data.issue_ids, entries)
     async_dispatcher_send(hass, SIGNAL_EXPOSURE_CHANGED)
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Take over the users configured in the UI and follow later changes of the options."""
+    get_data(hass).ui_entries = parse_ui_users(entry.options)
+    await _async_apply(hass)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Apply changed options of the entry without reloading the integration."""
+    get_data(hass).ui_entries = parse_ui_users(entry.options)
+    await _async_apply(hass)
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Drop the UI users; the YAML users stay."""
+    get_data(hass).ui_entries = []
+    await _async_apply(hass)
+    return True
