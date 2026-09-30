@@ -48,7 +48,6 @@ async def _areas(client: Any) -> dict[str, Any]:
     return await client.receive_json()
 
 
-@pytest.mark.usefixtures("demo_states")
 async def test_areas_hold_only_exposed_entities(hass: HomeAssistant, anton_client: Any) -> None:
     ground = fr.async_get(hass).async_create("Ground floor", level=0)
     unused = fr.async_get(hass).async_create("Attic", level=2)
@@ -79,6 +78,10 @@ async def test_areas_hold_only_exposed_entities(hass: HomeAssistant, anton_clien
     # An entity that is not exposed to the user does not make its area appear.
     other = entities.async_get_or_create("switch", "test", "3", suggested_object_id="office_fan")
     entities.async_update_entity(other.entity_id, area_id=hidden.id)
+
+    # The registry entries come first: an existing state would make Home Assistant pick another ID.
+    hass.states.async_set(socket.entity_id, "on")
+    hass.states.async_set(sensor.entity_id, "21.4")
 
     reply = await _areas(anton_client)
 
