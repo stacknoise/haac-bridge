@@ -328,7 +328,7 @@ erDiagram
 - A **floor** belongs to exactly one home; it has a name, a level number (for sorting, e.g. -1, 0, 1) and optional icon.
 - A **room** always has `homeId`; `floorId` is nullable. If `floorId` is set, the floor must belong to the same home (enforced in the use case and by a DB trigger).
 - Rooms without a floor are shown in a section "Other rooms" directly under the home.
-- **As built (icons)**: the optional icon of a home, level or room is one of 16 built-in icons (`PlaceIcon` in `:core:common`: home, building, cabin, living room, bedroom, kitchen, dining room, bathroom, office, laundry, garage, garden, terrace, kids room, stairs, level); the `icon` column stores its key, and an unknown key shows no icon. The place form has an *Icon* row (tap the chosen icon again to clear it); the Places overview shows the icon in front of the name.
+- **As built (icons)**: the optional icon of a home, level or room is one of 16 built-in icons (`PlaceIcon` in `:core:common`: home, building, cabin, living room, bedroom, kitchen, dining room, bathroom, office, laundry, garage, garden, terrace, kids room, stairs, level); the `icon` column stores its key, and an unknown key shows no icon. The place form has an *Icon* row (tap the chosen icon again to clear it); the Places overview shows the icon in front of the name, and the Rooms tab shows a room's icon in front of its title and on its chip.
 
 **A home is mandatory.** Every level and every room belongs to exactly one home; there are no unlinked levels or rooms. A home may consist of rooms only, without any levels. If no home exists yet, the create menu offers only *New home*, and creating a level or room always asks for its home (preselected when there is only one).
 
