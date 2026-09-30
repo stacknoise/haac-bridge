@@ -652,6 +652,7 @@ Subscription (`haac_bridge/subscribe_entities`): an empty result, then events in
 - `exposure_changed` follows every change of the exposed set: an entity matching the filter appears (`a`) or disappears (`r`), or a `haac_bridge.reload` changed the configuration (then `a`/`r` for the differences first). It is also sent after every reload, even without differences. Its `revision` equals the one `haac_bridge/exposure/revision` returns; the app then runs steps 2–4 of 9.1.
 - Changes of entities outside the exposed set are never sent.
 - The app ends the subscription with HA's `unsubscribe_events` command (`subscription`: the subscription's message id); closing the WebSocket ends it too.
+- Message ids: HA requires the ids on one WebSocket to keep increasing and answers a reused or lower id with the error code `id_reuse` (shown as `HAAC-BRG-005`). The connection therefore goes on with the id counter of the handshake (`haac_bridge/info` is id 1 of the same socket), and taking an id and sending the message happen under one lock, so the heartbeat, requests and subscriptions cannot overtake each other.
 
 ### 11.4 Versioning and robustness
 
