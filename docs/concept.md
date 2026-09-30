@@ -150,7 +150,7 @@ On first start – or whenever no server is bound – the app shows the server s
 
 The app can hold any number of HA instances; exactly one is active, and the user can switch to another one at any time from the top app bar.
 
-**Adding an instance** – *Settings → Instances → Add* runs the same flow as the first start: URL entry and validation (4.2), HA login (chapter 5), optional fingerprint unlock. Each instance gets a display name (default: the HA `location_name`) and an accent colour so the active instance is always recognisable.
+**Adding an instance** – *Settings → Instances → Add* runs the same flow as the first start: URL entry and validation (4.2), HA login (chapter 5), optional fingerprint unlock. Each instance gets a display name (default: the HA `location_name`) and an accent colour so the active instance is always recognisable. As built, the fingerprint step is a dialog right after the instance is stored (*Use fingerprint* / *Not now*), shown only if the device has an enrolled Class-3 biometric; *Use fingerprint* runs the enabling of 5.4 with the current unlock window, and a cancelled or failed prompt leaves it off (Settings → Security turns it on later). Both answers open the instance; adding only an address to a stored instance (4.5) does not offer it.
 
 **Isolation** – every instance has its own:
 
