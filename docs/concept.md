@@ -840,7 +840,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 - *Rooms on this level*: checkbox list of existing rooms with their current link ("directly in Main house", "moves from First floor"); only rooms of the selected home are listed; *New room on …* creates a room directly.
 - Summary line above the button ("Saving creates Attic in Main house with 1 room."), then *Create level*.
 - The same pattern applies to *New home* (link levels and rooms) and *New room* (link level or home), see 15.5 item 1.
-- As built: the level form adds *Level number* (− / +, new levels start above the highest level of the home). *New home* lists the rooms of other homes (*moves from Main house*; they lose their level) and can create rooms; the form of an existing home first shows the home's own rooms, fixed, with their level or *directly in* the home; levels do not move between homes (6.2). *New room* offers *No level* and the levels of the chosen home. The same form edits an existing place, with *Save* instead of the summary and a delete button in the header.
+- As built: the level form adds *Level number* (− / +, new levels start above the highest level of the home). *New home* lists the rooms of other homes (*moves from Main house*; they lose their level) and can create rooms; levels do not move between homes (6.2). *New room* offers *No level* and the levels of the chosen home. The same form edits an existing place, with *Save* instead of the summary and a delete button in the header.
 
 #### M-04 Add entities to a room (7.1, 7.2)
 
@@ -856,7 +856,7 @@ These values were read from the rendered mockups and are the basis of the Compos
 ![M-05 Room grid](mockups/png/M-05-room-grid.png)
 
 - Breadcrumb *Home · Level* with dropdown to switch; room name as title; icons *Edit layout* and *Add entities*.
-- Room chips for quick switching between rooms of the level.
+- Room chips for quick switching between rooms of the level; a level with a single room shows none, the room name in the title is enough. Tile rows are 120 dp high (a 1×1 tile holds icon, switch, name and state without clipping).
 - Grid with two columns and tile sizes 1×1, 2×1 and 2×2:
   - Climate (2×2): name, heating indicator, target temperature on an arc, current temperature ("now 20.8°"), − and + buttons.
   - Switch (1×1): icon, name, state, toggle; "on" tiles use `primaryContainer`.
