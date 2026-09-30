@@ -154,6 +154,8 @@ Lists every module, class and function of the integration with signature, file a
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
 | `haac_bridge.api.__init__` | `module` | `custom_components/haac_bridge/api/__init__.py` | The haac_bridge/* WebSocket commands, one module per command group (concept 11.2). |
+| `haac_bridge.api.areas` | `module` | `custom_components/haac_bridge/api/areas.py` | Command haac_bridge/areas (concept 6.3, 11.2). |
+| `ws_areas` | `async def ws_areas(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/areas.py` | Return the HA floors and areas that hold entities exposed to the caller. |
 | `haac_bridge.api.entities` | `module` | `custom_components/haac_bridge/api/entities.py` | Commands haac_bridge/entities/list and haac_bridge/subscribe_entities (concept 11.2, 11.3). |
 | `ws_entities_list` | `async def ws_entities_list(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/entities.py` | Return the revision and the descriptors of all entities exposed to the caller. |
 | `ws_subscribe_entities` | `async def ws_subscribe_entities(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> SubscriptionStarted` | `custom_components/haac_bridge/api/entities.py` | Subscribe to the live states of the caller's exposed entities. |
@@ -167,6 +169,16 @@ Lists every module, class and function of the integration with signature, file a
 | `ws_info` | `async def ws_info(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/info.py` | Return bridge, API and HA version, supported domains, instance ID and addresses. |
 | `haac_bridge.api.services` | `module` | `custom_components/haac_bridge/api/services.py` | Command haac_bridge/call_service (concept 10.3, 11.2, 11.4). |
 | `ws_call_service` | `async def ws_call_service(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/services.py` | Call a service of an exposed entity's domain on that entity only. |
+
+## areas
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.areas.__init__` | `module` | `custom_components/haac_bridge/areas/__init__.py` | HA floors and areas of the exposed entities, for the app's import wizard. |
+| `haac_bridge.areas.catalog` | `module` | `custom_components/haac_bridge/areas/catalog.py` | Floors and areas that contain exposed entities (concept 6.3, 11.2). |
+| `_area_of` | `def _area_of(entity: er.RegistryEntry, devices: dr.DeviceRegistry) -> str \| None` | `custom_components/haac_bridge/areas/catalog.py` | Return the area of an entity: its own, else the area of its device. |
+| `_entity_counts` | `def _entity_counts(hass: HomeAssistant, entity_ids: Iterable[str]) -> Counter[str]` | `custom_components/haac_bridge/areas/catalog.py` | Count the given entities per area ID; entities without an area are left out. |
+| `area_catalog` | `def area_catalog(hass: HomeAssistant, entity_ids: Iterable[str]) -> dict[str, Any]` | `custom_components/haac_bridge/areas/catalog.py` | Return the areas that hold at least one of the entities, and the floors those areas are on. |
 
 ## instance
 

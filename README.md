@@ -84,6 +84,7 @@ The app talks to the bridge over Home Assistant's WebSocket API with commands pr
 | `haac_bridge/call_service` | `entity_id`, `service`, `service_data` | Empty result, or an error: `HAB-SVC-001` not exposed, `HAB-ENT-001` entity gone, `HAB-SVC-002` service not in the entity's domain, `HAB-WS-001` target keys in `service_data`, `HAB-SVC-003` Home Assistant failed |
 | `haac_bridge/history` | `entity_ids`, `start`, `end`?, `minimal_response`? | Significant state changes per entity in Home Assistant's compressed state format; `HAB-HIST-001` if the recorder fails |
 | `haac_bridge/statistics` | `entity_ids`, `start`, `end`?, `period` (`hour`, `day`, `week`, `month`), `types` (`mean`, `min`, `max`, `sum`) | Long-term statistics rows per entity; `start`/`end` of each row in milliseconds |
+| `haac_bridge/areas` | – | `floors` (`floor_id`, `name`, `level`) and `areas` (`area_id`, `name`, `floor_id`, `entity_count`) of the Home Assistant registries, limited to areas that hold at least one entity exposed to the caller and the floors of those areas; no entity IDs. For the import wizard of the app |
 
 History and statistics only include requested entities that are exposed to the caller; others are left out silently. Times are ISO 8601; a period in the future returns an empty result.
 
