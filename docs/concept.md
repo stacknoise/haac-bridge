@@ -784,12 +784,12 @@ HAAC is distributed via Google Play and as a sideload APK. Both channels use the
 
 The binding UI reference is mockup set **1c**, in its consolidated form **2a** ("Going with 1c, room grid and edit layout from 1a"), dark theme "Nocturne". It covers nine screens (M-01 to M-09); screens not yet designed are listed in 15.4.
 
-**Restyled (October 2026):** the app now uses the light theme **"Salbei"** (design handoff "HAAC UI Redesign: Salbei", mockup block "E · Salbei: alle Screens"). Layout, behaviour and navigation are unchanged; tokens, shapes, type and the components named in 15.2 follow Salbei. The PNGs in `docs/mockups/png` and `haac-mockups-1c.html` still show Nocturne and are kept only as a layout reference.
+**Restyled (October 2026):** the app now uses the light theme **"Salbei"** (design handoff "HAAC UI Redesign: Salbei", mockup block "E · Salbei: alle Screens"). Layout, behaviour and navigation are unchanged; tokens, shapes, type and the components named in 15.2 follow Salbei. The PNGs in `docs/mockups/png` and `haac-mockups-1c.html` still show Nocturne and are kept only as a layout reference. Screenshots of the built app (`docs/screenshots`) follow the matching mockups for M-01, M-02, M-04, M-05 and M-06; M-03, M-07, M-08 and M-09 still show only the Nocturne mockup.
 
 ### 15.1 Rules for implementation (Claude Code)
 
 - **Precedence**: chapters 1–14 define behaviour and data; the mockups define layout, visual style and wording. Where they disagree, the concept text wins; 15.5 lists the known cases.
-- **Files in the repository**: `docs/mockups/haac-mockups-1c.html` (interactive source, open in a browser), `docs/mockups/png/M-0x-*.png` (one PNG per screen, 2× resolution).
+- **Files in the repository**: `docs/mockups/haac-mockups-1c.html` (interactive source, open in a browser), `docs/mockups/png/M-0x-*.png` (one PNG per screen, 2× resolution); `docs/screenshots/*.jpg` (screenshots of the built app in the Salbei design, listed under the matching screens in 15.3).
 - **Scale**: the mockups are drawn on a 300 px wide phone frame. Implement with Material 3 components, `dp`/`sp` units and the M3 type scale; do not copy pixel values literally.
 - **Mockup texts** ("anna", "Main house", "Living room") are sample data, not UI strings. UI strings go into `strings.xml` in English (German translation later).
 - **Terminology**: the UI says *Level*, the code and this concept say *Floor* (`floor` table, `Floor` class). Keep that mapping.
@@ -835,6 +835,12 @@ These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a 
 
 ![M-01 Scan and sign in](mockups/png/M-01-sign-in.png)
 
+*Mockup (Nocturne), layout reference.*
+
+![M-01 Scan and sign in, as built](screenshots/sign-in.jpg)
+
+*Sign in as built (Salbei); the server address is blurred.*
+
 - Heading "Hello." and a short intro.
 - Section *On this network* with live scan indicator (it ends after 10 seconds and turns into *Scan again*, which restarts the search): HA servers found via mDNS/zeroconf (service `_home-assistant._tcp`), each with host name and `IP:port`; the selected server is a card with accent tint, border and a check circle.
 - *Other address…* opens manual URL entry (4.2).
@@ -844,6 +850,16 @@ These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a 
 #### M-02 Places overview with create menu (6)
 
 ![M-02 Places overview](mockups/png/M-02-places.png)
+
+*Mockup (Nocturne), layout reference.*
+
+![M-02 Places overview, as built](screenshots/places.jpg)
+
+*Places as built (Salbei).*
+
+![M-02 create menu, as built](screenshots/places-speed-dial.jpg)
+
+*Create menu as built (Salbei): speed dial over a dimmed list.*
 
 - One list of all homes, levels and rooms; filter chips *All / Homes / Levels / Rooms* with counts.
 - Each row: type label, name, relation on the right ("2 levels", "Main house", "Ground floor"); rooms without a level show only their home (e.g. "Garden house"). The *Unlinked* chip of the mockup is not used (15.5).
@@ -864,6 +880,12 @@ These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a 
 
 ![M-04 Add entities](mockups/png/M-04-add-entities.png)
 
+*Mockup (Nocturne), layout reference.*
+
+![M-04 Add entities, as built](screenshots/add-entities.jpg)
+
+*Add entities as built (Salbei).*
+
 - Header with room name; domain tabs *Switch / Sensor / Climate* with counts (with only one kind of entity shared, a plain caption such as *Switch · 2* replaces the tabs); filter field.
 - Rows: checkbox, local or HA name, live state on the right (ON/OFF, value).
 - Entities already in another room show "in Kitchen" as a hint but stay selectable (15.5 item 2).
@@ -872,6 +894,12 @@ These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a 
 #### M-05 Room grid with live states (7, 8)
 
 ![M-05 Room grid](mockups/png/M-05-room-grid.png)
+
+*Mockup (Nocturne), layout reference.*
+
+![M-05 Room grid, as built](screenshots/rooms.jpg)
+
+*Room grid as built (Salbei).*
 
 - Breadcrumb *Home · Level* with dropdown to switch; room name as title; icons *Edit layout* and *Add entities*.
 - Room chips for quick switching between rooms of the level; the chip of the shown room is left out, because its name is the title (a level with a single room has no chips). Tile rows are 120 dp high (a 1×1 tile holds icon, switch, name and state without clipping).
@@ -885,6 +913,12 @@ These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a 
 #### M-06 Edit layout: drag, rename, remove (7.2, 7.3)
 
 ![M-06 Edit layout](mockups/png/M-06-edit-layout.png)
+
+*Mockup (Nocturne), layout reference.*
+
+![M-06 Edit layout, as built](screenshots/edit-layout.jpg)
+
+*Edit layout as built (Salbei).*
 
 - Edit mode title "Edit Living room" with *Done*; hint "Drag tiles to reorder. Tap a name to rename."
 - Every tile shows a drag handle, a remove badge (−) and a pencil next to the name; the dragged tile is lifted and the drop target shown hatched.
