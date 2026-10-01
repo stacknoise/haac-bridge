@@ -975,7 +975,7 @@ Until mockups exist, Claude Code builds these with the tokens from 15.2 and stan
 
 ### 15.6 App icon
 
-The launcher icon shows a house outline with a 2×2 tile grid in the accent colour `#4DFF7A` on the dark background `#161826`, matching the former Nocturne tokens; the icon was not redrawn for Salbei and stays as delivered. It is delivered as a complete Android adaptive icon set.
+The launcher icon shows a white house outline with a 2×2 tile grid, one tile lit, on the Salbei green `#2F6B4F` (a soft gradient from `#3A7D5E` to `#285B43`). It was redrawn in October 2026 for the Salbei design; the earlier Nocturne icon was a neon-green house on `#161826`. It is delivered as a complete Android adaptive icon set.
 
 ![App icon: circle, squircle and rounded masks, themed icon, Play Store icon](icons/app-icon-overview.png)
 
@@ -986,12 +986,13 @@ The launcher icon shows a house outline with a 2×2 tile grid in the accent colo
 | `res/mipmap-anydpi-v26/ic_launcher.xml`, `ic_launcher_round.xml` | Adaptive icon (Android 8+) with background, foreground and monochrome layer | – |
 | `res/mipmap-*/ic_launcher_foreground.png`, `_background.png`, `_monochrome.png` | Layers, 108 dp | 108–432 px (mdpi–xxxhdpi) |
 | `res/mipmap-*/ic_launcher.png`, `ic_launcher_round.png` | Legacy icons, 48 dp | 48–192 px (mdpi–xxxhdpi) |
-| `res/values/ic_launcher_background.xml` | Colour resource `ic_launcher_background` = `#161826` | – |
+| `res/values/ic_launcher_background.xml` | Colour resource `ic_launcher_background` = `#2F6B4F` | – |
 | `docs/icons/playstore-icon-512.png` | Google Play store listing (14.4), no transparency | 512 × 512 px |
 
 - The `res/` files are placed in `app/src/main/res/` of `haac-android`; the manifest references `android:icon="@mipmap/ic_launcher"` and `android:roundIcon="@mipmap/ic_launcher_round"`.
 - The foreground stays inside the 66 dp safe zone, so no launcher mask cuts the motif.
 - The monochrome layer is used for themed icons on Android 13+; the launcher tints it with the wallpaper colours.
+- The themed layer is the same motif as an opaque single-colour shape: the house outline, the lit tile filled and the other three as outlines.
 - The icon is used unchanged for both the Play and the sideload flavor.
 
 ## 16. Source code management (GitHub)
