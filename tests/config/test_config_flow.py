@@ -211,5 +211,100 @@ async def test_menu_offers_only_possible_entries(
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
-    expected = ["edit_user", "remove_user"] if configured else ["add_user"]
+    expected = (
+        ["edit_user", "remove_user", "export_yaml", "import_yaml"]
+        if configured
+        else ["add_user", "import_yaml"]
+    )
     assert result["menu_options"] == expected
+
+
+async def test_export_shows_the_ui_users_as_yaml(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    options = {
+        "users": [
+            {
+                "user_id": anton.id,
+                "filter": {"include_entities": ["sensor.humidity"]},
+                "names": {"sensor.humidity": "Humidity"},
+            }
+        ]
+    }
+    entry = await _add_entry(hass, options)
+
+    result = await _menu(hass, entry, "export_yaml")
+
+    assert result["step_id"] == "export_yaml"
+    exported = result["description_placeholders"]["yaml"]
+    assert "haac_bridge:" in exported
+    assert anton.id in exported
+    assert "sensor.humidity" in exported
+    assert "name: Humidity" in exported
+    # Confirming leaves everything as it was and returns to the menu.
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.MENU
+    assert entry.options == options
+
+
+async def test_import_adds_and_replaces_users(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    maria = add_user("maria")
+    old = {"user_id": anton.id, "filter": {"include_domains": ["sensor"]}}
+    entry = await _add_entry(hass, {"users": [old]})
+    text = (
+        "haac_bridge:\n"
+        "  users:\n"
+        f"    - user_id: {anton.id}\n"
+        "      filter:\n"
+        "        include_entities: [sensor.humidity]\n"
+        "      entity_config:\n"
+        "        sensor.humidity:\n"
+        "          name: Humidity\n"
+        f"    - user_id: {maria.id}\n"
+        "      filter:\n"
+        "        include_domains: [switch]\n"
+    )
+
+    result = await _menu(hass, entry, "import_yaml")
+    assert result["step_id"] == "import_yaml"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"yaml": text})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    users = {record["user_id"]: record for record in entry.options["users"]}
+    assert users[anton.id]["filter"] == {"include_entities": ["sensor.humidity"]}
+    assert users[anton.id]["names"] == {"sensor.humidity": "Humidity"}
+    assert users[maria.id]["filter"] == {"include_domains": ["switch"]}
+    assert get_data(hass).exposure.is_exposed(anton, "sensor.humidity")
+
+
+@pytest.mark.parametrize(
+    ("text", "error"),
+    [
+        ("users: [", "invalid_yaml"),
+        ("just a sentence", "invalid_yaml"),
+        ("users:\n  - user_id: abc\n    unknown_key: true\n", "invalid_config"),
+        ("users: []\n", "no_users"),
+        (
+            "users:\n  - username: anton\n    filter:\n      include_domains: [sensor]\n",
+            "needs_user_id",
+        ),
+        ("users:\n  - user_id: abc\n", "no_include"),
+        (
+            "users:\n  - user_id: not-a-ha-user\n    filter:\n      include_domains: [sensor]\n",
+            "unknown_user",
+        ),
+    ],
+)
+async def test_import_rejects_unusable_yaml(hass: HomeAssistant, text: str, error: str) -> None:
+    entry = await _add_entry(hass)
+
+    result = await _menu(hass, entry, "import_yaml")
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"yaml": text})
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": error}
+    assert entry.options == {}
