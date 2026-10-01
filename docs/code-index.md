@@ -88,6 +88,7 @@ Lists every module, class and function of the integration with signature, file a
 | `async_report_invalid_config` | `def async_report_invalid_config(hass: HomeAssistant, issue_ids: set[str]) -> None` | `custom_components/haac_bridge/config/repairs.py` | Log HAB-CFG-001 and create its Repairs issue; the previous configuration stays active. |
 | `async_check_users` | `async def async_check_users(hass: HomeAssistant, issue_ids: set[str], entries: list[UserEntry]) -> None` | `custom_components/haac_bridge/config/repairs.py` | Report entries without a matching HA user (HAB-CFG-002) and remove resolved issues. |
 | `haac_bridge.config.schema` | `module` | `custom_components/haac_bridge/config/schema.py` | YAML schema of the haac_bridge section in configuration.yaml (concept 10.2). |
+| `_none_as_empty` | `def _none_as_empty(section: Any) -> Any` | `custom_components/haac_bridge/config/schema.py` | Return an empty section for a bare `haac_bridge:` line, which YAML reads as None. |
 | `UserEntry` | `class UserEntry` | `custom_components/haac_bridge/config/schema.py` | One validated entry under `users`: who it applies to, its filter and its entity names. |
 | `UserEntry.label` | `def label(self) -> str` | `custom_components/haac_bridge/config/schema.py` | Return the name used for this entry in logs and Repairs. |
 | `parse_users` | `def parse_users(config: ConfigType) -> list[UserEntry]` | `custom_components/haac_bridge/config/schema.py` | Return the user entries of a validated configuration; empty if the section is missing. |

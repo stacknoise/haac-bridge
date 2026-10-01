@@ -84,6 +84,11 @@ async def test_missing_section_means_no_users() -> None:
     assert parse_users(CONFIG_SCHEMA({"haac_bridge": {}})) == []
 
 
+async def test_bare_section_means_no_users() -> None:
+    """A `haac_bridge:` line without content is read as None and means no users, not an invalid config."""
+    assert parse_users(CONFIG_SCHEMA({"haac_bridge": None})) == []
+
+
 @pytest.mark.parametrize(
     "user",
     [
