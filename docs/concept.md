@@ -409,7 +409,7 @@ Which controls appear is driven by the entity's `supported_features` bitmask and
 
 - Live state via WebSocket subscription (chapter 11), including `unavailable` and `unknown`.
 - Detail screen: state, `last_changed`, `last_updated`, full attribute list, HA friendly name, `entity_id`, local alias editor. As built: it opens with a tap on a tile without a toggle, or with *Details* in the long-press menu; it shows the name with a pencil for *Rename* (M-07), `entity_id`, the current state, the readings of 8.4, every control of the domain (disabled without a connection), the names from HA and the bridge, both times relative and absolute, and all attributes sorted by name.
-- History: chart or timeline for 24 h / 7 days / custom range via the bridge's history command. As built: *Custom* picks whole days (Material date range picker), up to now. Switches and sensors without unit or `state_class` show a timeline (`on` green, `off` neutral, gaps for `unavailable`/`unknown`, other states in categorical order); numeric sensors a line; `measurement` sensors beyond two days the hourly mean with a min/max band from `haac_bridge/statistics` (daily beyond 31 days); `total`/`total_increasing` sensors bars of the growth of `sum` per hour (per day beyond two days); climate entities current and target temperature with heating and cooling phases. A tap or horizontal drag shows the values at that time above the chart. Chart colours are checked for colour-vision deficiencies against the background; the brand green is too light for a chart series, so charts use a darker green. The history loads once the connection is open and does not update live.
+- History: chart or timeline for 24 h / 7 days / custom range via the bridge's history command. As built: *Custom* picks whole days (Material date range picker), up to now. Switches and sensors without unit or `state_class` show a timeline (`on` green, `off` neutral, gaps for `unavailable`/`unknown`, other states in categorical order); numeric sensors a line; `measurement` sensors beyond two days the hourly mean with a min/max band from `haac_bridge/statistics` (daily beyond 31 days); `total`/`total_increasing` sensors bars of the growth of `sum` per hour (per day beyond two days); climate entities current and target temperature with heating and cooling phases. A tap or horizontal drag shows the values at that time above the chart. Chart colours are checked for colour-vision deficiencies against the background; the accent green is too dark to separate from the other series, so charts use a lighter green (Salbei: `#1F9A4B`, yellow `#B27300`, adjusted by hand and not yet re-validated). The history loads once the connection is open and does not update live.
 - Optimistic UI for service calls with rollback if the confirmed state from HA differs or the call fails. The tile shows the requested state at once and keeps it until HA confirms it, at most 5 s; after that, or when the call fails, it shows HA's state again. A newer request of the same entity replaces the older one. Controls are disabled while there is no connection (14.1).
 
 ### 8.2 Switch (`switch`)
@@ -784,6 +784,8 @@ HAAC is distributed via Google Play and as a sideload APK. Both channels use the
 
 The binding UI reference is mockup set **1c**, in its consolidated form **2a** ("Going with 1c, room grid and edit layout from 1a"), dark theme "Nocturne". It covers nine screens (M-01 to M-09); screens not yet designed are listed in 15.4.
 
+**Restyled (October 2026):** the app now uses the light theme **"Salbei"** (design handoff "HAAC UI Redesign: Salbei", mockup block "E · Salbei: alle Screens"). Layout, behaviour and navigation are unchanged; tokens, shapes, type and the components named in 15.2 follow Salbei. The PNGs in `docs/mockups/png` and `haac-mockups-1c.html` still show Nocturne and are kept only as a layout reference.
+
 ### 15.1 Rules for implementation (Claude Code)
 
 - **Precedence**: chapters 1–14 define behaviour and data; the mockups define layout, visual style and wording. Where they disagree, the concept text wins; 15.5 lists the known cases.
@@ -794,26 +796,38 @@ The binding UI reference is mockup set **1c**, in its consolidated form **2a** (
 
 ### 15.2 Design tokens
 
-These values were read from the rendered mockups and are the basis of the Compose theme (`HaacTheme`, dark only in v1).
+These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a dark variant is not designed yet). They live in `HaacColors`, `HaacShapes`, `Type.kt` and `HaacComponents.kt` (`:core:common`).
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `background` | `#161826` | Screen background |
-| `surface` | `#232532` | Tiles, input fields, cards |
-| `surfaceVariant` | `#3F424D` | Inactive toggles, dividers |
-| `outline` | `#75798C` | 1 dp borders, chips, removed-entity dashed border |
-| `primary` | `#4DFF7A` | Accent: active toggle, selected chip, primary button border and text, check marks |
-| `primaryContainer` | `#0D2F18` | Background of "on" tiles and selected chips |
-| `onPrimaryContainer` | `#A6FFBB` | Text on "on" tiles |
-| `onBackground` | `#E9E9ED` | Primary text |
-| `onSurfaceVariant` | `#9397AB` | Secondary text, sublines, section labels |
-| Font | Inter (regular 400, medium 500) | All text; bundle via `res/font` |
+| `background` | `#F3F5F0` | Screen background |
+| `surface` | `#FFFFFF` | Cards, tiles, inputs |
+| `surfaceMuted` | `#EDF1E9` | Icon box of "off" tiles; segmented-control track `#E8EDE4` |
+| `outline` | `#E2E7DD` | 1 dp borders of cards and tiles |
+| `outlineStrong` | `#CBD3C6` | Outlined buttons and chips, disabled checkbox |
+| `onSurface` | `#1D2620` | Primary text, selected chip, selected segment |
+| `onSurfaceVariant` | `#5A6A5F` | Secondary text, inactive navigation (`#4A5A4F` on outlined chips) |
+| `accent` (`primary`) | `#2F6B4F` | Primary buttons, active navigation, "on" state; text on it is white |
+| `accentTint` | `#2F6B4F` at 10 % | "On" tile and selected row background; border at 47 % |
+| `accentTintStrong` | `#E3EFE6` | Menu icon squares, empty-state icon, `primaryContainer` |
+| `switchTrackOff` | `#B9C3B3` | Switch track when off |
+| `navBackground` | `#FAFBF8` | Bottom bar, top border `#DDE3D8` |
+| `disabledBg` / `disabledText` | `#E4E9DF` / `#6B7A70` | Disabled primary buttons |
+| `danger` | `#9B2C2C` | *Remove* text buttons, errors |
+| `scrim` | `#1D2620` at 50 % | Dialog scrim |
+| Font | Figtree (400, 500, 600, 700; variable font in `res/font`) | All text; licence `core/common/FONT-LICENSE-Figtree.txt` |
 | Mono font | system monospace | `entity_id`, IP addresses and ports |
-| Corner radius | 8 dp (chips, fields), 12 dp (tiles, dialogs, buttons), full (toggles, icon buttons) |  |
+| Corner radius | 12 dp chips, 16 dp fields and icon boxes, 18 dp buttons, 22 dp cards, 26 dp tiles, 32 dp dialogs, full (switches, pills) |  |
 
-- Primary buttons are outlined in `primary` with `primary` text, not filled.
+- Type: hero "Hello." 72/700; screen title 38/700; dialog title 26/700; top-bar title 20/700; tile name 18/700, row name 17/600; body 14–15; section label 12/600 uppercase, 12 % tracking.
+- Spacing: 20 dp screen padding (login 24 dp), 14 dp grid gap, 10–12 dp list gap; touch targets at least 44 dp. No shadows except the Places button and dialogs; depth is a 1 dp border.
+- Tiles: 168 dp high, 26 dp radius. "Off" is a white card with border; "on" uses `accentTint` with a 1.5 dp accent border, an accent icon box with white icon and an accent switch. The whole tile is the toggle target.
+- Primary buttons are filled in `accent` with white text (disabled: `disabledBg`); secondary buttons are outlined in `outlineStrong` with dark text. Fields are white with a 1 dp `outline`, 2 dp accent when focused.
 - Section labels ("ON THIS NETWORK", "HOME", "LEVEL") are small uppercase text with letter spacing in `onSurfaceVariant`.
-- Navigation: bottom bar with **Rooms**, **Places**, **Settings**.
+- Chips: unselected transparent with `outlineStrong` border, selected filled `onSurface`; 40 dp high.
+- Navigation: bottom bar with **Rooms**, **Places**, **Settings**; the active item shows an accent label and a 24×3 dp accent bar on its top edge (no indicator pill).
+- Places: list rows are cards with a type badge (HOME, LEVEL, ROOM); the create button is a 60 dp accent square with a soft green shadow and opens a speed dial over a 90 % `background` scrim that leaves the bottom bar clear.
+- The edit layout uses the same 168 dp row height as the room grid so that drag-and-drop geometry is shared.
 
 ### 15.3 Screens
 
@@ -822,9 +836,9 @@ These values were read from the rendered mockups and are the basis of the Compos
 ![M-01 Scan and sign in](mockups/png/M-01-sign-in.png)
 
 - Heading "Hello." and a short intro.
-- Section *On this network* with live scan indicator (it ends after 10 seconds and turns into *Scan again*, which restarts the search): HA servers found via mDNS/zeroconf (service `_home-assistant._tcp`), each with host name and `IP:port`; the selected server is marked with an accent bar and a check mark.
+- Section *On this network* with live scan indicator (it ends after 10 seconds and turns into *Scan again*, which restarts the search): HA servers found via mDNS/zeroconf (service `_home-assistant._tcp`), each with host name and `IP:port`; the selected server is a card with accent tint, border and a check circle.
 - *Other address…* opens manual URL entry (4.2).
-- Username and password fields on the same screen, then *Sign in* (outlined, with arrow).
+- Username and password fields on the same screen, then *Sign in* (filled, with arrow).
 - The same screen is used for *Add instance* (4.4).
 
 #### M-02 Places overview with create menu (6)
@@ -923,11 +937,11 @@ Until mockups exist, Claude Code builds these with the tokens from 15.2 and stan
 
 1. **A home is mandatory** (decided). The mockup notes allow unlinked levels and rooms and link a room to a home only via its level. Instead, every level and room belongs to a home, and a room links either to a level of that home or directly to the home (6.1). Consequences: no *Unlinked* chip in M-02, no *None* option for the home in M-03, and *New level* / *New room* require a home.
 2. **Entities in any number of rooms** (decided). The mockup notes say an entity sits in at most one room. Instead, an entity can be assigned to any number of rooms (7.2). In M-04, "in Kitchen" is only a hint; the row stays selectable.
-3. **New in the mockups, adopted in the concept**: LAN discovery (M-01), tile sizes and list arrange mode (M-05 to M-07), notification list (M-09). Their data and behaviour are defined in 4.2, 7.2, 9.1 and 12.
+. **Salbei replaces Nocturne** (decided, October 2026). The visual style of all screens follows the Salbei handoff (15.2); the nine mockup PNGs and the 1c HTML keep their layout role but no longer show the app's colours, type or shapes. Where the Salbei handoff and a mockup disagree on layout (for example tiles as cards instead of list rows), Salbei wins.
 
 ### 15.6 App icon
 
-The launcher icon shows a house outline with a 2×2 tile grid in the accent colour `#4DFF7A` on the dark background `#161826`, matching the design tokens (15.2). It is delivered as a complete Android adaptive icon set.
+The launcher icon shows a house outline with a 2×2 tile grid in the accent colour `#4DFF7A` on the dark background `#161826`, matching the former Nocturne tokens; the icon was not redrawn for Salbei and stays as delivered. It is delivered as a complete Android adaptive icon set.
 
 ![App icon: circle, squircle and rounded masks, themed icon, Play Store icon](icons/app-icon-overview.png)
 
