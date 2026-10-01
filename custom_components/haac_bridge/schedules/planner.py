@@ -25,7 +25,7 @@ class SchedulePlanner:
         store: ScheduleStore,
         triggers: TriggerFactory,
         on_due: Callable[[str], Awaitable[None]],
-        on_changed: Callable[[], None] = lambda: None,
+        on_changed: Callable[[], None],
     ) -> None:
         """Create the planner; `on_due` runs a schedule, `on_changed` reports a pause or resume."""
         self._hass = hass
