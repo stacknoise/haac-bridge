@@ -20,7 +20,7 @@ from custom_components.haac_bridge.core.errors import (
 TRANSLATIONS = (
     Path(__file__).parents[2] / "custom_components" / "haac_bridge" / "translations" / "en.json"
 )
-CODE_FORMAT = re.compile(r"^HAB-(CFG|AUTH|SVC|ENT|HIST|WS|INT)-\d{3}$")
+CODE_FORMAT = re.compile(r"^HAB-(CFG|AUTH|SVC|ENT|HIST|SCH|WS|INT)-\d{3}$")
 
 
 async def test_codes_are_unique_and_well_formed() -> None:
@@ -45,6 +45,7 @@ async def test_every_code_has_translation_and_app_mapping() -> None:
         (errors.InvalidServiceError, "SVC"),
         (errors.EntityNotFoundError, "ENT"),
         (errors.HistoryError, "HIST"),
+        (errors.ScheduleError, "SCH"),
         (errors.RequestError, "WS"),
         (errors.InternalError, "INT"),
     ],

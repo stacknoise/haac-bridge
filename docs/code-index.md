@@ -70,6 +70,7 @@ Lists every module, class and function of the integration with signature, file a
 | `InvalidServiceError` | `class InvalidServiceError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A service call was rejected or failed (area SVC). |
 | `EntityNotFoundError` | `class EntityNotFoundError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A requested entity does not exist (area ENT). |
 | `HistoryError` | `class HistoryError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | History or statistics could not be read (area HIST). |
+| `ScheduleError` | `class ScheduleError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A schedule is invalid, missing, in conflict or not allowed (area SCH). |
 | `RequestError` | `class RequestError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A WebSocket request has an invalid format (area WS). |
 | `InternalError` | `class InternalError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | Unexpected error inside the bridge (area INT). |
 | `haac_bridge.core.response_factory` | `module` | `custom_components/haac_bridge/core/response_factory.py` | ResponseFactory: builds every WebSocket reply of HAAC Bridge (concept 11, 18.2). |
@@ -224,3 +225,85 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.instance.addresses` | `module` | `custom_components/haac_bridge/instance/addresses.py` | Instance ID and configured addresses of this Home Assistant instance (concept 4.3, 11.2). |
 | `async_instance_identity` | `async def async_instance_identity(hass: HomeAssistant) -> dict[str, Any]` | `custom_components/haac_bridge/instance/addresses.py` | Return the instance ID and the internal, external and cloud address (each `None` if unset). |
 | `_url_or_none` | `def _url_or_none(resolve: Callable[[], str]) -> str \| None` | `custom_components/haac_bridge/instance/addresses.py` | Return the URL `resolve` finds, or `None` if Home Assistant has none of that kind. |
+
+## schedules
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.schedules.__init__` | `module` | `custom_components/haac_bridge/schedules/__init__.py` | Schedules: store, trigger planning, runner, user lifecycle and HA entities (concept 19). |
+| `haac_bridge.schedules.model` | `module` | `custom_components/haac_bridge/schedules/model.py` | Schedule data model, validation and (de)serialisation (concept 19.2). |
+| `WhenType` | `class WhenType(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | What triggers a schedule. |
+| `Action` | `class Action(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | What a schedule does with its entities. |
+| `PauseReason` | `class PauseReason(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | Why the system paused a schedule (concept 19.6). |
+| `RunResult` | `class RunResult(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | Outcome of the last run. |
+| `When` | `class When` | `custom_components/haac_bridge/schedules/model.py` | When a schedule runs: a wall-clock time or a sun event, on some weekdays. |
+| `When.to_dict` | `def to_dict(self) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/model.py` | Return the stored form; `time` only for fixed times, `offset_min` only for sun events. |
+| `Paused` | `class Paused` | `custom_components/haac_bridge/schedules/model.py` | A pause set by the system, with its reason and the time it started. |
+| `LastRun` | `class LastRun` | `custom_components/haac_bridge/schedules/model.py` | The outcome of the last run: when, the result and the HAB code if it was not ok. |
+| `Schedule` | `class Schedule` | `custom_components/haac_bridge/schedules/model.py` | One schedule as stored by the bridge. |
+| `Schedule.active` | `def active(self) -> bool` | `custom_components/haac_bridge/schedules/model.py` | Return whether the schedule is planned: enabled and not paused by the system. |
+| `Schedule.to_dict` | `def to_dict(self) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/model.py` | Return the stored (JSON) form. |
+| `Schedule.with_changes` | `def with_changes(self, **changes: Any) -> Schedule` | `custom_components/haac_bridge/schedules/model.py` | Return a copy with the given fields replaced. |
+| `_invalid` | `def _invalid() -> ScheduleError` | `custom_components/haac_bridge/schedules/model.py` | Return the error for a schedule that failed validation (HAB-SCH-001). |
+| `_enum` | `def _enum(cls: type[_E], raw: object) -> _E` | `custom_components/haac_bridge/schedules/model.py` | Return the member of `cls` for a raw value, or raise HAB-SCH-001. |
+| `_number` | `def _number(raw: object, low: int, high: int) -> int` | `custom_components/haac_bridge/schedules/model.py` | Return a whole number within the range; a bool does not count. |
+| `parse_time` | `def parse_time(raw: object) -> time` | `custom_components/haac_bridge/schedules/model.py` | Return the time of a `HH:MM` text (24 h, no seconds). |
+| `parse_days` | `def parse_days(raw: object) -> frozenset[int]` | `custom_components/haac_bridge/schedules/model.py` | Return the non-empty set of weekdays (0 = Monday). |
+| `parse_when` | `def parse_when(raw: object) -> When` | `custom_components/haac_bridge/schedules/model.py` | Return the validated trigger: a time with weekdays, or a sun event with an offset. |
+| `parse_name` | `def parse_name(raw: object) -> str` | `custom_components/haac_bridge/schedules/model.py` | Return the trimmed name of 1 to 60 characters. |
+| `parse_action` | `def parse_action(raw: object) -> Action` | `custom_components/haac_bridge/schedules/model.py` | Return the validated action. |
+| `parse_entities` | `def parse_entities(raw: object) -> tuple[str, ...]` | `custom_components/haac_bridge/schedules/model.py` | Return 1 to 20 distinct switch entity ids in the given order. |
+| `parse_enabled` | `def parse_enabled(raw: object) -> bool` | `custom_components/haac_bridge/schedules/model.py` | Return the `enabled` flag; it must be a real boolean. |
+| `new_schedule` | `def new_schedule(owner: str, fields: Mapping[str, Any], now: datetime \| None=None) -> Schedule` | `custom_components/haac_bridge/schedules/model.py` | Return a new schedule with a fresh id after validating `name`, `when`, `action`, `entities`. |
+| `_parse_moment` | `def _parse_moment(raw: object) -> datetime` | `custom_components/haac_bridge/schedules/model.py` | Return the datetime of a stored ISO text. |
+| `_parse_paused` | `def _parse_paused(raw: object) -> Paused \| None` | `custom_components/haac_bridge/schedules/model.py` | Return the stored pause, or None. |
+| `_parse_last_run` | `def _parse_last_run(raw: object) -> LastRun \| None` | `custom_components/haac_bridge/schedules/model.py` | Return the stored last run, or None. |
+| `schedule_from_dict` | `def schedule_from_dict(raw: object) -> Schedule` | `custom_components/haac_bridge/schedules/model.py` | Return the schedule of a stored dict, or raise HAB-SCH-001 if it is damaged. |
+| `haac_bridge.schedules.planner` | `module` | `custom_components/haac_bridge/schedules/planner.py` | Plans the next run of every schedule and calls the runner when one is due (concept 19.3). |
+| `SchedulePlanner` | `class SchedulePlanner` | `custom_components/haac_bridge/schedules/planner.py` | Keeps one timer per active schedule and re-plans after every run and every time change. |
+| `SchedulePlanner.__init__` | `def __init__(self, hass: HomeAssistant, store: ScheduleStore, triggers: TriggerFactory, on_due: Callable[[str], Awaitable[None]], on_changed: Callable[[], None]=lambda : None) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Create the planner; `on_due` runs a schedule, `on_changed` reports a pause or resume. |
+| `SchedulePlanner.async_start` | `async def async_start(self) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Plan every schedule, follow time zone and location changes and catch up missed runs. |
+| `SchedulePlanner.async_stop` | `def async_stop(self) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Cancel every timer and stop following configuration changes. |
+| `SchedulePlanner.async_plan_all` | `async def async_plan_all(self) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Plan every schedule anew. |
+| `SchedulePlanner.async_plan` | `async def async_plan(self, schedule_id: str, after: datetime \| None=None) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Plan the next run of one schedule, or cancel its timer if it is not active. |
+| `SchedulePlanner.planned_run` | `def planned_run(self, schedule_id: str) -> datetime \| None` | `custom_components/haac_bridge/schedules/planner.py` | Return when the schedule runs next, or None if it is not planned. |
+| `SchedulePlanner._cancel` | `def _cancel(self, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Cancel the timer of one schedule. |
+| `SchedulePlanner._plannable` | `def _plannable(schedule: Schedule) -> bool` | `custom_components/haac_bridge/schedules/planner.py` | Return whether a timer is needed: enabled, and not paused for a reason a timer cannot fix. |
+| `SchedulePlanner._make_job` | `def _make_job(self, schedule_id: str) -> Callable[[datetime], Awaitable[None]]` | `custom_components/haac_bridge/schedules/planner.py` | Return the timer callback of one schedule. |
+| `SchedulePlanner._make_job._fire` | `async def _fire(_now: datetime) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Plan the next run first, so a failing run never stops the schedule, then run. |
+| `SchedulePlanner._async_set_sun_pause` | `async def _async_set_sun_pause(self, schedule: Schedule, *, paused: bool) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Pause a sun schedule that has no event, or resume one whose event is back. |
+| `SchedulePlanner._missed` | `def _missed(self, schedule: Schedule, now: datetime) -> bool` | `custom_components/haac_bridge/schedules/planner.py` | Return whether a run was due shortly before `now` and has not happened (concept 19.3). |
+| `SchedulePlanner._handle_config_update` | `def _handle_config_update(self, _event: Event) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Re-plan everything after a change of the time zone or the location. |
+| `haac_bridge.schedules.store` | `module` | `custom_components/haac_bridge/schedules/store.py` | Persistent storage of the schedules in `.storage/haac_bridge.schedules` (concept 19.2). |
+| `ScheduleStore` | `class ScheduleStore` | `custom_components/haac_bridge/schedules/store.py` | Holds all schedules in memory and writes them to storage after every change. |
+| `ScheduleStore.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/schedules/store.py` | Create an empty store; call `async_load` before use. |
+| `ScheduleStore.async_load` | `async def async_load(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Read the schedules from storage; a damaged entry is skipped and logged once. |
+| `ScheduleStore.schedules` | `def schedules(self) -> list[Schedule]` | `custom_components/haac_bridge/schedules/store.py` | Return all schedules, oldest first. |
+| `ScheduleStore.get` | `def get(self, schedule_id: str) -> Schedule \| None` | `custom_components/haac_bridge/schedules/store.py` | Return the schedule with this id, or None. |
+| `ScheduleStore.by_owner` | `def by_owner(self, owner: str) -> list[Schedule]` | `custom_components/haac_bridge/schedules/store.py` | Return the schedules of one HA user, oldest first. |
+| `ScheduleStore.async_add` | `async def async_add(self, schedule: Schedule) -> None` | `custom_components/haac_bridge/schedules/store.py` | Add a new schedule and save. |
+| `ScheduleStore.async_replace` | `async def async_replace(self, schedule: Schedule) -> None` | `custom_components/haac_bridge/schedules/store.py` | Replace an existing schedule as a whole and save; an unknown id raises HAB-SCH-003. |
+| `ScheduleStore.async_remove` | `async def async_remove(self, schedule_ids: Iterable[str]) -> list[Schedule]` | `custom_components/haac_bridge/schedules/store.py` | Remove the schedules with these ids, save once and return what was removed. |
+| `ScheduleStore._async_save` | `async def _async_save(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Write all schedules to storage. |
+| `ScheduleStore.async_remove_file` | `async def async_remove_file(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Delete the storage file when the config entry of the bridge is removed. |
+| `haac_bridge.schedules.triggers` | `module` | `custom_components/haac_bridge/schedules/triggers.py` | Trigger planners: when a schedule runs next and last ran (concept 19.3, 18.2 TriggerFactory). |
+| `Trigger` | `class Trigger(Protocol)` | `custom_components/haac_bridge/schedules/triggers.py` | Computes the runs of one schedule; None means no run can be computed. |
+| `Trigger.next_run` | `def next_run(self, after: datetime) -> datetime \| None` | `custom_components/haac_bridge/schedules/triggers.py` | Return the first run strictly after `after` (UTC), or None. |
+| `Trigger.previous_run` | `def previous_run(self, before: datetime) -> datetime \| None` | `custom_components/haac_bridge/schedules/triggers.py` | Return the last run at or before `before` (UTC), or None. |
+| `TimeTrigger` | `class TimeTrigger` | `custom_components/haac_bridge/schedules/triggers.py` | A fixed wall-clock time on some weekdays. |
+| `TimeTrigger.__init__` | `def __init__(self, when: When, tz: tzinfo) -> None` | `custom_components/haac_bridge/schedules/triggers.py` | Remember the time, the weekdays and the time zone of the planning. |
+| `TimeTrigger.next_run` | `def next_run(self, after: datetime) -> datetime \| None` | `custom_components/haac_bridge/schedules/triggers.py` | Return the first run after `after`, DST-safe. |
+| `TimeTrigger.previous_run` | `def previous_run(self, before: datetime) -> datetime \| None` | `custom_components/haac_bridge/schedules/triggers.py` | Return the last run at or before `before`, DST-safe. |
+| `SunTrigger` | `class SunTrigger` | `custom_components/haac_bridge/schedules/triggers.py` | Sunrise or sunset plus an offset, on some weekdays of the local date of the result. |
+| `SunTrigger.__init__` | `def __init__(self, hass: HomeAssistant, when: When, event: str, tz: tzinfo) -> None` | `custom_components/haac_bridge/schedules/triggers.py` | Remember the sun event, the offset, the weekdays and the time zone. |
+| `SunTrigger._instant` | `def _instant(self, day_offset: int, today: datetime) -> datetime \| None` | `custom_components/haac_bridge/schedules/triggers.py` | Return the run on the sun event of `today` plus `day_offset` days, or None. |
+| `SunTrigger.next_run` | `def next_run(self, after: datetime) -> datetime \| None` | `custom_components/haac_bridge/schedules/triggers.py` | Return the first run after `after`; None if the sun never gives one within a year. |
+| `SunTrigger.previous_run` | `def previous_run(self, before: datetime) -> datetime \| None` | `custom_components/haac_bridge/schedules/triggers.py` | Return the last run at or before `before`; None if there is none within a year. |
+| `TriggerFactory` | `class TriggerFactory` | `custom_components/haac_bridge/schedules/triggers.py` | Creates the trigger planner that belongs to a schedule's `when` (concept 18.2). |
+| `TriggerFactory.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/schedules/triggers.py` | Remember hass for the sun calculations. |
+| `TriggerFactory.create` | `def create(self, when: When) -> Trigger` | `custom_components/haac_bridge/schedules/triggers.py` | Return the planner for this trigger, bound to the current HA time zone. |
+| `haac_bridge.schedules.wall_time` | `module` | `custom_components/haac_bridge/schedules/wall_time.py` | Next and previous run of a fixed wall-clock time with weekdays, DST-safe (concept 19.3 step 4). |
+| `_exists` | `def _exists(local: datetime) -> bool` | `custom_components/haac_bridge/schedules/wall_time.py` | Return whether the wall time exists in its zone (clocks going forward skip some). |
+| `wall_instant` | `def wall_instant(day: date, at: time, tz: tzinfo) -> datetime` | `custom_components/haac_bridge/schedules/wall_time.py` | Return the UTC instant at which the wall time `at` is reached on `day` in `tz`. |
+| `next_wall_run` | `def next_wall_run(after: datetime, days: Collection[int], at: time, tz: tzinfo) -> datetime \| None` | `custom_components/haac_bridge/schedules/wall_time.py` | Return the first run strictly after `after` on one of `days` (0 = Monday), or None. |
+| `previous_wall_run` | `def previous_wall_run(before: datetime, days: Collection[int], at: time, tz: tzinfo) -> datetime \| None` | `custom_components/haac_bridge/schedules/wall_time.py` | Return the last run at or before `before` on one of `days` (0 = Monday), or None. |

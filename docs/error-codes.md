@@ -14,5 +14,11 @@ Every error of the integration carries one of these codes (format `HAB-<AREA>-<N
 | HAB-SVC-003 | Home Assistant could not carry out the action | HAAC-BRG-005 | Home Assistant raised an error while executing an allowed service call. |
 | HAB-ENT-001 | This device no longer exists in Home Assistant | HAAC-ENT-001 | The requested entity does not exist in the state machine. |
 | HAB-HIST-001 | History is not available on this server | HAAC-BRG-006 | Recorder or history is not loaded, or the query against it failed. |
+| HAB-SCH-001 | The schedule is not valid | HAAC-SCH-003 | A schedule failed validation (name, time, days, action or entities). |
+| HAB-SCH-002 | A device could not be switched by the schedule | HAAC-SCH-007 | A schedule run could not switch an entity (not exposed, unavailable or not permitted). |
+| HAB-SCH-003 | This schedule does not exist | HAAC-SCH-001 | The schedule does not exist. |
+| HAB-SCH-004 | The schedule was changed in the meantime | HAAC-SCH-004 | The schedule changed after the caller loaded it (optimistic concurrency). |
+| HAB-SCH-005 | You have reached the limit of schedules | HAAC-SCH-005 | The user already has the maximum number of schedules. |
+| HAB-SCH-006 | You are not allowed to change this schedule | HAAC-SCH-006 | A regular user touched a foreign schedule, or an admin tried to change a foreign entity list. |
 | HAB-WS-001 | The request could not be understood | HAAC-BRG-005 | The request fields of a haac_bridge/* command failed validation. |
 | HAB-INT-000 | Something went wrong in HAAC Bridge | HAAC-BRG-005 | An exception without a HAB code reached the command wrapper. |
