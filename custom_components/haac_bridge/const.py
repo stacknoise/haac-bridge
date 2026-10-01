@@ -11,6 +11,9 @@ API_VERSION: Final = 1
 SUPPORTED_DOMAINS: Final = ("climate", "sensor", "switch")
 """Entity domains returned in v1, regardless of the user's filter (10.2)."""
 
+FEATURES: Final = ("schedules",)
+"""Optional features this bridge offers; `haac_bridge/info` reports them to the app (11.2, 11.4)."""
+
 CONF_USERS: Final = "users"
 CONF_USERNAME: Final = "username"
 CONF_USER_ID: Final = "user_id"
@@ -23,6 +26,9 @@ SERVICE_RELOAD: Final = "reload"
 
 SIGNAL_EXPOSURE_CHANGED: Final = f"{DOMAIN}_exposure_changed"
 """Dispatcher signal sent after a reload replaced the exposure of all users."""
+
+SIGNAL_SCHEDULES_CHANGED: Final = f"{DOMAIN}_schedules_changed"
+"""Dispatcher signal sent after a schedule was created, changed, run, paused or removed (19.4)."""
 
 SCHEDULE_STORE_KEY: Final = f"{DOMAIN}.schedules"
 """Name of the storage file (in `.storage`) that holds the schedules (concept 19.2)."""

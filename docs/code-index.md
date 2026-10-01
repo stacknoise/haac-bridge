@@ -11,6 +11,9 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.__init__` | `module` | `custom_components/haac_bridge/__init__.py` | HAAC Bridge: per-user entity exposure for the HA Android Client (concept 10). |
 | `async_setup` | `async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool` | `custom_components/haac_bridge/__init__.py` | Create the factories and exposure, register the commands and the reload action. |
 | `async_setup._async_reload` | `async def _async_reload(call: ServiceCall) -> None` | `custom_components/haac_bridge/__init__.py` | Handle the haac_bridge.reload action. |
+| `_async_start_schedules` | `async def _async_start_schedules(hass: HomeAssistant, schedules: ScheduleManager) -> None` | `custom_components/haac_bridge/__init__.py` | Load the schedules, plan them once HA has started and cancel the timers when it stops. |
+| `_async_start_schedules._start` | `async def _start(_hass: HomeAssistant) -> None` | `custom_components/haac_bridge/__init__.py` | Plan every schedule once Home Assistant is running. |
+| `_async_start_schedules._stop` | `def _stop(_event: Event) -> None` | `custom_components/haac_bridge/__init__.py` | Cancel all schedule timers when Home Assistant stops. |
 | `async_reload` | `async def async_reload(hass: HomeAssistant) -> None` | `custom_components/haac_bridge/__init__.py` | Re-read the YAML configuration and rebuild the exposure of all users. |
 | `_async_apply` | `async def _async_apply(hass: HomeAssistant) -> None` | `custom_components/haac_bridge/__init__.py` | Rebuild the exposure from the YAML and UI entries and tell connected apps. |
 | `async_setup_entry` | `async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool` | `custom_components/haac_bridge/__init__.py` | Take over the users configured in the UI and follow later changes of the options. |
@@ -48,7 +51,7 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.core.caller` | `module` | `custom_components/haac_bridge/core/caller.py` | Resolves the calling HA user of a WebSocket request (concept 10.3). |
 | `require_user` | `def require_user(connection: ActiveConnection) -> User` | `custom_components/haac_bridge/core/caller.py` | Return the HA user bound to the connection's access token, never a user named by the client. |
 | `haac_bridge.core.command` | `module` | `custom_components/haac_bridge/core/command.py` | Command wrapper: every haac_bridge/* command runs through it (concept 18.3). |
-| `SubscriptionStarted` | `class SubscriptionStarted` | `custom_components/haac_bridge/core/command.py` | Returned by a subscription handler: reply with an empty result, then send `initial` as first event. |
+| `SubscriptionStarted` | `class SubscriptionStarted` | `custom_components/haac_bridge/core/command.py` | Returned by a subscription handler: reply with an empty result, then send `initial` as first event (if any). |
 | `BridgeCommand` | `class BridgeCommand` | `custom_components/haac_bridge/core/command.py` | A haac_bridge/* command: its type, request fields and handler. |
 | `bridge_command` | `def bridge_command(command_type: str, fields: dict[Any, Any] \| None=None) -> Callable[[CommandHandler], BridgeCommand]` | `custom_components/haac_bridge/core/command.py` | Declare a handler as haac_bridge/* command with optional request fields. |
 | `bridge_command.decorator` | `def decorator(handler: CommandHandler) -> BridgeCommand` | `custom_components/haac_bridge/core/command.py` | Wrap the handler into a BridgeCommand. |
@@ -120,9 +123,11 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.exposure.exposure` | `module` | `custom_components/haac_bridge/exposure/exposure.py` | Per-user set of exposed entities and its revision hash (concept 10.2, 10.3). |
 | `ExposureSnapshot` | `class ExposureSnapshot` | `custom_components/haac_bridge/exposure/exposure.py` | The entities exposed to one user at one moment, their configured names and revision. |
 | `_UserRule` | `class _UserRule` | `custom_components/haac_bridge/exposure/exposure.py` | A configured user entry together with its built filter. |
+| `_nothing_excluded` | `def _nothing_excluded(entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/exposure.py` | Exclude no entity; the default when the caller has no entities of its own to hide. |
 | `Exposure` | `class Exposure` | `custom_components/haac_bridge/exposure/exposure.py` | Decides which entities a HA user sees; deny by default for users not configured. |
-| `Exposure.__init__` | `def __init__(self, entries: list[UserEntry], filters: FilterFactory) -> None` | `custom_components/haac_bridge/exposure/exposure.py` | Build one filter per configured user entry. |
-| `Exposure.is_exposed` | `def is_exposed(self, user: User, entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/exposure.py` | Return True if the entity is in a v1 domain and passes the user's filter. |
+| `Exposure.__init__` | `def __init__(self, entries: list[UserEntry], filters: FilterFactory, is_own_entity: Callable[[str], bool]=_nothing_excluded) -> None` | `custom_components/haac_bridge/exposure/exposure.py` | Build one filter per configured user entry; `is_own_entity` marks entities never exposed. |
+| `Exposure.is_configured` | `def is_configured(self, user: User) -> bool` | `custom_components/haac_bridge/exposure/exposure.py` | Return True if the user has an entry in the YAML or the UI configuration. |
+| `Exposure.is_exposed` | `def is_exposed(self, user: User, entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/exposure.py` | Return True if the entity is in a v1 domain, passes the user's filter and is not the bridge's own. |
 | `Exposure.filter_exposed` | `def filter_exposed(self, user: User, entity_ids: list[str]) -> list[str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the requested IDs the user may see, sorted and without duplicates. |
 | `Exposure.exposed_entity_ids` | `def exposed_entity_ids(self, hass: HomeAssistant, user: User) -> list[str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the sorted IDs of all current entities exposed to the user. |
 | `Exposure.configured_names` | `def configured_names(self, user: User) -> dict[str, str]` | `custom_components/haac_bridge/exposure/exposure.py` | Return the names from `entity_config` that apply to the user (global, then own). |
@@ -133,6 +138,9 @@ Lists every module, class and function of the integration with signature, file a
 | `_deny_all` | `def _deny_all(entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/filter_factory.py` | Expose no entity; used for entries without any include rule. |
 | `FilterFactory` | `class FilterFactory` | `custom_components/haac_bridge/exposure/filter_factory.py` | Creates entity filters with HA's entityfilter helper, so rules match the HomeKit Bridge. |
 | `FilterFactory.create` | `def create(self, entry: UserEntry) -> EntityPredicate` | `custom_components/haac_bridge/exposure/filter_factory.py` | Return the filter for one user entry; without an include rule it exposes nothing. |
+| `haac_bridge.exposure.own_entities` | `module` | `custom_components/haac_bridge/exposure/own_entities.py` | Recognises the entities HAAC Bridge creates itself, which are never exposed (concept 10.2, 19.5). |
+| `own_entity_checker` | `def own_entity_checker(hass: HomeAssistant) -> Callable[[str], bool]` | `custom_components/haac_bridge/exposure/own_entities.py` | Return a function that tells whether an entity ID belongs to the platform `haac_bridge`. |
+| `own_entity_checker._is_own` | `def _is_own(entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/own_entities.py` | Return True if the entity registry lists the entity under the bridge's own platform. |
 
 ## entities
 
@@ -204,6 +212,15 @@ Lists every module, class and function of the integration with signature, file a
 | `ws_statistics` | `async def ws_statistics(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/history.py` | Return long-term statistics of the requested entities that are exposed to the caller. |
 | `haac_bridge.api.info` | `module` | `custom_components/haac_bridge/api/info.py` | Command haac_bridge/info (concept 11.2, 11.4). |
 | `ws_info` | `async def ws_info(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/info.py` | Return bridge, API and HA version, supported domains, instance ID and addresses. |
+| `haac_bridge.api.schedules` | `module` | `custom_components/haac_bridge/api/schedules.py` | Commands haac_bridge/schedules/* and haac_bridge/subscribe_schedules (concept 11.2, 19.4). |
+| `_fields` | `def _fields(msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/schedules.py` | Return the schedule fields of a request without the transport keys. |
+| `ws_schedules_revision` | `async def ws_schedules_revision(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/schedules.py` | Return the revision and scope of the schedules the caller can see. |
+| `ws_schedules_list` | `async def ws_schedules_list(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/schedules.py` | Return the schedules the caller can see, with the next run of each. |
+| `ws_schedules_create` | `async def ws_schedules_create(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/schedules.py` | Create a schedule owned by the caller and return it. |
+| `ws_schedules_update` | `async def ws_schedules_update(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/schedules.py` | Change a schedule the caller may edit and return it; the version must be the edited one. |
+| `ws_schedules_delete` | `async def ws_schedules_delete(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/schedules.py` | Delete a schedule the caller may edit; an unknown id is not an error. |
+| `ws_schedules_run_now` | `async def ws_schedules_run_now(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/schedules.py` | Run a schedule once now without changing its plan. |
+| `ws_subscribe_schedules` | `async def ws_subscribe_schedules(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> SubscriptionStarted` | `custom_components/haac_bridge/api/schedules.py` | Subscribe to `schedules_changed` events for the schedules the caller can see. |
 | `haac_bridge.api.services` | `module` | `custom_components/haac_bridge/api/services.py` | Command haac_bridge/call_service (concept 10.3, 11.2, 11.4). |
 | `ws_call_service` | `async def ws_call_service(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/services.py` | Call a service of an exposed entity's domain on that entity only. |
 
@@ -231,6 +248,29 @@ Lists every module, class and function of the integration with signature, file a
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
 | `haac_bridge.schedules.__init__` | `module` | `custom_components/haac_bridge/schedules/__init__.py` | Schedules: store, trigger planning, runner, user lifecycle and HA entities (concept 19). |
+| `haac_bridge.schedules.manager` | `module` | `custom_components/haac_bridge/schedules/manager.py` | ScheduleManager: store, planner and runner together, and the operations of the commands (concept 19.4). |
+| `ScheduleManager` | `class ScheduleManager` | `custom_components/haac_bridge/schedules/manager.py` | Creates, changes, deletes, lists and runs schedules for the commands, as a given user. |
+| `ScheduleManager.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Wire the store, the planner and the runner; call `async_load` and `async_start` next. |
+| `ScheduleManager.async_load` | `async def async_load(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Read the schedules from storage. |
+| `ScheduleManager.async_start` | `async def async_start(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Start planning; call when Home Assistant has started. |
+| `ScheduleManager.async_stop` | `def async_stop(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Cancel all timers. |
+| `ScheduleManager.notify` | `def notify(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Tell subscribers that a schedule changed, ran, was paused or was removed. |
+| `ScheduleManager._async_run_due` | `async def _async_run_due(self, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Run a schedule whose time has come. |
+| `ScheduleManager.scope_of` | `def scope_of(user: User) -> str` | `custom_components/haac_bridge/schedules/manager.py` | Return `all` for admins, who see every schedule, and `own` for everybody else. |
+| `ScheduleManager.visible_to` | `def visible_to(self, user: User) -> list[Schedule]` | `custom_components/haac_bridge/schedules/manager.py` | Return the schedules the user may see: all for admins, their own for others. |
+| `ScheduleManager.revision_for` | `def revision_for(self, user: User) -> str` | `custom_components/haac_bridge/schedules/manager.py` | Return a hash over the visible schedules (id, version, pause, last run) and the scope. |
+| `ScheduleManager.async_describe` | `async def async_describe(self, schedule: Schedule) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/manager.py` | Return the stored form plus the owner's name and the computed next run. |
+| `ScheduleManager.async_list` | `async def async_list(self, user: User) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/manager.py` | Return the revision, the scope and the visible schedules. |
+| `ScheduleManager.async_create` | `async def async_create(self, user: User, fields: dict[str, Any]) -> Schedule` | `custom_components/haac_bridge/schedules/manager.py` | Create a schedule owned by `user` after validating it and the exposure of its entities. |
+| `ScheduleManager.async_update` | `async def async_update(self, user: User, schedule_id: str, updated_at: str, fields: dict[str, Any]) -> Schedule` | `custom_components/haac_bridge/schedules/manager.py` | Change a schedule the user may edit; `updated_at` must be that of the edited version. |
+| `ScheduleManager.async_delete` | `async def async_delete(self, user: User, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Delete a schedule the user may edit; an unknown id is not an error. |
+| `ScheduleManager.async_run_now` | `async def async_run_now(self, user: User, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Run a schedule once now, as its owner, without changing the plan. |
+| `ScheduleManager.async_remove` | `async def async_remove(self, schedule_ids: list[str]) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Remove schedules, stop their timers and tell subscribers. |
+| `ScheduleManager._require` | `def _require(self, schedule_id: str) -> Schedule` | `custom_components/haac_bridge/schedules/manager.py` | Return the schedule or raise HAB-SCH-003. |
+| `ScheduleManager._require_access` | `def _require_access(user: User, schedule: Schedule) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Allow the owner and admins; anybody else gets HAB-SCH-006. |
+| `ScheduleManager._check_exposed` | `def _check_exposed(self, user: User, entities: tuple[str, ...]) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Require every entity to be exposed to the user; the bridge's own entities never are. |
+| `ScheduleManager._parse_changes` | `def _parse_changes(self, user: User, schedule: Schedule, fields: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/manager.py` | Return the validated changes of an update; only the owner may change the entities. |
+| `ScheduleManager._without_ended_pause` | `def _without_ended_pause(self, schedule: Schedule, owner: User \| None) -> Schedule` | `custom_components/haac_bridge/schedules/manager.py` | Return the schedule without a pause whose cause is gone (concept 19.5). |
 | `haac_bridge.schedules.model` | `module` | `custom_components/haac_bridge/schedules/model.py` | Schedule data model, validation and (de)serialisation (concept 19.2). |
 | `WhenType` | `class WhenType(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | What triggers a schedule. |
 | `Action` | `class Action(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | What a schedule does with its entities. |
@@ -274,6 +314,20 @@ Lists every module, class and function of the integration with signature, file a
 | `SchedulePlanner._async_set_sun_pause` | `async def _async_set_sun_pause(self, schedule: Schedule, *, paused: bool) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Pause a sun schedule that has no event, or resume one whose event is back. |
 | `SchedulePlanner._missed` | `def _missed(self, schedule: Schedule, now: datetime) -> bool` | `custom_components/haac_bridge/schedules/planner.py` | Return whether a run was due shortly before `now` and has not happened (concept 19.3). |
 | `SchedulePlanner._handle_config_update` | `def _handle_config_update(self, _event: Event) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Re-plan everything after a change of the time zone or the location. |
+| `haac_bridge.schedules.runner` | `module` | `custom_components/haac_bridge/schedules/runner.py` | Runs one schedule: re-checks owner and exposure, switches the entities as the owner (concept 19.3). |
+| `RunHooks` | `class RunHooks` | `custom_components/haac_bridge/schedules/runner.py` | What the runner asks the manager to do: remove schedules, re-plan one, announce a change. |
+| `ScheduleRunner` | `class ScheduleRunner` | `custom_components/haac_bridge/schedules/runner.py` | Executes schedules one at a time per schedule. |
+| `ScheduleRunner.__init__` | `def __init__(self, hass: HomeAssistant, store: ScheduleStore, hooks: RunHooks) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Keep what a run needs. |
+| `ScheduleRunner.async_run` | `async def async_run(self, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Run a schedule now; a run of the same schedule that is still going on finishes first. |
+| `ScheduleRunner._async_run_locked` | `async def _async_run_locked(self, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Validate the owner and the exposure, then switch and record the result. |
+| `ScheduleRunner._async_switch_all` | `async def _async_switch_all(self, user: User, schedule: Schedule, targets: list[str]) -> int` | `custom_components/haac_bridge/schedules/runner.py` | Switch the entities, the unavailable ones after a short wait; return how many worked. |
+| `ScheduleRunner._async_wait_before_retry` | `async def _async_wait_before_retry(self) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Wait before unavailable entities are tried once more. |
+| `ScheduleRunner._async_switch_one` | `async def _async_switch_one(self, user: User, entity_id: str, service: str) -> int` | `custom_components/haac_bridge/schedules/runner.py` | Call the service for one entity as the owner; return 1 if it worked, else 0. |
+| `ScheduleRunner._is_unavailable` | `def _is_unavailable(self, entity_id: str) -> bool` | `custom_components/haac_bridge/schedules/runner.py` | Return True if the entity's state is `unavailable`. |
+| `ScheduleRunner._async_record` | `async def _async_record(self, schedule_id: str, result: RunResult) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Store the outcome of a run on the schedule as it is now. |
+| `ScheduleRunner._async_pause` | `async def _async_pause(self, schedule_id: str, reason: PauseReason, last_run: LastRun \| None=None) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Pause a schedule for a reason, optionally with a failed last run, and stop its timer. |
+| `ScheduleRunner._async_update` | `async def _async_update(self, schedule_id: str, *, last_run: LastRun \| None=None, paused: Paused \| None=None) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Set `last_run` and `paused` (those that are given) on the current version and announce it. |
+| `_result` | `def _result(done: int, total: int) -> RunResult` | `custom_components/haac_bridge/schedules/runner.py` | Return `ok` if every entity worked, `partial` if some did and `failed` if none did. |
 | `haac_bridge.schedules.store` | `module` | `custom_components/haac_bridge/schedules/store.py` | Persistent storage of the schedules in `.storage/haac_bridge.schedules` (concept 19.2). |
 | `ScheduleStore` | `class ScheduleStore` | `custom_components/haac_bridge/schedules/store.py` | Holds all schedules in memory and writes them to storage after every change. |
 | `ScheduleStore.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/schedules/store.py` | Create an empty store; call `async_load` before use. |
@@ -286,6 +340,12 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleStore.async_remove` | `async def async_remove(self, schedule_ids: Iterable[str]) -> list[Schedule]` | `custom_components/haac_bridge/schedules/store.py` | Remove the schedules with these ids, save once and return what was removed. |
 | `ScheduleStore._async_save` | `async def _async_save(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Write all schedules to storage. |
 | `ScheduleStore.async_remove_file` | `async def async_remove_file(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Delete the storage file when the config entry of the bridge is removed. |
+| `haac_bridge.schedules.subscription` | `module` | `custom_components/haac_bridge/schedules/subscription.py` | Live subscription of one app connection to schedule changes (concept 19.4). |
+| `ScheduleSubscription` | `class ScheduleSubscription` | `custom_components/haac_bridge/schedules/subscription.py` | Sends `schedules_changed` with the new revision whenever the caller's schedules change. |
+| `ScheduleSubscription.__init__` | `def __init__(self, hass: HomeAssistant, connection: ActiveConnection, msg_id: int, user: User) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Keep what is needed to compute the revision and send events; nothing is subscribed yet. |
+| `ScheduleSubscription.async_start` | `def async_start(self) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Remember the current revision and start listening. |
+| `ScheduleSubscription.async_stop` | `def async_stop(self) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Stop listening; called by HA when the app unsubscribes or the connection closes. |
+| `ScheduleSubscription._async_on_changed` | `def _async_on_changed(self) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Send an event if the caller's view of the schedules changed. |
 | `haac_bridge.schedules.triggers` | `module` | `custom_components/haac_bridge/schedules/triggers.py` | Trigger planners: when a schedule runs next and last ran (concept 19.3, 18.2 TriggerFactory). |
 | `Trigger` | `class Trigger(Protocol)` | `custom_components/haac_bridge/schedules/triggers.py` | Computes the runs of one schedule; None means no run can be computed. |
 | `Trigger.next_run` | `def next_run(self, after: datetime) -> datetime \| None` | `custom_components/haac_bridge/schedules/triggers.py` | Return the first run strictly after `after` (UTC), or None. |

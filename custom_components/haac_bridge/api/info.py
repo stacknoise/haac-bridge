@@ -6,7 +6,7 @@ from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import HomeAssistant
 
-from ..const import API_VERSION, SUPPORTED_DOMAINS
+from ..const import API_VERSION, FEATURES, SUPPORTED_DOMAINS
 from ..core.caller import require_user
 from ..core.command import bridge_command
 from ..core.runtime import get_data
@@ -23,6 +23,7 @@ async def ws_info(
         "bridge_version": get_data(hass).version,
         "api_version": API_VERSION,
         "domains": list(SUPPORTED_DOMAINS),
+        "features": list(FEATURES),
         "ha_version": HA_VERSION,
         **await async_instance_identity(hass),
     }

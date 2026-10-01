@@ -1,6 +1,6 @@
 """Per-user set of exposed entities and its revision hash (concept 10.2, 10.3)."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import hashlib
 
@@ -30,20 +30,39 @@ class _UserRule:
     predicate: EntityPredicate
 
 
+def _nothing_excluded(entity_id: str) -> bool:
+    """Exclude no entity; the default when the caller has no entities of its own to hide."""
+    return False
+
+
 class Exposure:
     """Decides which entities a HA user sees; deny by default for users not configured."""
 
-    def __init__(self, entries: list[UserEntry], filters: FilterFactory) -> None:
-        """Build one filter per configured user entry."""
+    def __init__(
+        self,
+        entries: list[UserEntry],
+        filters: FilterFactory,
+        is_own_entity: Callable[[str], bool] = _nothing_excluded,
+    ) -> None:
+        """Build one filter per configured user entry; `is_own_entity` marks entities never exposed."""
         self._rules = [_UserRule(entry, filters.create(entry)) for entry in entries]
+        self._is_own_entity = is_own_entity
+
+    def is_configured(self, user: User) -> bool:
+        """Return True if the user has an entry in the YAML or the UI configuration."""
+        return self._rule_for(user) is not None
 
     def is_exposed(self, user: User, entity_id: str) -> bool:
-        """Return True if the entity is in a v1 domain and passes the user's filter."""
+        """Return True if the entity is in a v1 domain, passes the user's filter and is not the bridge's own."""
         rule = self._rule_for(user)
         if rule is None:
             return False
         domain = split_entity_id(entity_id)[0]
-        return domain in SUPPORTED_DOMAINS and rule.predicate(entity_id)
+        return (
+            domain in SUPPORTED_DOMAINS
+            and rule.predicate(entity_id)
+            and not self._is_own_entity(entity_id)
+        )
 
     def filter_exposed(self, user: User, entity_ids: list[str]) -> list[str]:
         """Return the requested IDs the user may see, sorted and without duplicates."""
@@ -57,7 +76,7 @@ class Exposure:
         return sorted(
             state.entity_id
             for state in hass.states.async_all(SUPPORTED_DOMAINS)
-            if rule.predicate(state.entity_id)
+            if rule.predicate(state.entity_id) and not self._is_own_entity(state.entity_id)
         )
 
     def configured_names(self, user: User) -> dict[str, str]:

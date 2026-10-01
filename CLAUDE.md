@@ -22,7 +22,7 @@ scripts/code_index.py     # generator for the two files above
 custom_components/haac_bridge/
   __init__.py  config_flow.py  manifest.json  const.py  services.yaml
   translations/en.json    # user texts of exceptions, issues and the config/options flow
-  core/  config/  exposure/  entities/  services/  history/  api/   # modules by topic (concept 18.1)
+  core/  config/  exposure/  entities/  services/  history/  schedules/  api/   # modules by topic (concept 18.1)
 tests/                    # same topic structure
 .github/workflows/        # validate.yml, tests.yml, release.yml (concept 16.5)
 LICENSE  NOTICE           # Apache-2.0 (concept 16.2)

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ..entities.descriptor_factory import DescriptorFactory
     from ..exposure.exposure import Exposure
     from ..exposure.filter_factory import FilterFactory
+    from ..schedules.manager import ScheduleManager
     from ..services.call_factory import ServiceCallFactory
 
 
@@ -29,6 +30,7 @@ class HaacBridgeData:
     descriptors: DescriptorFactory
     services: ServiceCallFactory
     exposure: Exposure
+    schedules: ScheduleManager
     errors: ErrorFactory = field(default_factory=ErrorFactory)
     responses: ResponseFactory = field(default_factory=ResponseFactory)
     issue_ids: set[str] = field(default_factory=set)

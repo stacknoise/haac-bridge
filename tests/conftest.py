@@ -18,11 +18,11 @@ def auto_setup(recorder_mock: Any, enable_custom_integrations: None) -> None:
 
 
 @pytest.fixture
-def add_user(hass: HomeAssistant) -> Callable[[str], User]:
-    """Return a helper that adds a non-admin HA user with a HA auth provider login name."""
+def add_user(hass: HomeAssistant) -> Callable[..., User]:
+    """Return a helper that adds a HA user (not an admin unless `admin=True`) with a login name."""
 
-    def _add(username: str) -> User:
-        user = MockUser(name=username.title())
+    def _add(username: str, *, admin: bool = False) -> User:
+        user = MockUser(name=username.title(), is_owner=admin)
         user.add_to_hass(hass)
         user.credentials.append(
             Credentials(
