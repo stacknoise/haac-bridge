@@ -39,13 +39,22 @@ USER_SCHEMA = vol.All(
     cv.has_at_least_one_key(CONF_USERNAME, CONF_USER_ID),
 )
 
+
+def _none_as_empty(section: Any) -> Any:
+    """Return an empty section for a bare `haac_bridge:` line, which YAML reads as None."""
+    return {} if section is None else section
+
+
 CONFIG_SCHEMA = vol.Schema(
     {
-        DOMAIN: vol.Schema(
-            {
-                vol.Optional(CONF_ENTITY_CONFIG, default={}): ENTITY_CONFIG_SCHEMA,
-                vol.Optional(CONF_USERS, default=[]): vol.All(cv.ensure_list, [USER_SCHEMA]),
-            }
+        DOMAIN: vol.All(
+            _none_as_empty,
+            vol.Schema(
+                {
+                    vol.Optional(CONF_ENTITY_CONFIG, default={}): ENTITY_CONFIG_SCHEMA,
+                    vol.Optional(CONF_USERS, default=[]): vol.All(cv.ensure_list, [USER_SCHEMA]),
+                }
+            ),
         )
     },
     extra=vol.ALLOW_EXTRA,
