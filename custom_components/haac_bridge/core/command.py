@@ -21,9 +21,9 @@ CommandHandler = Callable[[HomeAssistant, ActiveConnection, dict[str, Any]], Awa
 
 @dataclass(frozen=True, slots=True)
 class SubscriptionStarted:
-    """Returned by a subscription handler: reply with an empty result, then send `initial` as first event."""
+    """Returned by a subscription handler: reply with an empty result, then send `initial` as first event (if any)."""
 
-    initial: Any
+    initial: Any = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +85,8 @@ def _wrap(command: BridgeCommand) -> websocket_api.WebSocketCommandHandler:
             return
         if isinstance(payload, SubscriptionStarted):
             connection.send_message(data.responses.result(msg["id"], None))
-            connection.send_message(data.responses.event(msg["id"], payload.initial))
+            if payload.initial is not None:
+                connection.send_message(data.responses.event(msg["id"], payload.initial))
             return
         connection.send_message(data.responses.result(msg["id"], payload))
 

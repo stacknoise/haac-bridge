@@ -5,6 +5,15 @@ from .entities import ws_entities_list, ws_subscribe_entities
 from .exposure import ws_exposure_revision
 from .history import ws_history, ws_statistics
 from .info import ws_info
+from .schedules import (
+    ws_schedules_create,
+    ws_schedules_delete,
+    ws_schedules_list,
+    ws_schedules_revision,
+    ws_schedules_run_now,
+    ws_schedules_update,
+    ws_subscribe_schedules,
+)
 from .services import ws_call_service
 
 COMMANDS = (
@@ -16,4 +25,11 @@ COMMANDS = (
     ws_history,
     ws_statistics,
     ws_areas,
+    ws_schedules_revision,
+    ws_schedules_list,
+    ws_schedules_create,
+    ws_schedules_update,
+    ws_schedules_delete,
+    ws_schedules_run_now,
+    ws_subscribe_schedules,
 )

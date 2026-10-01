@@ -1,8 +1,11 @@
 """Shared fixtures and helpers for the schedule tests."""
 
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from homeassistant.auth.models import User
 from homeassistant.core import HomeAssistant
 import pytest
 
@@ -50,3 +53,36 @@ async def berlin(hass: HomeAssistant) -> None:
     hass.config.latitude = 52.52
     hass.config.longitude = 13.405
     hass.config.elevation = 34
+
+
+@dataclass(frozen=True)
+class World:
+    """The users of a test: two regular users, an admin and one the bridge does not know."""
+
+    anton: User
+    lena: User
+    root: User
+    bob: User
+
+
+@pytest.fixture
+async def world(
+    add_user: Callable[..., User],
+    setup_bridge: Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
+    demo_states: None,
+) -> World:
+    """Set up the bridge: anton and root see all switches, lena only the fan, bob is not configured."""
+    anton = add_user("anton")
+    lena = add_user("lena")
+    root = add_user("root", admin=True)
+    bob = add_user("bob")
+    await setup_bridge(
+        {
+            "users": [
+                {"user_id": anton.id, "filter": {"include_domains": ["switch"]}},
+                {"user_id": lena.id, "filter": {"include_entities": ["switch.office_fan"]}},
+                {"user_id": root.id, "filter": {"include_domains": ["switch"]}},
+            ]
+        }
+    )
+    return World(anton, lena, root, bob)
