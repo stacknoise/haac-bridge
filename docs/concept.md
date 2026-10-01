@@ -28,6 +28,7 @@ Product name of the app: **HA Android Client**, short form **HAAC**. The compani
 | Structure | Home → Floor → Room, Home → Room (per instance) | Sharing layouts between devices/users |
 | Storage | Local on the device | Cloud backup of the layout |
 | Entity exposure | Per HA user via YAML | Config flow / UI in HA |
+| Time-controlled actions | Schedules for switches: fixed time with weekdays, sunrise/sunset with offset; run on the server (chapter 19) | Climate actions, one-off dates, conditions, push notifications |
 
 ### 1.3 Assumptions
 
@@ -64,7 +65,7 @@ flowchart LR
 | Component | Responsibility | Technology |
 | --- | --- | --- |
 | Android app | UI, local layout (homes/floors/rooms), aliases, secure token storage, biometric unlock, sync | Kotlin, Jetpack Compose, Room, Android Keystore |
-| HAAC Bridge (HACS) | Reads per-user exposure from YAML, resolves the calling HA user, returns only exposed entities, pushes filtered state changes, validates service calls | Python custom integration (`custom_components/haac_bridge`) |
+| HAAC Bridge (HACS) | Reads per-user exposure from YAML, resolves the calling HA user, returns only exposed entities, pushes filtered state changes, validates service calls, stores and runs the users' schedules (19) | Python custom integration (`custom_components/haac_bridge`) |
 | HA Core | User accounts, authentication, tokens, entity states, services, history | Stock Home Assistant |
 
 The layout (homes, floors, rooms, room assignments, aliases) lives only on the device. HA is the single source of truth for entity states and for which entities a user may see.
@@ -95,6 +96,7 @@ The app follows Google's recommended layered architecture (UI → domain → dat
 | :core:error | ErrorCode, HaacException hierarchy, ErrorFactory, ErrorReporter (17.3) |
 | :feature:instance | Instance list, switching, add and remove instances (4.4) |
 | :feature:notifications | Notification list with entity changes and errors (9, 17.4) |
+| :feature:schedules | Schedule list, detail, editor, time sheet, entity picker, admin views (19.7) |
 
 Package names, the factory pattern, error codes and the code index follow chapter 17.
 
@@ -417,7 +419,7 @@ Which controls appear is driven by the entity's `supported_features` bitmask and
 | Function | HA service / data |
 | --- | --- |
 | Turn on / off | `switch.turn_on`, `switch.turn_off` |
-| Toggle (tap on tile or its switch) | `switch.turn_on` / `switch.turn_off` for the state opposite to the one shown, not `switch.toggle`, so a stale state never inverts the intent |
+| Toggle (tap on tile or its switch) | `switch.turn_on` / `switch.turn_off` for the state opposite to the one shown, not `switch.toggle`, so a stale state never inverts the intent. The one exception is a schedule with the action *Toggle* (19.2), which sends `switch.toggle` on the server because it has no stale state to protect against |
 | Device class icon (`outlet`, `switch`) | attribute `device_class` |
 | On/off history timeline | history command |
 
@@ -471,11 +473,14 @@ On every start and on every instance switch (after unlock) the app compares the 
 
 **Notification list (M-09).** Every sync result is also written as an entry to a local notification list: *entity added* (actions *Add to room*, *Dismiss*), *entity removed* (actions *Remove tile*, *Keep*) and combined entries for several entities of one sync. The first sync of an instance creates no entries, since every entity is new then. *Dismiss* and *Keep* leave the entry in the list without actions. *Add to room* (one entity) and *Review N entities* (several) open a room chooser that adds all of them to the chosen room; the entry counts as handled when the chooser opens. *Remove tile* removes the entities from every room of the instance. Entries are per instance, grouped by day, marked read individually or all at once, deleted individually (swipe to the left, or a screen reader action) or all at once (*Delete all* in the header, after a confirmation; it removes the entries of the instance and the global ones and changes no rooms), with a snackbar *Undo* for the last deletion (the entries return with their time and read state), and purged after 30 days. The bell icon in the room header shows an unread dot. These are in-app notifications only; Android system notifications are not used in v1.
 
+Schedules (chapter 19) add two more entry types: *schedule removed* (a schedule of the user no longer exists on the server, `HAAC-SCH-001`; several at once are grouped) and *schedule paused* (the server paused one of the user's schedules, with the reason, `HAAC-SCH-002`). Both appear only for the user's own schedules and, like entity entries, not on the first sync of an instance.
+
 Errors appear in the same list, each with its error code (17.4).
 
 ### 9.2 Changes while the app is running
 
 - The bridge sends an `exposure_changed` event on the subscription when the admin reloads the integration after editing `configuration.yaml`. The app then runs steps 2–4 again without restart.
+- If the bridge reports the feature `schedules` (11.2), the app also subscribes to `haac_bridge/subscribe_schedules` and runs the schedule sync (19.7) after every connection and every `schedules_changed` event.
 - On resume from background after the lock timeout, the full start sequence runs again.
 
 ### 9.3 Rules
@@ -504,7 +509,7 @@ haac-bridge/                 # GitHub repo stacknoise/haac-bridge (chapter 16)
         ├── const.py
         ├── services.yaml    # haac_bridge.reload
         ├── translations/en.json
-        ├── core/  config/  exposure/  entities/  services/  history/
+        ├── core/  config/  exposure/  entities/  services/  history/  schedules/
         └── api/             # haac_bridge/* commands
 ```
 
@@ -550,6 +555,7 @@ haac_bridge:
 
 - Filters are built with HA's own `entityfilter` helper, so evaluation order is identical to the HomeKit Bridge (explicit exclude beats include).
 - Independently of the filter, only the v1 domains `switch`, `sensor`, `climate` are ever returned.
+- Entities of the platform `haac_bridge` itself (the entities the bridge creates for schedules, 19.5) are never exposed, whatever the filter says. Otherwise a filter such as "all switches" would let a user, or a schedule, address a schedule switch.
 - **Deny by default**: a HA user not listed under `users` gets an empty list. Unknown usernames are logged as a warning at startup.
 - A listed user whose filter has no `include_*` rule (empty filter or excludes only) also gets an empty list and a warning in the log. This deliberately deviates from the HomeKit Bridge, where such a filter would expose everything not excluded.
 - **As built (UI configuration).** The integration also has a config flow with a single entry (*Settings → Devices & services → Add integration → HAAC Bridge*) whose options flow manages the users: *Add a user* / *Change a user* / *Remove a user*. A user is chosen from the active, non-system HA users and stored by `user_id` in the entry options; the filter form offers the same six rules as YAML (`include_*` and `exclude_*` for domains, entities and globs, with the v1 domains only), requires at least one `include_*` rule and a wildcard of the form `domain.pattern`, and a second step names the explicitly included entities (per user, like `entity_config` under `users[]`). Saving applies at once and emits `exposure_changed`, without a reload. UI entries are appended after the YAML entries, and the first entry that matches a user wins, so a user in both places gets the YAML entry; unknown users are reported as HAB-CFG-002 like YAML ones. The global `entity_config` and users identified by `username` remain YAML-only. *Export as YAML* shows the UI users as a `haac_bridge:` section (`user_id`, `filter`, and `entity_config` for the names), and *Import from YAML* takes such a section or just its content: each user is named by `user_id`, must exist in HA and needs at least one `include_*` rule, and replaces the UI entry of the same user while other UI users stay; errors are shown in the form (`invalid_yaml`, `invalid_config`, `no_users`, `needs_user_id`, `no_include`, `unknown_user`). A bare `haac_bridge:` line in the YAML (read as None) counts as no users instead of an invalid configuration.
@@ -562,6 +568,7 @@ haac_bridge:
 - The set of visible entities is recomputed when entities are added to or removed from the state machine, so a glob matching a newly created sensor exposes it automatically.
 - Service calls are only executed if the target `entity_id` is exposed to the caller and the service belongs to the entity's domain; everything else is rejected with error code `HAB-SVC-001` or `HAB-SVC-002` (18.3).
 - History and statistics requests are filtered the same way before querying the recorder.
+- The bridge follows the HA user events: a deleted HA user, a deactivated user and a user removed from the bridge configuration lose or pause their schedules, and a deleted user's UI entry is removed (19.6).
 
 ## 11. Communication protocol and API specification
 
@@ -580,7 +587,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 
 | Command | Request fields | Response |
 | --- | --- | --- |
-| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version, `instance_id`, and `urls` with the `internal`, `external` and `cloud` address configured in HA (each `null` if not set) (4.5) |
+| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version, `instance_id`, `features` (list of optional features of the bridge, for example `["schedules"]`; missing counts as empty) and `urls` with the `internal`, `external` and `cloud` address configured in HA (each `null` if not set) (4.5) |
 | `haac_bridge/exposure/revision` | – | `revision` (hash over the exposed entity IDs and their configured names), entity count |
 | `haac_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
 | `haac_bridge/subscribe_entities` | – | Empty result, then events: `a` initial and added states, `c` changes, `r` removals (HA's compressed state format) and `exposure_changed` (11.3) |
@@ -588,6 +595,13 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/history` | `entity_ids[]`, `start`, `end`, `minimal_response` | State history per entity |
 | `haac_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
 | `haac_bridge/areas` | – | `floors` (`floor_id`, `name`, `level`, `null` if HA has none) and `areas` (`area_id`, `name`, `floor_id` or `null`, `entity_count`), limited to areas that hold at least one entity exposed to the caller and to the floors of those areas; no entity IDs (6.3) |
+| `haac_bridge/schedules/revision` | – | `revision` (hash over `id`, `updated_at`, `paused` and `last_run.at` of the schedules visible to the caller, and the scope) and `scope` (`own` or `all`) (19.4) |
+| `haac_bridge/schedules/list` | – | `revision`, `scope` and the visible schedules with the computed `next_run` and, for admins, `owner` and `owner_name` (19.4) |
+| `haac_bridge/schedules/create` | `name`, `when`, `action`, `entities[]`, `enabled` | The created schedule; always owned by the caller (19.4) |
+| `haac_bridge/schedules/update` | `id`, `updated_at` of the edited version and the changed fields | The updated schedule; `HAB-SCH-004` if it changed in the meantime (19.4) |
+| `haac_bridge/schedules/delete` | `id` | Empty result; an unknown `id` is not an error (19.4) |
+| `haac_bridge/schedules/run_now` | `id` | Empty result after the run; does not change the plan (19.4) |
+| `haac_bridge/subscribe_schedules` | – | Empty result, then `schedules_changed` events with the new `revision` (19.4) |
 
 ### 11.3 Message examples
 
@@ -661,7 +675,7 @@ Subscription (`haac_bridge/subscribe_entities`): an empty result, then events in
 ### 11.4 Versioning and robustness
 
 - `haac_bridge/info` returns an integer `api_version`. The app declares the range it supports and shows an "update the integration" hint on mismatch.
-- New optional fields in replies (such as `configured_name`) are additive and keep the `api_version`; the app ignores fields it does not know and treats missing optional fields as `null`.
+- New optional fields in replies (such as `configured_name` or `features`) and new commands (the `schedules` group) are additive and keep the `api_version`; the app ignores fields it does not know and treats missing optional fields as `null`. The app uses an optional feature only if `features` lists it.
 - One WebSocket per app session; heartbeat via HA's `ping`/`pong` every 30 s; reconnect with exponential back-off (1 s → 60 s, with jitter).
 - After reconnect: re-auth, revision check, re-subscribe – the same steps as the start sync.
 - Errors that a retry at the same address cannot fix (for example `HAAC-AUTH-003`, `HAAC-BRG-001`, `HAAC-BRG-002`, `HAAC-NET-007`, `HAAC-NET-008`) do not use the back-off; the app waits for a network change or *Try again*.
@@ -681,13 +695,14 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 | `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `configuredName?`, `deviceClass?`, `unit?`, `stateClass?`, `displayPrecision?`, `area?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState?` (JSON: state, attributes, last changed/updated) | Cache of bridge data; filled by the sync (9.1), states kept current by the subscription |
 | `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (`SMALL` 1×1, `WIDE` 2×1, `LARGE` 2×2; 7.2), `addedAt` | Assignment; cascade on room delete; the instance follows from the room's home |
 | `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name; cascade on server delete |
-| notification | id, serverId? → server, type (added/removed/error), errorCode?, bridgeCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results and errors for M-09 (17.4); serverId is empty for errors without an instance; count = entities, or occurrences of the same error within 10 minutes; purged after 30 days |
+| notification | id, serverId? → server, type (added/removed/error/schedule_removed/schedule_paused), errorCode?, bridgeCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt? | Sync results and errors for M-09 (17.4); serverId is empty for errors without an instance; count = entities, schedules, or occurrences of the same error within 10 minutes (for the schedule types `entityIds` holds the schedule names); purged after 30 days |
+| `schedule` | `serverId` → server + `scheduleId` (PK), `owner`, `ownerName?`, `name`, `enabled`, `whenType`, `time?`, `days` (bitmask), `offsetMin?`, `action`, `entityIds` (JSON), `createdAt`, `updatedAt`, `pausedReason?`, `pausedAt?`, `lastRunAt?`, `lastRunResult?`, `lastRunCode?`, `nextRun?`, `syncedAt` | Read-only cache of the bridge's schedules (19.7); filled by the schedule sync, never edited offline; cascade on server delete |
 
-- Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync. Migration 3 → 4 creates `notification`. Migration 4 → 5 creates `home`, `floor` and `room` (ids are random UUIDs, `sortOrder` leaves gaps of 1024) and the two triggers that reject a room whose floor belongs to another home; Room cannot declare triggers, so a new database gets them from a database callback. Migration 5 → 6 creates `room_entity` and `entity_alias`.
+- Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync. Migration 3 → 4 creates `notification`. Migration 4 → 5 creates `home`, `floor` and `room` (ids are random UUIDs, `sortOrder` leaves gaps of 1024) and the two triggers that reject a room whose floor belongs to another home; Room cannot declare triggers, so a new database gets them from a database callback. Migration 5 → 6 creates `room_entity` and `entity_alias`. Migration 6 → 7 creates `schedule`, which fills at the next schedule sync.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
 - Non-sensitive preferences (theme, unlock window, lock timeout) live in a typed DataStore (JSON via kotlinx.serialization). Whether an instance uses fingerprint unlock is not a separate flag: it follows from the key that protects its token file (5.3).
 
-The active instance is stored as `activeServerId` in DataStore. `home`, `exposed_entity` and `entity_alias` reference `server.id` with cascade delete, so removing an instance removes all of its data in one transaction.
+The active instance is stored as `activeServerId` in DataStore. `home`, `exposed_entity`, `entity_alias` and `schedule` reference `server.id` with cascade delete, so removing an instance removes all of its data in one transaction.
 
 ## 13. Security concept and threat model
 
@@ -717,6 +732,8 @@ Mitigations:
 | Faked mDNS announcement with the instance's `uuid` | Needs the `uuid`, which is only announced in the home network, and an attacker in the same network; residual risk of cleartext, documented in the warning dialog. *Always use the internal address* skips the check and warns about it |
 | Access to other users' entities via the bridge | Bridge resolves user from token (`connection.user`), ignores any user field from the client, deny by default |
 | Manipulated service call to a non-exposed entity | Bridge checks `entity_id` against exposure and service against domain before calling HA |
+| A schedule targets an entity the owner may not see, or a schedule switch | Entities are checked against the owner's exposure when a schedule is saved and again at every run (19.3); entities of the platform `haac_bridge` are never exposed and are rejected (`HAB-SCH-001`) |
+| A schedule keeps running for a deleted, deactivated or unconfigured user | Cleanup on the HA user events, a sweep at setup and after every change of the user list, and a check of the owner at every run (19.6); the run uses `Context(user_id=<owner>)`, so HA also applies the owner's permissions |
 | Credentials in logs or crash reports | No logging of `/auth/*`; crash reporting (if any) strips headers and bodies |
 | Hard-coded secrets in APK | None needed: `client_id` is a public URL, no API keys; secret scanning in CI |
 | Leaked screens | `FLAG_SECURE` on login/settings; auto-lock after background timeout |
@@ -740,6 +757,7 @@ Mitigations:
 | Service call rejected by the bridge (`HAB-SVC-001`, `HAB-SVC-002`) | Error snackbar, state rolled back, triggers a revision check |
 | Entity `unavailable` | Tile greyed out, controls disabled, last value shown with timestamp |
 | Entity deleted in HA or no longer shared | Warning icon on the tile, entity inactive and not assignable; stays in its rooms until the user removes it (7.4) |
+| Connection down while schedules are shown | Cached schedules are shown dimmed, creating, changing, enabling and deleting are disabled (19.7) |
 
 **As built ("stale")** – once the live connection has been down for 3 seconds, the Rooms tab shows the banner "Offline: showing the last known states", dims the tiles and keeps the controls disabled; the delay keeps the marking away while the app is still connecting after a start. The marking ends as soon as the connection is open again.
 
@@ -757,7 +775,7 @@ Every error in this table is raised as a `HaacException` with an error code from
 | Phase | Content |
 | --- | --- |
 | MVP (v1.0) | Onboarding, login + fingerprint, homes/floors/rooms, switch/sensor/climate, per-user exposure, start sync, multiple HA instances with switching, internal/external address per instance |
-| v1.1 | HA area import wizard, per-room aliases, home-screen widgets and quick-settings tiles |
+| v1.1 | HA area import wizard, per-room aliases, home-screen widgets and quick-settings tiles, schedules for switches (chapter 19) |
 | v1.2 | More domains (`light`, `cover`, `binary_sensor`, `lock`, `media_player`) |
 | v2.0 | Encrypted layout backup/export, UI config flow for the bridge |
 
@@ -782,7 +800,7 @@ HAAC is distributed via Google Play and as a sideload APK. Both channels use the
 
 ## 15. UI mockups
 
-The binding UI reference is mockup set **1c**, in its consolidated form **2a** ("Going with 1c, room grid and edit layout from 1a"), dark theme "Nocturne". It covers nine screens (M-01 to M-09); screens not yet designed are listed in 15.4.
+The binding UI reference is mockup set **1c**, in its consolidated form **2a** ("Going with 1c, room grid and edit layout from 1a"), dark theme "Nocturne". It covers nine screens (M-01 to M-09); the schedule screens M-10 to M-18 were designed later in the Salbei style (15.3); screens not yet designed are listed in 15.4.
 
 **Restyled (October 2026):** the app now uses the light theme **"Salbei"** (design handoff "HAAC UI Redesign: Salbei", mockup block "E · Salbei: alle Screens"). Layout, behaviour and navigation are unchanged; tokens, shapes, type and the components named in 15.2 follow Salbei. The PNGs in `docs/mockups/png` and `haac-mockups-1c.html` still show Nocturne and are kept only as a layout reference. Screenshots of the built app (`docs/screenshots`) follow the matching mockups for M-01, M-02, M-04, M-05 and M-06; M-03, M-07, M-08 and M-09 still show only the Nocturne mockup.
 
@@ -952,6 +970,22 @@ These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a 
   - Several new entities: combined item with *Review N entities*.
 
 Error entries (warning icon, message, error code, action) are not yet in the mockup; they follow 17.4 until a mockup exists.
+
+#### M-10 to M-18 Schedules (19.7)
+
+The schedule screens exist only as Salbei mockups (the private artifact "Zeitpläne: Konzept-Screens" and the row below it) and in the design handoff, section 3b; they have no Nocturne mockup. Look and layout follow that handoff; behaviour follows chapter 19.
+
+| Screen | Content |
+| --- | --- |
+| M-10 Schedules | Fourth bottom tab, only if the bridge reports the feature `schedules`. Title, *Next up* banner (the schedule that runs next), schedule cards with time, weekday summary, name, target and an *enabled* switch, round add button. Admins also get the filter chips *All* / *Mine* and the owner name on foreign cards. Cards of schedules the server paused are muted and carry a *Paused* badge. |
+| M-11 Schedules (empty) | Icon, *No schedules yet*, one sentence of explanation, button *Create schedule*. |
+| M-12 New schedule | Name, time card (opens M-13), weekday buttons with the presets *Weekdays*, *Weekend*, *Every day*, a live summary card, action (*Turn on* / *Turn off* / *Toggle*), the chosen entities with an *Add entities* tile (opens M-14), and the info line that the schedule runs on the HA server. Also used to edit. |
+| M-13 Time sheet | Bottom sheet *Run at* with *Time* / *Sunrise* / *Sunset*: for *Time* hour and minute steppers (hour ±1, minute ±5) and quick times; for the sun types an offset in 5-minute steps (−180 to +180). |
+| M-14 Pick entities | Multi-select of the entities exposed to the user as tiles; room chips only filter (rooms exist only in the app); button *Done · N selected*, disabled while nothing is selected. |
+| M-15 Schedule detail | Big time, repeat text, weekday dots, action card, *Enabled* switch, the next three runs, the last run (result *Done* or the failure with its code), *Delete schedule* with a confirmation. |
+| M-16 Schedules (admin) | M-10 with the filter chips and owner labels. |
+| M-17 Detail of a foreign schedule (admin) | M-15 plus an *Owner* card and the hint "Entities can only be changed by the owner." |
+| M-18 Edit a foreign schedule (admin) | M-12 with a banner *Owned by {name}*; name, time, repeat and action can be changed, the entity card is locked and has no *Add entities* tile. |
 
 ### 15.4 Screens not yet designed
 
@@ -1136,6 +1170,7 @@ com.stacknoise.haac
     ├── layout               # homes, floors, rooms
     ├── entities             # picker, room grid, controls (switch, sensor, climate), sync
     ├── notifications        # notification list incl. errors (M-09)
+    ├── schedules            # schedule list, editor, detail, admin views (M-10 to M-18)
     └── settings             # settings, about, licenses
 ```
 
@@ -1178,7 +1213,7 @@ enum class ErrorCode(
 )
 ```
 
-- **Code format** `HAAC-<AREA>-<NNN>`. Areas: `NET` network, `AUTH` login and tokens, `SEC` keystore and biometrics, `BRG` HAAC Bridge, `SYNC` synchronisation, `DB` local database, `LAY` homes/floors/rooms, `ENT` entities and controls, `INST` instances, `DISC` LAN discovery, `APP` unexpected errors.
+- **Code format** `HAAC-<AREA>-<NNN>`. Areas: `NET` network, `AUTH` login and tokens, `SEC` keystore and biometrics, `BRG` HAAC Bridge, `SYNC` synchronisation, `DB` local database, `LAY` homes/floors/rooms, `ENT` entities and controls, `INST` instances, `DISC` LAN discovery, `SCH` schedules, `APP` unexpected errors.
 - **Exception hierarchy**: sealed class `HaacException(code, cause)` with one subclass per area, e.g. `NetworkException`, `AuthException`, `KeystoreException`, `BridgeException`, `SyncException`, `StorageException`, `ValidationException`, `UnexpectedException` (`HAAC-APP-000`).
 - **Catching**: low-level exceptions (`IOException`, `SSLException`, `SerializationException`, `SQLiteException`, `KeyPermanentlyInvalidatedException`) and bridge error replies with HAB codes (18.3) are caught at the data-layer boundary and converted with `ErrorFactory`. Code above the data layer only sees `HaacException`.
 - **Throwing**: app code never throws plain `Exception`, `IllegalStateException` or similar; it throws the matching `HaacException` with its code.
@@ -1221,6 +1256,13 @@ enum class ErrorCode(
 | HAAC-NET-008 | A different server answers at this address. The connection was closed for your safety. | Open settings |
 | HAAC-LAY-001 | This home, level or room no longer exists. Please check your places. | None |
 | HAAC-LAY-002 | Please enter a name. | None |
+| HAAC-SCH-001 | This schedule no longer exists on the server. | None |
+| HAAC-SCH-002 | This schedule was paused by the server. | None |
+| HAAC-SCH-003 | This schedule is not valid. Check the name, time, days and devices. | None |
+| HAAC-SCH-004 | This schedule was changed somewhere else. Reload it and try again. | Retry |
+| HAAC-SCH-005 | You have reached the limit of schedules. Delete one first. | None |
+| HAAC-SCH-006 | You are not allowed to change this schedule. | None |
+| HAAC-SCH-007 | The last run could not switch every device. | None |
 
 ### 17.4 Errors in the notification list
 
@@ -1276,6 +1318,7 @@ custom_components/haac_bridge/
 ├── instance/                # instance ID and addresses for haac_bridge/info
 ├── services/                # call_factory.py: validated service calls
 ├── history/                 # filtered history and statistics
+├── schedules/               # store, trigger planning, runner, user lifecycle, HA entities (19)
 └── api/                     # haac_bridge/* WebSocket commands, one module per command group
 scripts/code_index.py        # generates docs/code-index.md and docs/error-codes.md (18.5)
 tests/                       # same topic structure as the integration
@@ -1293,6 +1336,7 @@ Factories are plain classes created once in `async_setup` and stored in `hass.da
 | `FilterFactory` | One `EntityFilter` per HA user from the YAML configuration | Filter rules in one place (10.2) |
 | `DescriptorFactory` | Entity descriptor per domain (switch, sensor, climate) from an HA state | Per-domain attribute selection; new domains in one place |
 | `ServiceCallFactory` | Validated service call (domain, service, data, target) | Enforces exposure and domain services (10.3) |
+| `TriggerFactory` | One trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run of a schedule | Time and sun logic in one place (19.3) |
 | `ResponseFactory` | WebSocket result and error replies | One reply format incl. error code (11) |
 | `ErrorFactory` | `HaacBridgeError` from any caught exception | Error mapping in one place (18.3) |
 
@@ -1302,8 +1346,8 @@ Factories are plain classes created once in `async_setup` and stored in `hass.da
 
 Every error of the bridge is a `HaacBridgeError` with a unique code. All codes are defined in one file, `core/errors.py`.
 
-- **Code format** `HAB-<AREA>-<NNN>`. Areas: `CFG` YAML configuration, `AUTH` caller, `SVC` service calls, `ENT` entities, `HIST` history and statistics, `WS` request format, `INT` unexpected errors.
-- **Exception hierarchy**: `HaacBridgeError` derives from Home Assistant's `HomeAssistantError` and uses its translation mechanism (`translation_domain="haac_bridge"`, `translation_key`). Subclasses per area: `ConfigError`, `NotAllowedError`, `InvalidServiceError`, `EntityNotFoundError`, `HistoryError`, `RequestError`, `InternalError`.
+- **Code format** `HAB-<AREA>-<NNN>`. Areas: `CFG` YAML configuration, `AUTH` caller, `SVC` service calls, `ENT` entities, `HIST` history and statistics, `SCH` schedules, `WS` request format, `INT` unexpected errors.
+- **Exception hierarchy**: `HaacBridgeError` derives from Home Assistant's `HomeAssistantError` and uses its translation mechanism (`translation_domain="haac_bridge"`, `translation_key`). Subclasses per area: `ConfigError`, `NotAllowedError`, `InvalidServiceError`, `EntityNotFoundError`, `HistoryError`, `ScheduleError`, `RequestError`, `InternalError`.
 - **User texts** live in `translations/en.json` (section `exceptions`): short, plain language, no technical terms, no entity attributes or tokens, and no trailing period (Home Assistant strips it from translated exception messages).
 - **Command wrapper**: every `haac_bridge/*` command runs inside one wrapper in `core/command.py`. It converts any exception via `ErrorFactory` and replies with `connection.send_error(msg_id, code, message)`, where `code` is the HAB code. `asyncio.CancelledError` is never caught.
 - No bare `except:` and no `except Exception` outside this wrapper; every error is logged once with its code, never with tokens or passwords.
@@ -1319,6 +1363,12 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 | HAB-SVC-003 | Home Assistant could not carry out the action | HAAC-BRG-005 |
 | HAB-ENT-001 | This device no longer exists in Home Assistant | HAAC-ENT-001 |
 | HAB-HIST-001 | History is not available on this server | HAAC-BRG-006 |
+| HAB-SCH-001 | The schedule is not valid | HAAC-SCH-003 |
+| HAB-SCH-002 | A device could not be switched by the schedule | HAAC-SCH-007 (run result, not a command reply) |
+| HAB-SCH-003 | This schedule does not exist | HAAC-SCH-001 |
+| HAB-SCH-004 | The schedule was changed in the meantime | HAAC-SCH-004 |
+| HAB-SCH-005 | You have reached the limit of schedules | HAAC-SCH-005 |
+| HAB-SCH-006 | You are not allowed to change this schedule | HAAC-SCH-006 |
 | HAB-WS-001 | The request could not be understood | HAAC-BRG-005 |
 | HAB-INT-000 | Something went wrong in HAAC Bridge | HAAC-BRG-005 |
 
@@ -1339,3 +1389,162 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 1. Before implementing, search `docs/code-index.md` for a function with the same purpose and reuse or extend it.
 2. Code needed in a second place is extracted into its own function right away, in the topic module or in `core/`.
 3. CI runs PMD CPD for Python and fails from 100 duplicated tokens; `ruff` (incl. pydocstyle and complexity rules) and `bandit` are active.
+
+## 19. Schedules (time-controlled actions)
+
+### 19.1 Goal and scope
+
+A user can define actions that HA executes at fixed times, for example "every weekday at 06:45 switch the light on".
+
+- **Scope:** domain `switch`; actions *Turn on*, *Turn off*, *Toggle*; triggers *fixed time with weekdays* and *sunrise/sunset with offset*.
+- **Out of scope:** climate actions (for example set a temperature), sensors, one-off dates, per-day exceptions (idea: *Skip next run*), conditions, push notifications.
+- **Server-authoritative:** schedules are stored and executed by the bridge. The app is only an editor and a cache, so schedules run with the app closed, the phone off or on another network.
+- **Online-only editing:** creating, changing, enabling and deleting needs an open connection to the bridge. There are no local-only schedules, so a schedule that is missing on the server is always a deletion, never an unsynced draft.
+- **Owner:** every schedule belongs to exactly one HA user (the user of the WebSocket connection that created it). HA admins can see and manage all schedules (19.4).
+
+### 19.2 Data model (bridge)
+
+Storage: `homeassistant.helpers.storage.Store`, key `haac_bridge.schedules` (its own file in `.storage`, not in the options of the config entry), store version 1. It is part of full HA backups like `core.config_entries`.
+
+```json
+{
+  "schedules": [
+    {
+      "id": "uuid4",
+      "owner": "<ha user id>",
+      "name": "Morning light",
+      "enabled": true,
+      "when": { "type": "time", "time": "06:45", "days": [0, 1, 2, 3, 4] },
+      "action": "turn_on",
+      "entities": ["switch.garage_socket"],
+      "created_at": "2026-10-01T05:12:00+00:00",
+      "updated_at": "2026-10-01T05:12:00+00:00",
+      "paused": null,
+      "last_run": null
+    }
+  ]
+}
+```
+
+| Field | Rules |
+| --- | --- |
+| `when.type` | `time`, `sunrise` or `sunset` |
+| `when.time` | `HH:MM` (24 h), only for `time`; seconds are always 0 |
+| `when.days` | non-empty subset of 0 to 6 (0 = Monday); required for all types |
+| `when.offset_min` | only for sunrise and sunset, integer from −180 to 180 (negative = before) |
+| `action` | `turn_on`, `turn_off`, `toggle` |
+| `entities` | 1 to 20 entity ids, domain `switch`, each exposed to the owner when the schedule is written, none of the platform `haac_bridge` |
+| `name` | 1 to 60 characters, trimmed |
+| `paused` | `null` or `{ "reason": <reason>, "at": <ISO time> }`, reasons in 19.6 |
+| `last_run` | `null` or `{ "at": <ISO time>, "result": "ok", "partial" or "failed", "code": <HAB code or null> }` |
+
+Limits: at most 50 schedules per user. `next_run` is never stored; it is computed from `when` and the HA time zone.
+
+`toggle` sends `switch.toggle` (explicit user intent). This is the one place where the bridge deviates from the rule "switches use turn_on/turn_off" (8.2), because a schedule has no stale state to protect against.
+
+### 19.3 Execution
+
+1. **Planning.** For every enabled, non-paused schedule the bridge computes the next run and registers one callback with `async_track_point_in_utc_time`; after each run it plans the next one. Callbacks are kept in a dict `id -> unsubscribe`. A `TriggerFactory` (18.2) creates one trigger planner per `when.type`. The bridge plans with absolute instants and does its own weekday filter; it does not use `async_track_time_change`, `async_track_sunrise` or `async_track_sunset` as such, because they fire every day, and HA's `find_next_time_expression_time` skips the day when the wall time falls into a DST gap.
+2. **Run.** On trigger, under a per-schedule lock:
+   1. Re-validate: the schedule still exists, the owner exists and is active (`hass.auth.async_get_user`), the owner is still configured in the bridge. If the owner no longer exists or is no longer configured, the schedule is deleted (19.6) and the run is aborted; if the owner is inactive, the run is aborted and the schedule is paused.
+   2. Re-check the exposure per entity with the same logic as `call_service` (`HAB-SVC-001`, `HAB-ENT-001`, `HAB-SVC-002`). Unexposed entities are skipped; if none is left the schedule is paused with `no_entities`.
+   3. Call the service with `Context(user_id=<owner>)`, so the logbook shows who triggered it. HA then applies the owner's permissions; an `Unauthorized` answer counts as failed for that entity.
+   4. Entities that are `unavailable` are tried once more after 30 s; then they count as failed.
+   5. Store `last_run` (result `ok` if all entities worked, `partial` if some did, `failed` if none; code `HAB-SCH-002` unless `ok`), save the store, send `schedules_changed`.
+3. **Missed runs.** If HA starts later than the planned time, the run is executed once if it is at most 5 minutes late; otherwise it is skipped and `last_run` is not changed.
+4. **Time changes (decided).** Fixed times are evaluated as wall-clock times in the HA time zone:
+   - A time that does not exist on a day (clocks go forward) runs at the first existing minute after the gap, on that day. A schedule for 02:30 on the day the clock jumps from 02:00 to 03:00 runs at 03:00.
+   - A time that occurs twice (clocks go back) runs once, at its first occurrence.
+   - Sun triggers use absolute instants, so DST does not matter for them; the weekday is the local date of the resulting instant (after the offset).
+   - A change of the HA time zone or location (`core_config_updated`) re-plans every schedule.
+5. **Sun triggers.** The next sunrise or sunset comes from `homeassistant.helpers.sun.get_astral_event_next` with the offset; it needs only the location in the HA configuration, not the `sun` integration. If the location is missing or no event is found within one year (polar day or night), the schedule is paused with `sun_unavailable` and resumes at the next re-plan once the cause is gone.
+
+### 19.4 WebSocket API
+
+All commands go through the existing command wrapper (HAB error codes, 18.3). Regular users see and change only their own schedules. HA admins (`connection.user.is_admin`) see all schedules: `list` returns `scope: "all"` (otherwise `"own"`), and every schedule carries `owner` and `owner_name`. Admins may enable or disable, run now, delete and change name, time, weekdays and action of any schedule. The entity list of a foreign schedule can only be changed by its owner, because the run uses the owner's exposure; an attempt returns `HAB-SCH-006`. `create` always creates a schedule owned by the caller. `api_version` stays 1 (additive, 11.4); `haac_bridge/info` gets the field `features` (`["schedules"]`), and the app shows the schedules tab only if it is present. The commands are listed in 11.2.
+
+```json
+{"id": 21, "type": "haac_bridge/schedules/create", "name": "Morning light", "enabled": true,
+ "when": {"type": "time", "time": "06:45", "days": [0, 1, 2, 3, 4]},
+ "action": "turn_on", "entities": ["switch.garage_socket"]}
+
+{"id": 22, "type": "haac_bridge/subscribe_schedules"}
+{"id": 22, "type": "event", "event": {"schedules_changed": {"revision": "7c0a…19ef"}}}
+```
+
+`update` needs the `updated_at` of the version the app edited (optimistic concurrency); a mismatch returns `HAB-SCH-004`. `delete` of an unknown id is not an error. `run_now` runs the schedule once without changing the plan.
+
+### 19.5 Entities in HA
+
+The bridge creates entities for every schedule, so schedules are visible and controllable in HA.
+
+| Entity | Details |
+| --- | --- |
+| `switch` "enabled" | Unique id `haac_bridge_schedule_<id>_enabled`. On means `enabled`. Turning it on or off in HA changes `enabled`, updates `updated_at` and sends `schedules_changed`. |
+| `sensor` "next run" (device class `timestamp`) | Unique id `haac_bridge_schedule_<id>_next_run`. `unknown` while the schedule is disabled or paused. Attributes: `owner`, `owner_name`, `paused_reason`, `last_run`. |
+
+- All entities belong to one device "HAAC Schedules" of the config entry. The entity name is the schedule name and follows renames.
+- They are created with the schedule and removed with it (`er.async_remove`). The setup sweep (19.6) also removes registry entries that have no schedule.
+- `enabled` is the user's choice, `paused` (19.2) is set by the system. The switch always shows `enabled`. A system pause shows in the attributes and as `unknown` next run and ends by itself when its cause is gone.
+- **Never exposed to app users.** The exposure builder excludes every entity of the platform `haac_bridge` (10.2). `create` and `update` reject such entities (`HAB-SCH-001`).
+- Any HA user who may operate entities in HA can toggle the switch (HA's normal model); the bridge adds no check.
+
+### 19.6 Lifecycle and cleanup
+
+The bridge keeps schedules and configuration consistent with the HA users. All cleanup runs in one coroutine under one lock and ends with one store save and one `exposure_changed` / `schedules_changed`.
+
+Pause reasons: `owner_inactive`, `no_entities`, `sun_unavailable`. A schedule the user switched off has `enabled = false` and no pause reason.
+
+#### 19.6.1 HA user deleted (`user_removed`)
+
+HA sends the event `user_removed` with the payload `{"user_id": …}` after the user is removed; the user object no longer exists then. The bridge:
+
+1. Deletes all schedules of the user (cancels callbacks first, removes the entities, saves).
+2. Removes the user's entry from the UI configuration (`options.users`) with `hass.config_entries.async_update_entry`. The update listener then re-applies the configuration and sends `exposure_changed`.
+3. If the user is also listed in the YAML, the bridge cannot edit the YAML. The entry then refers to a user that does not exist, which is `HAB-CFG-002` as before (10.2): the entry is skipped and a Repairs issue names the user id.
+
+#### 19.6.2 Other cases
+
+| Case | Behavior |
+| --- | --- |
+| `user_updated` | The payload has only `user_id`, no `is_active`; the bridge reads the user with `hass.auth.async_get_user`. If the user is inactive, all their schedules are paused (`owner_inactive`); when the user is active again they resume after re-validation. HA sends this event only when a user is changed through its update API, not when a user is activated or deactivated directly, so the sweeps in 19.6.3 are required. |
+| User removed from the bridge configuration only (options flow *Remove a user*, YAML reload) | The user's schedules are deleted immediately (step 1 of 19.6.1; the HA account still exists, so the user entry is not touched again). A rejected reload (`HAB-CFG-001`) applies nothing, so a YAML typo cannot delete schedules. The step *Remove a user* shows how many schedules will be deleted before the user confirms. |
+| Entity no longer exposed to the owner | Not removed from the schedule. It is skipped at run time (result `partial`, code `HAB-SCH-002`). If no entity is left the schedule is paused (`no_entities`). |
+| Config entry of the bridge removed | `async_remove_entry` removes the store file. `async_unload_entry` only cancels callbacks and saves. |
+
+#### 19.6.3 Sweeps (safety net)
+
+- **At setup and after every change of the user list** (options flow, `haac_bridge.reload`): compare the schedule owners with the existing, active and configured users and apply 19.6.1 and 19.6.2. This also catches users deleted or deactivated while the bridge was not loaded.
+- **At every run:** the checks in 19.3 step 2.1. Even if every cleanup failed, nothing runs for a deleted or unconfigured user.
+
+### 19.7 App
+
+**Local cache.** The Room table `schedule` (schema 7, 12) holds the schedules of the active instance with owner, owner name, all fields and the computed next run. Removing an instance removes its cached schedules.
+
+**Sync** (analogous to `exposed_entity`, 9.1). On every established connection (not only on a cold start) and on every `schedules_changed` event, if `features` contains `schedules`:
+
+1. Call `schedules/revision`; if it equals the stored revision, stop.
+2. Call `schedules/list` and diff by id: new, changed, removed.
+3. Removed ids are deleted from the cache and produce a notification entry (`HAAC-SCH-001`, for example "Schedule 'Morning light' no longer exists on the server"); several removed ids at once produce one grouped entry. A schedule that is newly paused produces an entry with the reason (`HAAC-SCH-002`).
+4. The app acts only on a successful answer for the matching `instance_id`; on connection errors, in the "stale" state or with a bridge without the feature the cache stays unchanged. The first sync of an instance produces no notifications.
+5. Notifications are created only for the user's own schedules. If the scope shrinks (`scope` changes from `all` to `own`, for example because the user lost the admin role), cached foreign schedules are dropped silently.
+
+**Errors.** Bridge errors of the schedule commands are mapped as in 18.3 (`HAB-SCH-001` → `HAAC-SCH-003`, `-003` → `HAAC-SCH-001`, `-004` → `HAAC-SCH-004`, `-005` → `HAAC-SCH-005`, `-006` → `HAAC-SCH-006`). A last run with the result `partial` or `failed` shows `HAAC-SCH-007` in the detail screen; it is not added to the notification list. On `HAAC-SCH-004` the editor offers to reload the schedule and keep the edits where possible.
+
+**Screens** (M-10 to M-18, 15.3). Editing a foreign schedule as an admin: name, time, weekdays, action and *Enabled* can be changed and deleting is allowed; the entity picker is disabled with the hint "Entities can only be changed by the owner". The bottom navigation gets a fourth tab *Schedules*, visible only if the bridge reports the feature. When the connection is "stale", cached schedules are shown dimmed and all editing is disabled.
+
+### 19.8 Tests
+
+Bridge (`pytest`): next-run computation including weekdays, DST gap (runs at the first existing minute after the gap) and DST overlap (runs once), sun triggers with offset and with a weekday filter on the local date, polar `ValueError` pauses with `sun_unavailable`, re-plan after a time zone change; run with all entities ok, one unavailable, one unexposed, and `Unauthorized` from HA; missed-run policy; `user_removed` removes schedules and the UI entry and reports `HAB-CFG-002` for a YAML entry; `user_updated` inactive and active; removal in the options flow deletes at once (including the confirmation count); a rejected YAML reload deletes nothing; setup sweep with a schedule of a deleted user; the run-time check deletes the schedule of an unconfigured owner; entity registry creation and cleanup; the exposure never offers `haac_bridge` entities and a schedule cannot target them; regular users cannot see or change foreign schedules; admins see all and can change foreign schedules except their entities (`HAB-SCH-006`); optimistic concurrency.
+
+App: diff of `schedules/list` against the cache (new, changed, removed), grouped notification, no action on errors and on a wrong `instance_id`, cascade delete with the instance, scope shrink drops foreign schedules silently, notifications only for own schedules, tab hidden without the feature, editing disabled when stale, error mapping, migration 6 → 7.
+
+### 19.9 Decisions
+
+1. Schedules run on the server; the app only edits and caches; editing is online-only.
+2. A user removed from the bridge configuration loses their schedules at once (no grace period); a deleted HA user loses the schedules and the UI entry of the bridge.
+3. Every schedule gets entities in HA (19.5); entities of the platform `haac_bridge` are never exposed.
+4. Admins see and manage all schedules; the entity list of a foreign schedule stays with the owner.
+5. DST: a nonexistent wall time runs at the first existing minute after the gap, a repeated one runs once (19.3).
+6. Limits: 50 schedules per user, 20 entities per schedule, offset ±180 minutes.
+7. Candidates for a later version: climate actions and *Skip next run*.
