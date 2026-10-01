@@ -45,20 +45,18 @@ def _none_as_empty(section: Any) -> Any:
     return {} if section is None else section
 
 
-CONFIG_SCHEMA = vol.Schema(
-    {
-        DOMAIN: vol.All(
-            _none_as_empty,
-            vol.Schema(
-                {
-                    vol.Optional(CONF_ENTITY_CONFIG, default={}): ENTITY_CONFIG_SCHEMA,
-                    vol.Optional(CONF_USERS, default=[]): vol.All(cv.ensure_list, [USER_SCHEMA]),
-                }
-            ),
-        )
-    },
-    extra=vol.ALLOW_EXTRA,
+SECTION_SCHEMA = vol.All(
+    _none_as_empty,
+    vol.Schema(
+        {
+            vol.Optional(CONF_ENTITY_CONFIG, default={}): ENTITY_CONFIG_SCHEMA,
+            vol.Optional(CONF_USERS, default=[]): vol.All(cv.ensure_list, [USER_SCHEMA]),
+        }
+    ),
 )
+"""The content of the `haac_bridge:` section; a bare section means no users."""
+
+CONFIG_SCHEMA = vol.Schema({DOMAIN: SECTION_SCHEMA}, extra=vol.ALLOW_EXTRA)
 
 
 @dataclass(frozen=True, slots=True)

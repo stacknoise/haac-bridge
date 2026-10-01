@@ -25,6 +25,7 @@ from homeassistant.helpers.selector import (
 import voluptuous as vol
 
 from .config.ui_users import FILTER_KEYS, INCLUDE_KEYS, user_options, users_of
+from .config.ui_yaml import export_users, import_users
 from .const import CONF_NAMES, CONF_USER_ID, CONF_USERS, DOMAIN, SUPPORTED_DOMAINS
 
 _DOMAIN_SELECTOR = SelectSelector(
@@ -52,6 +53,9 @@ _GLOB_KEYS = (CONF_INCLUDE_ENTITY_GLOBS, CONF_EXCLUDE_ENTITY_GLOBS)
 MENU_ADD = "add_user"
 MENU_EDIT = "edit_user"
 MENU_REMOVE = "remove_user"
+MENU_EXPORT = "export_yaml"
+MENU_IMPORT = "import_yaml"
+CONF_YAML = "yaml"
 
 
 class HaacBridgeConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -73,7 +77,7 @@ class HaacBridgeConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class HaacBridgeOptionsFlow(OptionsFlow):
-    """Menu to add, change and remove the users the app may show entities to (concept 10.2)."""
+    """Menu to add, change, remove, export and import the users the app may show entities to (concept 10.2)."""
 
     def __init__(self) -> None:
         """Start without a user selected."""
@@ -81,11 +85,56 @@ class HaacBridgeOptionsFlow(OptionsFlow):
         self._rules: dict[str, list[str]] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Show the menu; changing or removing needs an already configured user."""
+        """Show the menu; changing, removing and exporting need an already configured user."""
         options = [MENU_ADD] if await self._async_free_users() else []
         if users_of(self.config_entry.options):
-            options += [MENU_EDIT, MENU_REMOVE]
-        return self.async_show_menu(step_id="init", menu_options=options)
+            options += [MENU_EDIT, MENU_REMOVE, MENU_EXPORT]
+        return self.async_show_menu(step_id="init", menu_options=[*options, MENU_IMPORT])
+
+    async def async_step_export_yaml(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show the UI users as YAML to copy; confirming returns to the menu without a change."""
+        if user_input is not None:
+            return await self.async_step_init()
+        return self.async_show_form(
+            step_id=MENU_EXPORT,
+            data_schema=vol.Schema({}),
+            description_placeholders={"yaml": export_users(self.config_entry.options)},
+        )
+
+    async def async_step_import_yaml(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Take over users from pasted YAML; a user in the YAML replaces that user's entry here."""
+        errors: dict[str, str] = {}
+        text = (user_input or {}).get(CONF_YAML, "")
+        if user_input is not None:
+            records, error = import_users(text)
+            if error is None and not await self._async_all_exist(records):
+                error = "unknown_user"
+            if error is None:
+                imported = {record[CONF_USER_ID]: record for record in records}
+                others = [
+                    r
+                    for r in users_of(self.config_entry.options)
+                    if r[CONF_USER_ID] not in imported
+                ]
+                return self.async_create_entry(data={CONF_USERS: [*others, *imported.values()]})
+            errors["base"] = error
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_YAML, description={"suggested_value": text}): TextSelector(
+                    TextSelectorConfig(multiline=True)
+                )
+            }
+        )
+        return self.async_show_form(step_id=MENU_IMPORT, data_schema=schema, errors=errors)
+
+    async def _async_all_exist(self, records: list[dict[str, Any]]) -> bool:
+        """Return True if every record names an existing Home Assistant user."""
+        users = {user.id for user in await self.hass.auth.async_get_users()}
+        return all(record[CONF_USER_ID] in users for record in records)
 
     async def async_step_add_user(
         self, user_input: dict[str, Any] | None = None
