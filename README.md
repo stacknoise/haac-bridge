@@ -52,6 +52,8 @@ You can configure the users in the Home Assistant UI, in `configuration.yaml`, o
 
 Changes take effect at once, no restart or reload needed. Advanced or shared setups can still use YAML. If a user is configured in both places, the YAML entry is used and the UI entry for that user is ignored. The UI identifies users by their stable user ID, so renaming a Home Assistant user does not break the entry.
 
+*Export as YAML* in the same menu shows the users configured in the UI as a `haac_bridge:` section, ready to copy into `configuration.yaml` or to keep as a backup (the UI data lives in `.storage/core.config_entries`, which a backup of `configuration.yaml` alone does not contain). *Import from YAML* takes such a section, or just its content, and adds the users; a user who is already configured in the UI is replaced, the others stay. Imported users are named by `user_id`, need at least one `include_*` rule, and must exist in Home Assistant. A bare `haac_bridge:` line in `configuration.yaml` counts as no users, so you can use the UI alone.
+
 ### In `configuration.yaml`
 
 ```yaml
