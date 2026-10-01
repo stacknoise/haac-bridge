@@ -105,6 +105,24 @@
     "hist_unavailable": {
       "message": "History is not available on this server"
     },
+    "sch_invalid": {
+      "message": "The schedule is not valid"
+    },
+    "sch_run_failed": {
+      "message": "A device could not be switched by the schedule"
+    },
+    "sch_not_found": {
+      "message": "This schedule does not exist"
+    },
+    "sch_conflict": {
+      "message": "The schedule was changed in the meantime"
+    },
+    "sch_limit": {
+      "message": "You have reached the limit of schedules"
+    },
+    "sch_not_allowed": {
+      "message": "You are not allowed to change this schedule"
+    },
     "ws_invalid_request": {
       "message": "The request could not be understood"
     },

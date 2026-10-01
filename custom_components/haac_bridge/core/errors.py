@@ -41,6 +41,24 @@ class ErrorCode(StrEnum):
     HIST_UNAVAILABLE = "HAB-HIST-001"
     """Recorder or history is not loaded, or the query against it failed."""
 
+    SCH_INVALID = "HAB-SCH-001"
+    """A schedule failed validation (name, time, days, action or entities)."""
+
+    SCH_RUN_FAILED = "HAB-SCH-002"
+    """A schedule run could not switch an entity (not exposed, unavailable or not permitted)."""
+
+    SCH_NOT_FOUND = "HAB-SCH-003"
+    """The schedule does not exist."""
+
+    SCH_CONFLICT = "HAB-SCH-004"
+    """The schedule changed after the caller loaded it (optimistic concurrency)."""
+
+    SCH_LIMIT = "HAB-SCH-005"
+    """The user already has the maximum number of schedules."""
+
+    SCH_NOT_ALLOWED = "HAB-SCH-006"
+    """A regular user touched a foreign schedule, or an admin tried to change a foreign entity list."""
+
     WS_INVALID_REQUEST = "HAB-WS-001"
     """The request fields of a haac_bridge/* command failed validation."""
 
@@ -67,6 +85,12 @@ APP_CODES: Final[dict[ErrorCode, str | None]] = {
     ErrorCode.SVC_FAILED: "HAAC-BRG-005",
     ErrorCode.ENT_NOT_FOUND: "HAAC-ENT-001",
     ErrorCode.HIST_UNAVAILABLE: "HAAC-BRG-006",
+    ErrorCode.SCH_INVALID: "HAAC-SCH-003",
+    ErrorCode.SCH_RUN_FAILED: "HAAC-SCH-007",
+    ErrorCode.SCH_NOT_FOUND: "HAAC-SCH-001",
+    ErrorCode.SCH_CONFLICT: "HAAC-SCH-004",
+    ErrorCode.SCH_LIMIT: "HAAC-SCH-005",
+    ErrorCode.SCH_NOT_ALLOWED: "HAAC-SCH-006",
     ErrorCode.WS_INVALID_REQUEST: "HAAC-BRG-005",
     ErrorCode.INT_UNEXPECTED: "HAAC-BRG-005",
 }
@@ -120,6 +144,12 @@ class HistoryError(HaacBridgeError):
     """History or statistics could not be read (area HIST)."""
 
     default_code = ErrorCode.HIST_UNAVAILABLE
+
+
+class ScheduleError(HaacBridgeError):
+    """A schedule is invalid, missing, in conflict or not allowed (area SCH)."""
+
+    default_code = ErrorCode.SCH_INVALID
 
 
 class RequestError(HaacBridgeError):
