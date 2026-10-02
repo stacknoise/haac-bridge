@@ -814,7 +814,7 @@ The binding UI reference is mockup set **1c**, in its consolidated form **2a** (
 
 ### 15.2 Design tokens
 
-These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a dark variant is not designed yet). They live in `HaacColors`, `HaacShapes`, `Type.kt` and `HaacComponents.kt` (`:core:common`).
+These values are the basis of the Compose theme (`HaacTheme`, "Salbei" in a light and a dark palette, see *Dark palette* below). The tokens live in `HaacPalette`; `HaacColors` reads the current palette in composables, so screens never hold a colour value of their own. Shapes, type and components are in `HaacShapes`, `Type.kt` and `HaacComponents.kt` (`:core:common`). The table gives the light values.
 
 | Token | Value | Use |
 | --- | --- | --- |
@@ -846,6 +846,26 @@ These values are the basis of the Compose theme (`HaacTheme`, light "Salbei"; a 
 - Navigation: bottom bar with **Rooms**, **Places**, **Settings**; the active item shows an accent label and a 24×3 dp accent bar on its top edge (no indicator pill).
 - Places: list rows are cards with a type badge (HOME, LEVEL, ROOM); the create button is a 60 dp accent square with a soft green shadow and opens a speed dial over a 90 % `background` scrim that leaves the bottom bar clear.
 - The edit layout uses the same 168 dp row height as the room grid so that drag-and-drop geometry is shared.
+
+**Dark palette** (added October 2026, "Salbei dark"). The app follows the dark mode of the phone by default; *Settings → Appearance* offers *System*, *Light* and *Dark* and stores the choice in the app settings (`themeMode`, default `SYSTEM`; one choice for all instances). The stored mode is read once before the first frame so that a chosen design never flashes the other one. Roles and shapes stay as in the light design; only the values change:
+
+| Token | Dark value | Notes |
+| --- | --- | --- |
+| `background` / `surface` / `surfaceMuted` | `#111713` / `#1A221D` / `#212B25` | Cards are lifted from the ground; segmented-control track `#26312A` |
+| `outline` / `outlineStrong` | `#2B372F` / `#3F4D44` | |
+| `onSurface` | `#E4EBE5` | Selected chips and segments invert: light fill, dark text |
+| `onSurfaceVariant` | `#9DAEA2` | `#B6C5BA` on outlined chips |
+| `accent` | `#6FC79A` | A lighter step of the sage green; **text on it is dark** (`onAccent` `#0C2418`) |
+| `accentTint` / `accentTintStrong` / accent border | `#6FC79A` at 15 % / `#1F3A2D` / `#6FC79A` at 53 % | |
+| `switchTrackOff` / `switchThumbOff` | `#3A4840` / `#9AA89E` | The knob of an off switch is light grey (white in the light design) |
+| `navBackground` / `navBorder` | `#161D19` / `#28322C` | |
+| `disabledBg` / `disabledText` | `#222C26` / `#6E7D73` | |
+| `danger` / `dangerContainer` | `#EF8F87` / `#3B1F1D` | |
+| `scrim` | black at 70 % | |
+
+- The status and navigation bars stay transparent; their icons are light on the dark design and dark on the light one. The window background before the first frame follows the phone's dark mode (`values-night`).
+- Charts use their own series colours per design (`ChartPalette`): the light set is unchanged; the dark set is green `#22A852`, blue `#3987E5`, magenta `#D55181` and yellow `#C98500`, the values that passed the dataviz validator on the former dark background `#161826`. They have not been validated again on `#1A221D`.
+- The instance accent colours (4.4) are the same in both designs.
 
 ### 15.3 Screens
 
@@ -996,7 +1016,7 @@ Until mockups exist, Claude Code builds these with the tokens from 15.2 and stan
 | Instance switcher and *Add instance* | 4.4 |
 | Addresses of an instance and the *Add as address* dialog | 4.5 |
 | Fingerprint prompt, unlock and lock screen | 5.4, 5.5 |
-| Settings (instances, fingerprint toggle, unlock window, lock timeout, logout, diagnostics) | 4.4, 5.4, 5.5, 9.3 |
+| Settings (instances, appearance, fingerprint toggle, unlock window, lock timeout, logout, diagnostics) | 4.4, 5.4, 5.5, 9.3, 15.2 |
 | Entity detail: switch, sensor, climate incl. history | 8 |
 | New home and new room forms | 6 |
 | Offline and error states | 14.1 |
