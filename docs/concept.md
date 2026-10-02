@@ -1472,7 +1472,7 @@ All commands go through the existing command wrapper (HAB error codes, 18.3). Re
 {"id": 22, "type": "event", "event": {"schedules_changed": {"revision": "7c0a…19ef"}}}
 ```
 
-`update`, `delete` and `run_now` name the schedule with `schedule_id`, because `id` is the message id of the WebSocket protocol. `update` needs the `updated_at` of the version the app edited (optimistic concurrency); a mismatch returns `HAB-SCH-004`. `delete` of an unknown id is not an error. `run_now` runs the schedule once without changing the plan.
+`update`, `delete` and `run_now` name the schedule with `schedule_id`, because `id` is the message id of the WebSocket protocol. `update` needs the `updated_at` of the version the app edited (optimistic concurrency); a mismatch returns `HAB-SCH-004`. `delete` of an unknown `schedule_id` is not an error. `run_now` runs the schedule once without changing the plan.
 
 ### 19.5 Entities in HA
 
