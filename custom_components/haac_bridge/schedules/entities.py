@@ -54,7 +54,7 @@ class ScheduleEntity(Entity):
     """Common part of the schedule entities: it follows the schedule in the store."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
     _attr_device_info = DEVICE_INFO
 
     def __init__(self, manager: ScheduleManager, schedule_id: str, suffix: str) -> None:

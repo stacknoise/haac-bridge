@@ -72,8 +72,9 @@ async def test_a_yaml_only_setup_gets_its_config_entry(hass: HomeAssistant, worl
     entry = entry_of(hass)
     assert entry.title == "HAAC Bridge"
     assert entry.data == {}
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, "schedules")})
-    assert device is None  # the device appears with the first schedule
+    assert (
+        dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id) == []
+    )  # no schedule yet
 
 
 async def test_entities_appear_with_the_schedule(hass: HomeAssistant, world: World) -> None:
@@ -81,22 +82,24 @@ async def test_entities_appear_with_the_schedule(hass: HomeAssistant, world: Wor
 
     switch = state_of(hass, "switch", schedule.id, SUFFIX_ENABLED)
     assert switch.state == "on"
-    assert switch.name == "Morning light"
+    assert switch.name == "HAAC Schedules Morning light"
 
     sensor = state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN)
     planned = manager_of(hass).planner.planned_run(schedule.id)
     assert planned is not None
     assert sensor.state == planned.isoformat()
-    assert sensor.name == "Morning light next run"
+    assert sensor.name == "HAAC Schedules Morning light next run"
     assert sensor.attributes["device_class"] == "timestamp"
     assert sensor.attributes["owner"] == world.anton.id
     assert sensor.attributes["owner_name"] == "Anton"
     assert sensor.attributes["paused_reason"] is None
     assert sensor.attributes["last_run"] is None
 
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, "schedules")})
-    assert device is not None
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry_of(hass).entry_id)
+    assert len(devices) == 1
+    device = devices[0]
     assert device.name == "HAAC Schedules"
+    assert device.identifiers == {(DOMAIN, "schedules")}
     registry = er.async_get(hass)
     for platform, suffix in (("switch", SUFFIX_ENABLED), ("sensor", SUFFIX_NEXT_RUN)):
         found = entity_id(hass, platform, schedule.id, suffix)
@@ -144,8 +147,12 @@ async def test_names_follow_renames(hass: HomeAssistant, world: World) -> None:
         world.anton, schedule.id, schedule.updated_at.isoformat(), {"name": "Evening light"}
     )
     await hass.async_block_till_done()
-    assert state_of(hass, "switch", schedule.id, SUFFIX_ENABLED).name == "Evening light"
-    assert state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN).name == "Evening light next run"
+    assert (
+        state_of(hass, "switch", schedule.id, SUFFIX_ENABLED).name == "HAAC Schedules Evening light"
+    )
+    assert state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN).name == (
+        "HAAC Schedules Evening light next run"
+    )
 
 
 async def test_entities_go_with_the_schedule(hass: HomeAssistant, world: World) -> None:
