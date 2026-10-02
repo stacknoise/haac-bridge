@@ -138,6 +138,25 @@ class ScheduleManager:
         self.notify()
         return updated
 
+    async def async_set_enabled(self, schedule_id: str, *, enabled: bool) -> None:
+        """Enable or disable a schedule, as its `enabled` switch in HA does (concept 19.5)."""
+        schedule = self._require(schedule_id)
+        if schedule.enabled == enabled:
+            return
+        await self.store.async_replace(
+            schedule.with_changes(enabled=enabled, updated_at=dt_util.utcnow())
+        )
+        await self.planner.async_plan(schedule_id)
+        self.notify()
+
+    async def async_wipe(self) -> None:
+        """Delete every schedule and the storage file; called when the config entry is removed."""
+        schedule_ids = [schedule.id for schedule in self.store.schedules]
+        await self.store.async_remove_file()
+        for schedule_id in schedule_ids:
+            await self.planner.async_plan(schedule_id)
+        self.notify()
+
     async def async_delete(self, user: User, schedule_id: str) -> None:
         """Delete a schedule the user may edit; an unknown id is not an error."""
         schedule = self.store.get(schedule_id)

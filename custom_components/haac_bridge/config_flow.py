@@ -69,6 +69,13 @@ class HaacBridgeConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="user")
         return self.async_create_entry(title="HAAC Bridge", data={})
 
+    async def async_step_import(self, import_data: dict[str, Any]) -> ConfigFlowResult:
+        """Create the entry for an installation that is configured in YAML only (concept 19.5).
+
+        The schedule entities need a config entry, so the bridge adds one by itself.
+        """
+        return self.async_create_entry(title="HAAC Bridge", data={})
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:

@@ -1,7 +1,7 @@
 """HAAC Bridge: per-user entity exposure for the HA Android Client (concept 10)."""
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.reload import async_integration_yaml_config
@@ -22,10 +22,15 @@ from .entities.descriptor_factory import DescriptorFactory
 from .exposure.exposure import Exposure
 from .exposure.filter_factory import FilterFactory
 from .exposure.own_entities import own_entity_checker
+from .schedules.entities import ScheduleEntityManager
 from .schedules.manager import ScheduleManager
+from .schedules.runtime import HaacBridgeConfigEntry
 from .services.call_factory import ServiceCallFactory
 
 __all__ = ["CONFIG_SCHEMA", "DOMAIN"]
+
+PLATFORMS = [Platform.SWITCH, Platform.SENSOR]
+"""Platforms that carry the entities of the schedules (concept 19.5)."""
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -46,6 +51,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     await async_check_users(hass, data.issue_ids, entries)
     async_register_commands(hass, COMMANDS)
     await _async_start_schedules(hass, data.schedules)
+    if DOMAIN in config and not hass.config_entries.async_entries(DOMAIN):
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_IMPORT}, data={})
+        )
 
     async def _async_reload(call: ServiceCall) -> None:
         """Handle the haac_bridge.reload action."""
@@ -96,10 +105,14 @@ async def _async_apply(hass: HomeAssistant) -> None:
     async_dispatcher_send(hass, SIGNAL_EXPOSURE_CHANGED)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Take over the users configured in the UI and follow later changes of the options."""
-    get_data(hass).ui_entries = parse_ui_users(entry.options)
+async def async_setup_entry(hass: HomeAssistant, entry: HaacBridgeConfigEntry) -> bool:
+    """Take over the UI users, follow option changes and create the entities of the schedules."""
+    data = get_data(hass)
+    data.ui_entries = parse_ui_users(entry.options)
     await _async_apply(hass)
+    entry.runtime_data = ScheduleEntityManager(hass, data.schedules, entry)
+    entry.runtime_data.async_sweep()
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
@@ -110,8 +123,15 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     await _async_apply(hass)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Drop the UI users; the YAML users stay."""
+async def async_unload_entry(hass: HomeAssistant, entry: HaacBridgeConfigEntry) -> bool:
+    """Unload the schedule entities and drop the UI users; the YAML users stay."""
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
     get_data(hass).ui_entries = []
     await _async_apply(hass)
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete all schedules and their storage file when the entry is removed (concept 19.6)."""
+    await get_data(hass).schedules.async_wipe()
