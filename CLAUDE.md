@@ -16,6 +16,7 @@ CLAUDE.md
 README.md                 # HACS installation, YAML example (concept 10.2)
 hacs.json
 docs/concept.md
+docs/development.md       # developer guide: setup, checks, factories, error codes, code index, releases
 docs/code-index.md        # GENERATED: every module, class and function with a one-line summary (concept 18.5)
 docs/error-codes.md       # GENERATED: every HAB error code (concept 18.3)
 scripts/code_index.py     # generator for the two files above
