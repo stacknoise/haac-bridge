@@ -32,6 +32,7 @@ class RunHooks:
     remove: Callable[[list[str]], Awaitable[None]]
     replan: Callable[[str], Awaitable[None]]
     changed: Callable[[], None]
+    ready: Callable[[], bool]
 
 
 class ScheduleRunner:
@@ -55,7 +56,7 @@ class ScheduleRunner:
     async def _async_run_locked(self, schedule_id: str) -> None:
         """Validate the owner and the exposure, then switch and record the result."""
         schedule = self._store.get(schedule_id)
-        if schedule is None:
+        if schedule is None or not self._hooks.ready():
             return
         user = await self._hass.auth.async_get_user(schedule.owner)
         exposure = get_data(self._hass).exposure

@@ -89,7 +89,9 @@ class ScheduleEntity(Entity):
 
     @callback
     def _handle_change(self) -> None:
-        """Refresh the state after a schedule changed."""
+        """Refresh the state after a schedule changed; a removed schedule's entity is being removed."""
+        if self.schedule is None:
+            return
         self.async_schedule_update_ha_state(True)
 
 

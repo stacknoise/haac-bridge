@@ -34,10 +34,14 @@
       },
       "remove_user": {
         "title": "Remove a user",
-        "description": "The app will show this user no entities.",
+        "description": "The app will show this user no entities, and the user's schedules are deleted.",
         "data": {
           "user_id": "User"
         }
+      },
+      "confirm_remove": {
+        "title": "Remove this user?",
+        "description": "{user} has {count} schedule(s) in the app. They are deleted together with the user's entry, and their entities disappear from Home Assistant. Submit to remove the user."
       },
       "filter": {
         "title": "What may this user see?",
