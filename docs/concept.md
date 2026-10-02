@@ -1480,12 +1480,13 @@ The bridge creates entities for every schedule, so schedules are visible and con
 
 | Entity | Details |
 | --- | --- |
-| `switch` "enabled" | Unique id `haac_bridge_schedule_<id>_enabled`. On means `enabled`. Turning it on or off in HA changes `enabled`, updates `updated_at` and sends `schedules_changed`. |
-| `sensor` "next run" (device class `timestamp`) | Unique id `haac_bridge_schedule_<id>_next_run`. `unknown` while the schedule is disabled or paused. Attributes: `owner`, `owner_name`, `paused_reason`, `last_run`. |
+| `switch` (named like the schedule) | Unique id `haac_bridge_schedule_<id>_enabled`. Entity id `switch.haac_schedules_<name>`. On means `enabled`. Turning it on or off in HA changes `enabled`, updates `updated_at` and sends `schedules_changed`. |
+| `sensor` "<Name> next run" (device class `timestamp`) | Unique id `haac_bridge_schedule_<id>_next_run`. Entity id `sensor.haac_schedules_<name>_next_run`. `unknown` while the schedule is disabled or paused. Attributes: `owner`, `owner_name`, `paused_reason`, `last_run`. |
 
-- All entities belong to one device "HAAC Schedules" of the config entry. The entity name is the schedule name and follows renames.
+- All entities belong to one device "HAAC Schedules" of the config entry. The entity names follow renames; the entity ids are fixed when the entity is created, and because the entities carry the device name, they start with `haac_schedules_`.
 - They are created with the schedule and removed with it (`er.async_remove`). The setup sweep (19.6) also removes registry entries that have no schedule.
 - `enabled` is the user's choice, `paused` (19.2) is set by the system. The switch always shows `enabled`. A system pause shows in the attributes and as `unknown` next run and ends by itself when its cause is gone.
+- **Config entry for YAML-only setups.** The entities need a config entry. If the bridge is configured in YAML only, it creates the entry by itself with an import flow (`async_step_import`) at startup. If the user deletes the entry, the bridge deletes all schedules (see 19.6.2); in a YAML setup the entry is created again at the next start, with an empty store.
 - **Never exposed to app users.** The exposure builder excludes every entity of the platform `haac_bridge` (10.2). `create` and `update` reject such entities (`HAB-SCH-001`).
 - Any HA user who may operate entities in HA can toggle the switch (HA's normal model); the bridge adds no check.
 
@@ -1510,6 +1511,7 @@ HA sends the event `user_removed` with the payload `{"user_id": …}` after the 
 | `user_updated` | The payload has only `user_id`, no `is_active`; the bridge reads the user with `hass.auth.async_get_user`. If the user is inactive, all their schedules are paused (`owner_inactive`); when the user is active again they resume after re-validation. HA sends this event only when a user is changed through its update API, not when a user is activated or deactivated directly, so the sweeps in 19.6.3 are required. |
 | User removed from the bridge configuration only (options flow *Remove a user*, YAML reload) | The user's schedules are deleted immediately (step 1 of 19.6.1; the HA account still exists, so the user entry is not touched again). A rejected reload (`HAB-CFG-001`) applies nothing, so a YAML typo cannot delete schedules. The step *Remove a user* shows how many schedules will be deleted before the user confirms. |
 | Entity no longer exposed to the owner | Not removed from the schedule. It is skipped at run time (result `partial`, code `HAB-SCH-002`). If no entity is left the schedule is paused (`no_entities`). |
+| Config entry reloads (options change, reload of the entry) | While the entry is unloaded the UI users are missing from the exposure, so the run check (19.3 step 2.1) would see their owners as unconfigured. The manager therefore sets `users_ready` to false: runs wait until the entry is set up again, and the sweep does not run while unloading. |
 | Config entry of the bridge removed | `async_remove_entry` removes the store file. `async_unload_entry` only cancels callbacks and saves. |
 
 #### 19.6.3 Sweeps (safety net)
