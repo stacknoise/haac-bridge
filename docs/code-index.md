@@ -270,7 +270,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleEntity.available` | `def available(self) -> bool` | `custom_components/haac_bridge/schedules/entities.py` | Return True while the schedule exists. |
 | `ScheduleEntity.async_added_to_hass` | `async def async_added_to_hass(self) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Refresh whenever a schedule changes, runs, is paused or removed. |
 | `ScheduleEntity.async_update` | `async def async_update(self) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Look up the owner's name, which can only be read asynchronously. |
-| `ScheduleEntity._handle_change` | `def _handle_change(self) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Refresh the state after a schedule changed. |
+| `ScheduleEntity._handle_change` | `def _handle_change(self) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Refresh the state after a schedule changed; a removed schedule's entity is being removed. |
 | `ScheduleEnabledSwitch` | `class ScheduleEnabledSwitch(ScheduleEntity, SwitchEntity)` | `custom_components/haac_bridge/schedules/entities.py` | Shows and sets whether the schedule is enabled; a system pause does not change it. |
 | `ScheduleEnabledSwitch.__init__` | `def __init__(self, manager: ScheduleManager, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Create the switch of one schedule. |
 | `ScheduleEnabledSwitch.name` | `def name(self) -> str \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return the schedule name, which follows renames. |
