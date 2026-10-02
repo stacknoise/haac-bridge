@@ -96,13 +96,14 @@ class ScheduleManager:
             digest.update(("\t".join(parts) + "\n").encode())
         return digest.hexdigest()
 
-    async def async_describe(self, schedule: Schedule) -> dict[str, Any]:
-        """Return the stored form plus the owner's name and the computed next run."""
+    async def async_describe(self, schedule: Schedule, user: User) -> dict[str, Any]:
+        """Return the stored form plus the owner's name, the computed next run and whether `user` owns it."""
         owner = await self._hass.auth.async_get_user(schedule.owner)
         planned = self.planner.planned_run(schedule.id)
         return {
             **schedule.to_dict(),
             "owner_name": owner.name if owner else None,
+            "own": schedule.owner == user.id,
             "next_run": planned.isoformat() if planned else None,
         }
 
@@ -111,7 +112,7 @@ class ScheduleManager:
         return {
             "revision": self.revision_for(user),
             "scope": self.scope_of(user),
-            "schedules": [await self.async_describe(item) for item in self.visible_to(user)],
+            "schedules": [await self.async_describe(item, user) for item in self.visible_to(user)],
         }
 
     async def async_create(self, user: User, fields: dict[str, Any]) -> Schedule:
