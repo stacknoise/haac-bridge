@@ -74,6 +74,25 @@ class ScheduleStore:
             await self._async_save()
         return removed
 
+    async def async_apply_changes(
+        self, replace: Iterable[Schedule] = (), remove: Iterable[str] = ()
+    ) -> list[Schedule]:
+        """Replace and remove schedules together with one save; return the removed schedules.
+
+        Schedules in `replace` that no longer exist are ignored.
+        """
+        removed = [
+            self._schedules.pop(schedule_id)
+            for schedule_id in list(remove)
+            if schedule_id in self._schedules
+        ]
+        replaced = [item for item in replace if item.id in self._schedules]
+        for schedule in replaced:
+            self._schedules[schedule.id] = schedule
+        if removed or replaced:
+            await self._async_save()
+        return removed
+
     async def _async_save(self) -> None:
         """Write all schedules to storage."""
         await self._store.async_save({"schedules": [item.to_dict() for item in self.schedules]})

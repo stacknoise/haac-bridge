@@ -97,6 +97,37 @@ async def test_remove_of_nothing_does_not_write(
     assert KEY not in hass_storage
 
 
+async def test_apply_changes_replaces_and_removes_with_one_save(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    store = await _loaded(hass)
+    first = make_schedule(name="First")
+    second = make_schedule(name="Second")
+    third = make_schedule(name="Third")
+    for schedule in (first, second, third):
+        await store.async_add(schedule)
+
+    removed = await store.async_apply_changes(
+        replace=[second.with_changes(enabled=False), make_schedule(name="Unknown")],
+        remove=[first.id, "missing"],
+    )
+
+    assert removed == [first]
+    assert {item.name: item.enabled for item in store.schedules} == {
+        "Second": False,
+        "Third": True,
+    }
+    assert len(hass_storage[KEY]["data"]["schedules"]) == 2
+
+
+async def test_apply_changes_without_changes_does_not_write(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    store = await _loaded(hass)
+    assert await store.async_apply_changes(replace=[make_schedule()], remove=["missing"]) == []
+    assert KEY not in hass_storage
+
+
 async def test_damaged_entries_are_skipped(
     hass: HomeAssistant, hass_storage: dict[str, Any], caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -27,6 +27,7 @@ import voluptuous as vol
 from .config.ui_users import FILTER_KEYS, INCLUDE_KEYS, user_options, users_of
 from .config.ui_yaml import export_users, import_users
 from .const import CONF_NAMES, CONF_USER_ID, CONF_USERS, DOMAIN, SUPPORTED_DOMAINS
+from .core.runtime import get_data
 
 _DOMAIN_SELECTOR = SelectSelector(
     SelectSelectorConfig(
@@ -169,17 +170,49 @@ class HaacBridgeOptionsFlow(OptionsFlow):
     async def async_step_remove_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Remove a configured user; the app then shows this user no entities."""
+        """Remove a configured user; the app then shows this user no entities.
+
+        If the user has schedules, a confirmation says how many are deleted with the entry.
+        """
         if user_input is not None:
-            remaining = [
-                record
-                for record in users_of(self.config_entry.options)
-                if record[CONF_USER_ID] != user_input[CONF_USER_ID]
-            ]
-            return self.async_create_entry(data={CONF_USERS: remaining})
+            self._user_id = user_input[CONF_USER_ID]
+            if self._schedule_count(self._user_id):
+                return await self.async_step_confirm_remove()
+            return self._remove(self._user_id)
         return self.async_show_form(
             step_id="remove_user", data_schema=_user_schema(await self._async_configured_users())
         )
+
+    async def async_step_confirm_remove(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for a confirmation that names the number of schedules that will be deleted."""
+        if self._user_id is None:
+            return self.async_abort(reason="unknown")
+        if user_input is not None:
+            return self._remove(self._user_id)
+        user = await self.hass.auth.async_get_user(self._user_id)
+        return self.async_show_form(
+            step_id="confirm_remove",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "user": (user.name if user else None) or self._user_id,
+                "count": str(self._schedule_count(self._user_id)),
+            },
+        )
+
+    def _schedule_count(self, user_id: str | None) -> int:
+        """Return how many schedules the user has."""
+        return len(get_data(self.hass).schedules.store.by_owner(user_id)) if user_id else 0
+
+    def _remove(self, user_id: str) -> ConfigFlowResult:
+        """Save the options without this user; their schedules are deleted when the options apply."""
+        remaining = [
+            record
+            for record in users_of(self.config_entry.options)
+            if record[CONF_USER_ID] != user_id
+        ]
+        return self.async_create_entry(data={CONF_USERS: remaining})
 
     async def async_step_filter(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choose which entities the user may see: domains, entities and wildcards to include or exclude."""

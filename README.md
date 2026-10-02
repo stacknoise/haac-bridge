@@ -27,6 +27,15 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 - Read the Home Assistant floors and areas that hold shared entities, so the app can offer an import of levels and rooms (no entity IDs are sent).
 - Report the Home Assistant version, the bridge and API version, the instance ID and the internal, external and cloud address, so the app can recognise the same Home Assistant under different addresses.
 
+**Schedules (time-controlled actions)**
+- Users create schedules in the app, for example "every weekday at 06:45 turn the light on". A schedule switches `switch` entities (turn on, turn off or toggle) at a fixed time on chosen weekdays, or at sunrise or sunset with an offset of up to 3 hours.
+- Schedules are stored and run **by the bridge**, so they work with the app closed, the phone off or on another network. They run in the context of their owner, so the logbook shows who triggered them, and at every run the bridge checks again that the owner still exists and may see each entity.
+- Each schedule appears in Home Assistant as an *enabled* switch and a *next run* timestamp sensor on the device **HAAC Schedules**. Turning the switch off pauses the schedule. These entities are never shared with app users, whatever a filter says.
+- Home Assistant administrators see and manage all schedules in the app; the entity list of a foreign schedule can only be changed by its owner.
+- Schedules follow the users: they are deleted at once when their owner is removed from the bridge configuration or deleted in Home Assistant, and paused while the owner is deactivated. Removing the integration deletes all schedules.
+- Schedules need the integration to have a configuration entry. If you configure the bridge in `configuration.yaml` only, it adds the entry by itself. Schedules are saved in `.storage/haac_bridge.schedules`, which a full Home Assistant backup includes.
+- Times are Home Assistant's local time. A time that does not exist on the day the clocks go forward runs at the first minute after the gap; a time that occurs twice runs once.
+
 **Safety and operations**
 - The caller is always the Home Assistant user behind the access token; the app cannot ask for another user's entities.
 - Stable error codes (`HAB-…`) with plain-language messages, configuration problems and unknown users as *Repairs* issues, and the action `haac_bridge.reload` to re-read the YAML.
@@ -120,6 +129,8 @@ The app talks to the bridge over Home Assistant's WebSocket API with commands pr
 | `haac_bridge/history` | `entity_ids`, `start`, `end`?, `minimal_response`? | Significant state changes per entity in Home Assistant's compressed state format; `HAB-HIST-001` if the recorder fails |
 | `haac_bridge/statistics` | `entity_ids`, `start`, `end`?, `period` (`hour`, `day`, `week`, `month`), `types` (`mean`, `min`, `max`, `sum`) | Long-term statistics rows per entity; `start`/`end` of each row in milliseconds |
 | `haac_bridge/areas` | – | `floors` (`floor_id`, `name`, `level`) and `areas` (`area_id`, `name`, `floor_id`, `entity_count`) of the Home Assistant registries, limited to areas that hold at least one entity exposed to the caller and the floors of those areas; no entity IDs. For the import wizard of the app |
+
+The schedule commands are `haac_bridge/schedules/revision`, `list`, `create`, `update`, `delete` and `run_now` and `haac_bridge/subscribe_schedules` (event `{"schedules_changed": {"revision": …}}`). `update`, `delete` and `run_now` name the schedule with `schedule_id`; `update` also needs the `updated_at` of the version that was edited (`HAB-SCH-004` if it changed in the meantime). `haac_bridge/info` lists `features: ["schedules"]`. Regular users see only their own schedules, administrators all of them (`scope`). See concept chapter 19 and [docs/error-codes.md](docs/error-codes.md) for the `HAB-SCH-*` codes.
 
 History and statistics only include requested entities that are exposed to the caller; others are left out silently. Times are ISO 8601; a period in the future returns an empty result.
 

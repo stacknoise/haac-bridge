@@ -14,6 +14,7 @@ from ..const import MAX_SCHEDULES_PER_USER, SIGNAL_SCHEDULES_CHANGED
 from ..core.errors import ErrorCode, ScheduleError
 from ..core.runtime import get_data
 from .model import (
+    Paused,
     PauseReason,
     Schedule,
     new_schedule,
@@ -38,11 +39,15 @@ class ScheduleManager:
     def __init__(self, hass: HomeAssistant) -> None:
         """Wire the store, the planner and the runner; call `async_load` and `async_start` next."""
         self._hass = hass
+        # False while the configured users are not loaded (the config entry reloads); runs wait then.
+        self.users_ready = True
         self.store = ScheduleStore(hass)
         self.planner = SchedulePlanner(
             hass, self.store, TriggerFactory(hass), self._async_run_due, self.notify
         )
-        hooks = RunHooks(self.async_remove, self.planner.async_plan, self.notify)
+        hooks = RunHooks(
+            self.async_remove, self.planner.async_plan, self.notify, lambda: self.users_ready
+        )
         self.runner = ScheduleRunner(hass, self.store, hooks)
 
     async def async_load(self) -> None:
@@ -170,6 +175,37 @@ class ScheduleManager:
         self._require_access(user, self._require(schedule_id))
         await self.runner.async_run(schedule_id)
 
+    async def async_sweep(self, owner_id: str | None = None) -> None:
+        """Delete the schedules of users who are gone or not configured, pause those of inactive ones.
+
+        Runs after every change of the user list and at setup (concept 19.6.3). With `owner_id`
+        only that user's schedules are looked at. Everything is saved once and announced once.
+        """
+        users = {user.id: user for user in await self._hass.auth.async_get_users()}
+        exposure = get_data(self._hass).exposure
+        replace: list[Schedule] = []
+        remove: list[str] = []
+        for schedule in self.store.schedules:
+            if owner_id is not None and schedule.owner != owner_id:
+                continue
+            owner = users.get(schedule.owner)
+            if owner is None or not exposure.is_configured(owner):
+                remove.append(schedule.id)
+                continue
+            updated = self._with_owner_state(schedule, owner)
+            if updated != schedule:
+                replace.append(updated)
+        if not replace and not remove:
+            return
+        await self.store.async_apply_changes(replace, remove)
+        for schedule_id in [*(item.id for item in replace), *remove]:
+            await self.planner.async_plan(schedule_id)
+        self.notify()
+
+    async def async_remove_owner(self, owner_id: str) -> None:
+        """Delete every schedule of a user, as when the HA user was deleted (concept 19.6.1)."""
+        await self.async_remove([item.id for item in self.store.by_owner(owner_id)])
+
     async def async_remove(self, schedule_ids: list[str]) -> None:
         """Remove schedules, stop their timers and tell subscribers."""
         removed = await self.store.async_remove(schedule_ids)
@@ -216,6 +252,15 @@ class ScheduleManager:
                 self._check_exposed(user, entities)
                 changes["entities"] = entities
         return changes
+
+    def _with_owner_state(self, schedule: Schedule, owner: User) -> Schedule:
+        """Return the schedule paused if its owner is inactive, or resumed if its pause has ended."""
+        if owner.is_active:
+            return self._without_ended_pause(schedule, owner)
+        paused = schedule.paused
+        if paused is not None and paused.reason is PauseReason.OWNER_INACTIVE:
+            return schedule
+        return schedule.with_changes(paused=Paused(PauseReason.OWNER_INACTIVE, dt_util.utcnow()))
 
     def _without_ended_pause(self, schedule: Schedule, owner: User | None) -> Schedule:
         """Return the schedule without a pause whose cause is gone (concept 19.5)."""
