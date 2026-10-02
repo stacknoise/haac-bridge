@@ -800,7 +800,7 @@ HAAC is distributed via Google Play and as a sideload APK. Both channels use the
 ### 14.5 Open points
 
 - [x] Privacy policy page online at `https://stacknoise.com/haac/privacy/` (16.8).
-- [ ] Demo mode (chapter 20) built before the first Google Play production release (14.4).
+- [x] Demo mode (chapter 20) built before the first Google Play production release (14.4); in version 0.3.0.
 
 ## 15. UI mockups
 
@@ -1592,7 +1592,7 @@ Anyone can try HAAC without a Home Assistant server: Google Play reviewers, who 
 
 ### 20.2 Design: an in-process bridge
 
-The app talks to the bridge only through two small interfaces: `BridgeChannel` (commands and subscriptions, 11.2) and `HaWebSocket` (`send`, `receive`, `close`). The demo implements the same protocol behind them, so the connection, sync, controllers and screens run unchanged. Package `com.stacknoise.haac.core.network.demo` in `:core:network`:
+The app talks to the bridge only through two small interfaces: `BridgeChannel` (commands and subscriptions, 11.2) and `HaWebSocket` (`send`, `receive`, `close`). The demo implements the same protocol behind them, so the connection, sync, controllers and screens run unchanged. Package `com.stacknoise.haac.core.network.demo` in `:core:network` (the connector is the one exception, see below):
 
 | Component | Role |
 | --- | --- |
@@ -1600,7 +1600,8 @@ The app talks to the bridge only through two small interfaces: `BridgeChannel` (
 | `DemoWorld` | The state of the demo in memory: entities with states and attributes, floors and areas, schedules, the exposure and schedule revisions |
 | `DemoBridge` | Answers the `haac_bridge/*` commands of chapters 11 and 19.4 from `DemoWorld` with the same JSON as the real bridge, including error replies with HAB codes, and sends the events of the subscriptions |
 | `DemoSocket` | `HaWebSocket` over `DemoBridge`: `send` hands a message to the bridge, `receive` returns its replies and events, including the answer to `ping` |
-| `DemoBridgeConnector` | `BridgeConnector` (17.2): for the server ID `demo` it builds a `BridgeConnection` over a `DemoSocket` without a handshake over the network; every other ID goes to the unchanged `DefaultBridgeConnector` |
+| `DemoWorldStore` | Reads and writes the state file of 20.5: `FileDemoWorldStore` in the app, `MemoryDemoWorldStore` in tests |
+| `DemoBridgeConnector` | `BridgeConnector` (17.2): for the server ID `demo` it builds a `BridgeConnection` over a `DemoSocket` without a handshake over the network; every other ID goes to the unchanged `DefaultBridgeConnector`. It lives in package `connection` next to `DefaultBridgeConnector`, because the `BridgeConnector` interface speaks `okhttp3.HttpUrl`; the `demo` package itself imports no OkHttp (20.6) |
 
 `ConnectionSupervisor`, `EntitySync`, `ScheduleSync`, `EntityController` and the screens are not changed. The routing is a Hilt binding of `BridgeConnector`, decided only by the server ID.
 
