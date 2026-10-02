@@ -140,7 +140,7 @@ The app uses `instance_id` to recognise the same Home Assistant under different 
 
 ## Development
 
-Read [CLAUDE.md](CLAUDE.md) and [docs/concept.md](docs/concept.md) (chapters 10, 11, 13 and 18) first.
+Read the [developer guide](docs/development.md), [CLAUDE.md](CLAUDE.md) and [docs/concept.md](docs/concept.md) (chapters 10, 11, 13 and 18) first.
 
 ```bash
 pip install -r requirements_test.txt -r requirements_lint.txt   # Python 3.14
