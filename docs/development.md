@@ -80,13 +80,13 @@ The caller is always `connection.user`; the bridge never accepts a user name or 
 1. Add the handler to the module of its group in `api/` (or a new module for a new group), declared with the decorator:
 
    ```python
-   @bridge_command("haac_bridge/areas")          # optional second argument: the request fields (voluptuous)
+   @bridge_command("haac_bridge/areas")  # optional second argument: the request fields (voluptuous)
    async def ws_areas(
        hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
    ) -> dict[str, Any]:
        """Return the HA floors and areas that hold entities exposed to the caller."""
        snapshot = get_data(hass).exposure.snapshot(hass, require_user(connection))
-       return area_catalog(hass, snapshot.entity_ids)   # topic module; plain, JSON-serialisable payload
+       return area_catalog(hass, snapshot.entity_ids)  # topic module; plain, JSON-serialisable payload
    ```
 
    (From `api/areas.py`. The caller comes from `require_user(connection)`.)
