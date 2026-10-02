@@ -596,7 +596,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
 | `haac_bridge/areas` | – | `floors` (`floor_id`, `name`, `level`, `null` if HA has none) and `areas` (`area_id`, `name`, `floor_id` or `null`, `entity_count`), limited to areas that hold at least one entity exposed to the caller and to the floors of those areas; no entity IDs (6.3) |
 | `haac_bridge/schedules/revision` | – | `revision` (hash over `id`, `updated_at`, `paused` and `last_run.at` of the schedules visible to the caller, and the scope) and `scope` (`own` or `all`) (19.4) |
-| `haac_bridge/schedules/list` | – | `revision`, `scope` and the visible schedules with the computed `next_run` and, for admins, `owner` and `owner_name` (19.4) |
+| `haac_bridge/schedules/list` | – | `revision`, `scope` and the visible schedules with the computed `next_run`, `owner`, `owner_name` and `own` (19.4) |
 | `haac_bridge/schedules/create` | `name`, `when`, `action`, `entities[]`, `enabled` | The created schedule; always owned by the caller (19.4) |
 | `haac_bridge/schedules/update` | `schedule_id`, `updated_at` of the edited version and the changed fields | The updated schedule; `HAB-SCH-004` if it changed in the meantime (19.4) |
 | `haac_bridge/schedules/delete` | `schedule_id` | Empty result; an unknown `schedule_id` is not an error (19.4) |
@@ -1461,7 +1461,7 @@ Limits: at most 50 schedules per user. `next_run` is never stored; it is compute
 
 ### 19.4 WebSocket API
 
-All commands go through the existing command wrapper (HAB error codes, 18.3). Regular users see and change only their own schedules. HA admins (`connection.user.is_admin`) see all schedules: `list` returns `scope: "all"` (otherwise `"own"`), and every schedule carries `owner` and `owner_name`. Admins may enable or disable, run now, delete and change name, time, weekdays and action of any schedule. The entity list of a foreign schedule can only be changed by its owner, because the run uses the owner's exposure; an attempt returns `HAB-SCH-006`. `create` always creates a schedule owned by the caller. `api_version` stays 1 (additive, 11.4); `haac_bridge/info` gets the field `features` (`["schedules"]`), and the app shows the schedules tab only if it is present. The commands are listed in 11.2.
+All commands go through the existing command wrapper (HAB error codes, 18.3). Regular users see and change only their own schedules. HA admins (`connection.user.is_admin`) see all schedules: `list` returns `scope: "all"` (otherwise `"own"`), and every schedule carries `owner` and `owner_name`. Every schedule in `list`, `create` and `update` replies also carries `own`, which is true if the caller is the owner; the app knows no HA user id, so this is how it tells its own schedules from foreign ones in the admin scope. Admins may enable or disable, run now, delete and change name, time, weekdays and action of any schedule. The entity list of a foreign schedule can only be changed by its owner, because the run uses the owner's exposure; an attempt returns `HAB-SCH-006`. `create` always creates a schedule owned by the caller. `api_version` stays 1 (additive, 11.4); `haac_bridge/info` gets the field `features` (`["schedules"]`), and the app shows the schedules tab only if it is present. The commands are listed in 11.2.
 
 ```json
 {"id": 21, "type": "haac_bridge/schedules/create", "name": "Morning light", "enabled": true,

@@ -63,8 +63,9 @@ async def ws_schedules_create(
 ) -> dict[str, Any]:
     """Create a schedule owned by the caller and return it."""
     manager = get_data(hass).schedules
-    schedule = await manager.async_create(require_user(connection), _fields(msg))
-    return await manager.async_describe(schedule)
+    user = require_user(connection)
+    schedule = await manager.async_create(user, _fields(msg))
+    return await manager.async_describe(schedule, user)
 
 
 @bridge_command(
@@ -76,10 +77,9 @@ async def ws_schedules_update(
 ) -> dict[str, Any]:
     """Change a schedule the caller may edit and return it; the version must be the edited one."""
     manager = get_data(hass).schedules
-    schedule = await manager.async_update(
-        require_user(connection), msg["schedule_id"], msg["updated_at"], _fields(msg)
-    )
-    return await manager.async_describe(schedule)
+    user = require_user(connection)
+    schedule = await manager.async_update(user, msg["schedule_id"], msg["updated_at"], _fields(msg))
+    return await manager.async_describe(schedule, user)
 
 
 @bridge_command("haac_bridge/schedules/delete", {vol.Required("schedule_id"): str})

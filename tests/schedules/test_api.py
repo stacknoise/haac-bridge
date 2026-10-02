@@ -55,6 +55,7 @@ async def test_create_list_and_revision(world: World, client_for: CLIENT) -> Non
     assert schedule["name"] == "Morning light"
     assert schedule["owner"] == world.anton.id
     assert schedule["owner_name"] == "Anton"
+    assert schedule["own"] is True
     assert schedule["enabled"] is True
     assert schedule["next_run"] is not None
     assert schedule["paused"] is None
@@ -236,6 +237,10 @@ async def test_admins_see_all_and_change_all_but_entities(world: World, client_f
     assert {item["id"]: item["owner_name"] for item in listing["schedules"]} == {
         mine["id"]: "Anton",
         hers["id"]: "Lena",
+    }
+    assert {item["id"]: item["own"] for item in listing["schedules"]} == {
+        mine["id"]: False,
+        hers["id"]: False,
     }
     assert (await ws(root, "schedules/revision"))["result"]["scope"] == "all"
 
