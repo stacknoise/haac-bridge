@@ -29,6 +29,7 @@ Product name of the app: **HA Android Client**, short form **HAAC**. The compani
 | Storage | Local on the device | Cloud backup of the layout |
 | Entity exposure | Per HA user via YAML | Config flow / UI in HA |
 | Time-controlled actions | Schedules for switches: fixed time with weekdays, sunrise/sunset with offset; run on the server (chapter 19) | Climate actions, one-off dates, conditions, push notifications |
+| Demo mode | A built-in demo instance with sample data, no server needed (chapter 20) | A hosted demo server, a guided tour |
 
 ### 1.3 Assumptions
 
@@ -124,7 +125,7 @@ On first start – or whenever no server is bound – the app shows the server s
 
 | Condition at app start | Target screen |
 | --- | --- |
-| No instance configured | Server URL entry |
+| No instance configured | Server URL entry (with *Try the demo*, chapter 20) |
 | Last active instance has no refresh token | HA login for that instance |
 | Last active instance: token stored, biometric unlock enabled | Biometric prompt |
 | Last active instance: token stored, biometric unlock disabled | Opens directly; the stored token is usable only while the device is unlocked |
@@ -198,6 +199,7 @@ With an active unlock window (5.4), the fingerprint step of the switch is skippe
 | Add, change or remove an address (4.5) | Re-validation and `instance_id` check; login only if HA rejects the existing refresh token; layout stays. At least one address remains |
 | Remove instance | Confirmation dialog; refresh token revoked on the server (if reachable), token and Keystore key deleted, cache, layout, assignments and aliases of that instance deleted |
 | Remove last instance | App returns to the first-start screen |
+| Demo instance | Created by *Try the demo* on the server screen; no login and no addresses; removing it makes no call to any server (chapter 20) |
 
 ### 4.5 Internal and external address
 
@@ -734,6 +736,7 @@ Mitigations:
 | Manipulated service call to a non-exposed entity | Bridge checks `entity_id` against exposure and service against domain before calling HA |
 | A schedule targets an entity the owner may not see, or a schedule switch | Entities are checked against the owner's exposure when a schedule is saved and again at every run (19.3); entities of the platform `haac_bridge` are never exposed and are rejected (`HAB-SCH-001`) |
 | A schedule keeps running for a deleted, deactivated or unconfigured user | Cleanup on the HA user events, a sweep at setup and after every change of the user list, and a check of the owner at every run (19.6); the run uses `Context(user_id=<owner>)`, so HA also applies the owner's permissions |
+| The demo mode is used to reach a server or to leak a credential | The demo makes no network connection and handles no credentials; only the server ID `demo` is routed to it, and no real instance can have that ID (20.6) |
 | Credentials in logs or crash reports | No logging of `/auth/*`; crash reporting (if any) strips headers and bodies |
 | Hard-coded secrets in APK | None needed: `client_id` is a public URL, no API keys; secret scanning in CI |
 | Leaked screens | `FLAG_SECURE` on login/settings; auto-lock after background timeout |
@@ -790,13 +793,14 @@ HAAC is distributed via Google Play and as a sideload APK. Both channels use the
 
 - **Signing**: when enrolling in Play App Signing, the existing app signing key is exported and uploaded instead of letting Google generate one. The key stays in a secured vault so the sideload flavor can be signed with it.
 - **Developer verification**: Google requires apps on certified Android devices to come from verified developers, sideloaded apps included. Enforcement starts on 30 September 2026 in Brazil, Indonesia, Singapore and Thailand and is planned globally for 2027 ([Google](https://support.google.com/android-developer-console/answer/16561738?hl=en), [Android Authority](https://www.androidauthority.com/android-sideloading-changes-timeline-3679204/)). The developer account and the package name with its signing key must be registered before the first sideload release.
-- **Play requirements**: current target API level, Data safety form (the developer collects no data; all data flows only between the device and the user's own HA instances), privacy policy URL https://stacknoise.com/haac/privacy (16.8).
+- **Play requirements**: current target API level, Data safety form (the developer collects no data; all data flows only between the device and the user's own HA instances), privacy policy URL https://stacknoise.com/haac/privacy (16.8). Reviewers cannot be given access to a private Home Assistant installation, so the Play Console *App access* declaration points to the demo mode (chapter 20).
 - **Release process**: CI builds both flavors from the same Git tag with the same `versionCode`.
 - The HAAC Bridge integration is distributed separately via HACS (chapter 10).
 
 ### 14.5 Open points
 
-- [ ] Privacy policy page `https://stacknoise.com/haac/privacy` online before the first Google Play release (16.8).
+- [x] Privacy policy page online at `https://stacknoise.com/haac/privacy/` (16.8).
+- [ ] Demo mode (chapter 20) built before the first Google Play production release (14.4).
 
 ## 15. UI mockups
 
@@ -1015,6 +1019,7 @@ Until mockups exist, Claude Code builds these with the tokens from 15.2 and stan
 | --- | --- |
 | Instance switcher and *Add instance* | 4.4 |
 | Addresses of an instance and the *Add as address* dialog | 4.5 |
+| Demo entry on M-01 (*Try the demo*) and the demo banner | 20.4 |
 | Fingerprint prompt, unlock and lock screen | 5.4, 5.5 |
 | Settings (instances, appearance, fingerprint toggle, unlock window, lock timeout, logout, diagnostics) | 4.4, 5.4, 5.5, 9.3, 15.2 |
 | Entity detail: switch, sensor, climate incl. history | 8 |
@@ -1213,6 +1218,7 @@ Whenever the kind of object depends on a type or on runtime data, it is created 
 | `HaWebSocketFactory` | WebSocket to `/api/websocket` of one address | Cleartext rule (4.3) and socket setup in one place; replaceable in tests |
 | `KeyFactory` / `CipherFactory` | Keystore keys (plain, biometric, unlock window) and ciphers | Key parameters from 5.3 and 5.4 in one place |
 | `InstanceSessionFactory` | Per-instance session: HTTP client, WebSocket, token store for one `serverId` | Strict instance isolation (4.4) |
+| `BridgeConnector` | The live connection of an instance: the real bridge, or the in-process demo bridge for the demo instance (chapter 20) | One place decides how an instance connects |
 | `EndpointSelector` | The address of an instance to connect to, from its addresses, the home network check and the probes | Selection rules of 4.5 in one place |
 | `ErrorFactory` | `HaacException` from any caught `Throwable` | Error mapping in one place (17.3) |
 | ViewModel factories (`@AssistedFactory`) | ViewModels with runtime parameters (`roomId`, `entityId`) | Hilt standard for runtime arguments |
@@ -1572,3 +1578,95 @@ App: diff of `schedules/list` against the cache (new, changed, removed), grouped
 5. DST: a nonexistent wall time runs at the first existing minute after the gap, a repeated one runs once (19.3).
 6. Limits: 50 schedules per user, 20 entities per schedule, offset ±180 minutes.
 7. Candidates for a later version: climate actions and *Skip next run*.
+
+## 20. Demo mode
+
+### 20.1 Goal and scope
+
+Anyone can try HAAC without a Home Assistant server: Google Play reviewers, who cannot be given access to a private installation (14.4), users who first want to look around, and screenshots for the store and the README.
+
+- **Scope:** one built-in *demo instance* with fixed sample data: switches, a sensor, a climate device, areas and floors for the import, one schedule and history for the charts. Every function of version 1 works against it: places and rooms, tiles, controls, detail and history, edit layout, notifications, schedules (editing online-only as in 19.1), settings.
+- **No server, no network, no login.** The demo runs inside the app. It opens no socket, uses no HTTP client and reads no credentials.
+- **Both flavors** (`play`, `sideload`) contain the demo.
+- **Out of scope:** a demo in HAAC Bridge, several demo instances, moving the demo layout to a real instance (the user adds the real instance and removes the demo), a guided tour.
+
+### 20.2 Design: an in-process bridge
+
+The app talks to the bridge only through two small interfaces: `BridgeChannel` (commands and subscriptions, 11.2) and `HaWebSocket` (`send`, `receive`, `close`). The demo implements the same protocol behind them, so the connection, sync, controllers and screens run unchanged. Package `com.stacknoise.haac.core.network.demo` in `:core:network`:
+
+| Component | Role |
+| --- | --- |
+| `DemoInstance` | Constants: server ID `demo` (a real instance ID is a random UUID, so they never collide), display name, the fixed `instance_id`, and the address `https://demo.haac.invalid/` (the reserved top-level domain `.invalid` never resolves; the address exists only because an instance row needs one) |
+| `DemoWorld` | The state of the demo in memory: entities with states and attributes, floors and areas, schedules, the exposure and schedule revisions |
+| `DemoBridge` | Answers the `haac_bridge/*` commands of chapters 11 and 19.4 from `DemoWorld` with the same JSON as the real bridge, including error replies with HAB codes, and sends the events of the subscriptions |
+| `DemoSocket` | `HaWebSocket` over `DemoBridge`: `send` hands a message to the bridge, `receive` returns its replies and events, including the answer to `ping` |
+| `DemoBridgeConnector` | `BridgeConnector` (17.2): for the server ID `demo` it builds a `BridgeConnection` over a `DemoSocket` without a handshake over the network; every other ID goes to the unchanged `DefaultBridgeConnector` |
+
+`ConnectionSupervisor`, `EntitySync`, `ScheduleSync`, `EntityController` and the screens are not changed. The routing is a Hilt binding of `BridgeConnector`, decided only by the server ID.
+
+**Fidelity rule.** `DemoBridge` is a second implementation of a protocol that the real bridge defines (chapter 11). Whenever a command or a reply changes, the demo changes in the same pull request. Tests feed the demo's replies through the real consumers (20.7), so a format difference fails a test instead of a review.
+
+### 20.3 Demo data and behaviour
+
+| Kind | Content |
+| --- | --- |
+| Switches | `switch.demo_living_room_light` "Living room light", `switch.demo_kitchen_light` "Kitchen light", `switch.demo_bedroom_lamp` "Bedroom lamp", `switch.demo_socket` "Socket"; some on, some off |
+| Sensors | `sensor.demo_temperature` (device class `temperature`, `state_class` `measurement`, °C), `sensor.demo_energy` (device class `energy`, `state_class` `total_increasing`, kWh) |
+| Climate | `climate.demo_thermostat`: modes `off`, `heat`, `auto`; target 21 °C, current 20.5 °C, step 0.5, `hvac_action`; supported features: target temperature |
+| Areas | One floor "Ground floor" with the areas "Living room", "Kitchen" and "Bedroom", each holding its entities (for *Import from Home Assistant*, 6.3) |
+| Schedule | "Morning light": weekdays 07:00, turn on `switch.demo_living_room_light`, owner is the demo user, `own = true` |
+| User | The demo user is a regular (non-admin) user named "Demo" |
+
+- **Names carry no personal data.** Entity names are English sample names, shown as they are (a user may rename them locally like any entity, 7.3).
+- **Services work.** `call_service` changes the state in `DemoWorld` and sends the changed state on the subscription, as HA does after the real service ran: `turn_on`, `turn_off`, `toggle`, `set_temperature` (within the limits of the climate entity), `set_hvac_mode`. A service the entity does not support returns `HAB-SVC-002` as the real bridge does. The confirmation of the optimistic display (8.1) therefore works.
+- **History is generated.** `history` and `statistics` return deterministic series computed from the entity ID and the requested window (a daily curve for temperature, a rising counter for energy, a few on/off periods for switches, heating and cooling phases for the thermostat). They are not stored.
+- **Schedules** follow the rules of chapter 19: validation, the limits (50 schedules, 20 entities, offset ±180 minutes), `revision`, `schedules_changed`, optimistic concurrency (`HAB-SCH-004`), `run_now` (switches the entities at once and sets `last_run`). `next_run` is computed from the weekdays and the time in the time zone of the phone; sunrise and sunset use the fixed demo times 06:30 and 19:30. **Schedules do not fire by themselves** in the demo (there is no server that waits for the time); only *Run now* switches.
+- **Always connected.** The demo connection does not drop, so the app is never "stale" and editing is always available.
+- **Revisions** are stable: the same data gives the same revision, so a restart of the app produces no *new entity* notifications.
+
+### 20.4 Entry, instance and leaving the demo
+
+- **Entry.** On the server screen (M-01) a secondary button *Try the demo* sits under *Other address…*. It is shown while no demo instance exists. A tap creates the demo instance and opens the main area; there is no login, no discovery and no permission request.
+- **Instance.** A `server` row with the ID `demo`, the display name "Demo", the HA user name "Demo", the fixed `instance_id`, the demo address and the current bridge API version. A **placeholder token** (a constant, non-secret value) is stored through the normal `TokenStore` with the device key. It is never sent anywhere; it only makes start routing (4.1), the instance switcher (4.4) and the settings treat the demo like any other instance, so none of them needs a special case. Fingerprint unlock is not offered for the demo.
+- **Marking.** A slim banner under the top bar of the *Rooms* and *Schedules* tabs reads "Demo – sample data, no server connected". *Settings → Instances* and *Diagnostics* name the instance "Demo".
+- **Hidden for the demo:** addresses and certificates (4.5, 4.3), the home network check, discovery and the local network permission.
+- **Several instances.** A real instance can be added next to the demo; with two instances the switcher appears (4.4).
+- **Removing the demo.** *Remove instance* deletes the instance row and with it the cache, layout, assignments, aliases and notifications (cascade, 12), deletes the placeholder token and the saved demo state (20.5), and makes **no call to any server**: `InstanceSignOut` does not revoke a token for the demo ID. Removing the last instance returns to the server screen, where *Try the demo* is shown again.
+
+### 20.5 State and persistence
+
+- **Local data of the demo instance** (rooms, tile layout, local names, notifications, settings) lives in Room like that of any instance and survives restarts.
+- **The state of the demo bridge** (entity states, schedules, revisions) is kept in one small JSON file in the app's private files (`demo-world.json`, no secrets, excluded from backup like all app data). It is written after every change and read when the demo connects. If the file is missing or cannot be read, the demo starts with the default data. Without the file, a schedule the user created in the demo would be missing after a restart and the schedule sync would report it as removed on the server (19.7); the file avoids this and keeps the demo consistent.
+- **Switching the demo off.** Removing the demo instance deletes the file.
+
+### 20.6 Security and privacy
+
+- The demo makes no network connection and handles no credentials. `DemoInstance` and the demo package use no `okhttp3` classes, no `TokenClient` and no `InstanceSession`; a test checks the imports of the package.
+- Only the server ID `demo` is routed to the demo; no stored real instance can have this ID (they are random UUIDs), and the demo ID can never be routed to a real server.
+- The placeholder token is not a secret and gives access to nothing; it is stored encrypted like every token (5.3) only to keep the code paths equal.
+- Data safety (14.4): unchanged; the demo collects and sends nothing.
+- Everything the user creates in the demo stays on the device and is deleted with the instance.
+
+### 20.7 Tests
+
+`DemoBridge`: every command of 11.2 and 19.4 returns a reply that the real consumer parses (`EntitySync`, `EntityHistory`, `AreaSource`, `ScheduleSync`, `ScheduleCommands` are run against a `DemoSocket`); `call_service` changes the state and sends the event, an unsupported service returns `HAB-SVC-002`, a state outside the limits of the climate entity is rejected; schedules: create, update, delete, `run_now`, limits, a conflicting `updated_at` returns `HAB-SCH-004`, `next_run` for weekdays and the demo sun times; history series are deterministic and cover the requested window; revisions are stable across restarts; the state file is written and read, and a damaged file leads to the default data.
+
+`DemoBridgeConnector`: the demo ID never touches `EndpointSelector`, `InstanceSessionFactory` or `BridgeInfoClient`; every other ID is passed to the default connector; the package imports no `okhttp3`.
+
+Instance: *Try the demo* creates the row, the placeholder token and the active instance; start routing opens the main area; removing the demo makes no network call, deletes the token, the file and the cascade, and shows the server screen again; the banner is shown on the demo and not on a real instance.
+
+### 20.8 Release and Google Play
+
+- **App access (14.4).** The Play Console declaration for reviewers reads: no sign-in needed; on the first screen tap *Try the demo*. The texts are in `docs/play-store-listing.md`; the store description mentions the demo.
+- **Version.** The demo is a new feature, so it ships in a minor version (for example 0.3.0); fixes that are needed before it go out as patch versions.
+- A real Home Assistant server stays the normal way to use the app; the demo is labelled as such in the app and in the store listing.
+
+### 20.9 Decisions
+
+1. The demo runs inside the app as a fake bridge behind `HaWebSocket`; there is no hosted demo server.
+2. One fixed demo instance with the ID `demo`, a placeholder token and a banner.
+3. The state of the demo bridge is persisted in `demo-world.json`; the local data lives in Room.
+4. Demo schedules do not fire by themselves; *Run now* switches.
+5. Both flavors contain the demo. The entry is only on the server screen.
+6. The demo replies must keep the format of the real bridge; they are checked by feeding them through the real consumers.
+7. Candidates for a later version: a guided tour, a second demo user (administrator) to show *All / Mine* of 19.7.
