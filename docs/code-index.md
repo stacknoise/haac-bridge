@@ -270,16 +270,17 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleEntity.available` | `def available(self) -> bool` | `custom_components/haac_bridge/schedules/entities.py` | Return True while the schedule exists. |
 | `ScheduleEntity.async_added_to_hass` | `async def async_added_to_hass(self) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Refresh whenever a schedule changes, runs, is paused or removed. |
 | `ScheduleEntity.async_update` | `async def async_update(self) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Look up the owner's name, which can only be read asynchronously. |
+| `ScheduleEntity._label` | `def _label(self) -> str \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return the schedule name followed by its owner in brackets, so equal names stay apart. |
 | `ScheduleEntity._handle_change` | `def _handle_change(self) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Refresh the state after a schedule changed; a removed schedule's entity is being removed. |
 | `ScheduleEnabledSwitch` | `class ScheduleEnabledSwitch(ScheduleEntity, SwitchEntity)` | `custom_components/haac_bridge/schedules/entities.py` | Shows and sets whether the schedule is enabled; a system pause does not change it. |
 | `ScheduleEnabledSwitch.__init__` | `def __init__(self, manager: ScheduleManager, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Create the switch of one schedule. |
-| `ScheduleEnabledSwitch.name` | `def name(self) -> str \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return the schedule name, which follows renames. |
+| `ScheduleEnabledSwitch.name` | `def name(self) -> str \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return the schedule name with its owner, which follows renames. |
 | `ScheduleEnabledSwitch.is_on` | `def is_on(self) -> bool \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return whether the schedule is enabled. |
 | `ScheduleEnabledSwitch.async_turn_on` | `async def async_turn_on(self, **kwargs: Any) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Enable the schedule. |
 | `ScheduleEnabledSwitch.async_turn_off` | `async def async_turn_off(self, **kwargs: Any) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Disable the schedule. |
 | `ScheduleNextRunSensor` | `class ScheduleNextRunSensor(ScheduleEntity, SensorEntity)` | `custom_components/haac_bridge/schedules/entities.py` | Shows when the schedule runs next; unknown while it is disabled or paused. |
 | `ScheduleNextRunSensor.__init__` | `def __init__(self, manager: ScheduleManager, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Create the sensor of one schedule. |
-| `ScheduleNextRunSensor.name` | `def name(self) -> str \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return the schedule name followed by `next run`. |
+| `ScheduleNextRunSensor.name` | `def name(self) -> str \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return the schedule name with its owner, followed by `next run`. |
 | `ScheduleNextRunSensor.native_value` | `def native_value(self) -> datetime \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return the planned time of the next run. |
 | `ScheduleNextRunSensor.extra_state_attributes` | `def extra_state_attributes(self) -> dict[str, Any] \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return owner, pause reason and last run. |
 | `ScheduleEntityManager` | `class ScheduleEntityManager` | `custom_components/haac_bridge/schedules/entities.py` | Keeps one switch and one sensor per schedule in step with the store (concept 19.5). |

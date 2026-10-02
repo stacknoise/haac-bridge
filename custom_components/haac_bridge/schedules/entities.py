@@ -87,6 +87,14 @@ class ScheduleEntity(Entity):
         owner = await self.hass.auth.async_get_user(schedule.owner)
         self._owner_name = owner.name if owner else None
 
+    @property
+    def _label(self) -> str | None:
+        """Return the schedule name followed by its owner in brackets, so equal names stay apart."""
+        schedule = self.schedule
+        if schedule is None:
+            return None
+        return f"{schedule.name} ({self._owner_name})" if self._owner_name else schedule.name
+
     @callback
     def _handle_change(self) -> None:
         """Refresh the state after a schedule changed; a removed schedule's entity is being removed."""
@@ -104,9 +112,8 @@ class ScheduleEnabledSwitch(ScheduleEntity, SwitchEntity):
 
     @property
     def name(self) -> str | None:
-        """Return the schedule name, which follows renames."""
-        schedule = self.schedule
-        return schedule.name if schedule else None
+        """Return the schedule name with its owner, which follows renames."""
+        return self._label
 
     @property
     def is_on(self) -> bool | None:
@@ -134,9 +141,9 @@ class ScheduleNextRunSensor(ScheduleEntity, SensorEntity):
 
     @property
     def name(self) -> str | None:
-        """Return the schedule name followed by `next run`."""
-        schedule = self.schedule
-        return f"{schedule.name} next run" if schedule else None
+        """Return the schedule name with its owner, followed by `next run`."""
+        label = self._label
+        return f"{label} next run" if label else None
 
     @property
     def native_value(self) -> datetime | None:

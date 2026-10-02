@@ -82,13 +82,13 @@ async def test_entities_appear_with_the_schedule(hass: HomeAssistant, world: Wor
 
     switch = state_of(hass, "switch", schedule.id, SUFFIX_ENABLED)
     assert switch.state == "on"
-    assert switch.name == "HAAC Schedules Morning light"
+    assert switch.name == "HAAC Schedules Morning light (Anton)"
 
     sensor = state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN)
     planned = manager_of(hass).planner.planned_run(schedule.id)
     assert planned is not None
     assert sensor.state == planned.isoformat()
-    assert sensor.name == "HAAC Schedules Morning light next run"
+    assert sensor.name == "HAAC Schedules Morning light (Anton) next run"
     assert sensor.attributes["device_class"] == "timestamp"
     assert sensor.attributes["owner"] == world.anton.id
     assert sensor.attributes["owner_name"] == "Anton"
@@ -147,11 +147,27 @@ async def test_names_follow_renames(hass: HomeAssistant, world: World) -> None:
         world.anton, schedule.id, schedule.updated_at.isoformat(), {"name": "Evening light"}
     )
     await hass.async_block_till_done()
-    assert (
-        state_of(hass, "switch", schedule.id, SUFFIX_ENABLED).name == "HAAC Schedules Evening light"
+    assert state_of(hass, "switch", schedule.id, SUFFIX_ENABLED).name == (
+        "HAAC Schedules Evening light (Anton)"
     )
     assert state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN).name == (
-        "HAAC Schedules Evening light next run"
+        "HAAC Schedules Evening light (Anton) next run"
+    )
+
+
+async def test_equal_names_of_two_owners_stay_apart(hass: HomeAssistant, world: World) -> None:
+    mine = await create(hass, world)
+    theirs = await manager_of(hass).async_create(world.root, FIELDS)
+    await hass.async_block_till_done()
+
+    assert entity_id(hass, "switch", mine.id, SUFFIX_ENABLED) == (
+        "switch.haac_schedules_morning_light_anton"
+    )
+    assert entity_id(hass, "switch", theirs.id, SUFFIX_ENABLED) == (
+        "switch.haac_schedules_morning_light_root"
+    )
+    assert entity_id(hass, "sensor", theirs.id, SUFFIX_NEXT_RUN) == (
+        "sensor.haac_schedules_morning_light_root_next_run"
     )
 
 
