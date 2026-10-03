@@ -1135,14 +1135,14 @@ haac-bridge/
 | Workflow | Repo | Trigger | Steps |
 | --- | --- | --- | --- |
 | `ci.yml` | haac-android | Pull request, push to `main` | Build both flavors, Android Lint, Detekt, copy-paste detection (CPD), codeIndexCheck, unit tests, Room migration tests |
-| `release.yml` | haac-android | Tag `v*` | Signed AAB to Google Play internal track; signed universal APK + SHA-256 to GitHub Release |
+| `release.yml` | haac-android | Tag `v*`, or by hand (*Run workflow*) with an existing tag | Checks that `appVersion` equals the tag (16.4); builds the signed sideload APK and the signed Play bundle (AAB) in one run; verifies the APK with `apksigner` and the bundle with `jarsigner`; attaches the APK and its SHA-256 to the GitHub Release; keeps the bundle as the workflow artifact `haac-<tag>-play-bundle` for 30 days. The upload to Google Play is manual (Play Console, internal test first); the workflow holds no Play credentials |
 | `validate.yml` | haac-bridge | Pull request, push, nightly | `hassfest` action, HACS validation action (`hacs/action`) |
 | `tests.yml` | haac-bridge | Pull request, push | `pytest` with `pytest-homeassistant-custom-component`, `ruff`, `bandit`, CPD, code index check (18.5) |
 | `release.yml` | haac-bridge | Tag `v*` | Check that `manifest.json` version equals the tag, create GitHub Release with notes |
 
 ### 16.6 Secrets and repository security
 
-- Signing keystore (base64), keystore and key passwords and the Google Play service account JSON are stored only as GitHub Actions secrets in an environment `release` with a required reviewer; never in the repository.
+- Signing keystore (base64), keystore and key passwords and the Google Play service account JSON (only if the upload to Google Play is automated later; not needed now, 16.5) are stored only as GitHub Actions secrets in an environment `release` with a required reviewer; never in the repository.
 - Enabled in both repos: secret scanning with push protection, Dependabot alerts and version updates, CodeQL analysis (Kotlin, Python).
 - `SECURITY.md` names a private reporting channel (GitHub private vulnerability reporting).
 
