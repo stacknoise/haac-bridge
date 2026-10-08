@@ -51,5 +51,29 @@ MISSED_RUN_GRACE: Final = timedelta(minutes=5)
 SERVICE_TIMEOUT: Final = 15
 """Seconds a service call of the bridge may take before it counts as failed (HAB-SVC-003)."""
 
+ALLOWED_SERVICES: Final[dict[str, dict[str, frozenset[str]]]] = {
+    "switch": {
+        "turn_on": frozenset(),
+        "turn_off": frozenset(),
+        "toggle": frozenset(),
+    },
+    "climate": {
+        "turn_on": frozenset(),
+        "turn_off": frozenset(),
+        "set_hvac_mode": frozenset({"hvac_mode"}),
+        "set_temperature": frozenset({"temperature", "target_temp_low", "target_temp_high"}),
+        "set_humidity": frozenset({"humidity"}),
+        "set_fan_mode": frozenset({"fan_mode"}),
+        "set_preset_mode": frozenset({"preset_mode"}),
+        "set_swing_mode": frozenset({"swing_mode"}),
+        "set_swing_horizontal_mode": frozenset({"swing_horizontal_mode"}),
+    },
+    "sensor": {},
+}
+"""Services the bridge carries out per domain, each with the service_data keys it accepts (11.4).
+
+Matches what the app and the schedules call; anything else, even if HA has it, is refused.
+"""
+
 TARGET_KEYS: Final = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
 """Keys a client must not put into service_data; the bridge sets the target itself (11.4)."""

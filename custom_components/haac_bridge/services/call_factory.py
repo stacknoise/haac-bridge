@@ -10,7 +10,7 @@ from homeassistant.core import Context, HomeAssistant, split_entity_id
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound, Unauthorized
 import voluptuous as vol
 
-from ..const import SERVICE_TIMEOUT, TARGET_KEYS
+from ..const import ALLOWED_SERVICES, SERVICE_TIMEOUT, TARGET_KEYS
 from ..core.errors import EntityNotFoundError, ErrorCode, InvalidServiceError, RequestError
 from ..exposure.exposure import Exposure
 
@@ -41,15 +41,19 @@ class ServiceCallFactory:
         service: str,
         data: dict[str, Any],
     ) -> ValidatedServiceCall:
-        """Return the validated call or raise the matching HAB error (SVC-001, ENT-001, SVC-002, WS-001)."""
+        """Return the validated call or raise the matching HAB error (SVC-001, ENT-001, SVC-002, WS-001).
+
+        Only services in ALLOWED_SERVICES are carried out, and only with their listed data keys.
+        """
         if not exposure.is_exposed(user, entity_id):
             raise InvalidServiceError(ErrorCode.SVC_NOT_ALLOWED)
         if self._hass.states.get(entity_id) is None:
             raise EntityNotFoundError(ErrorCode.ENT_NOT_FOUND)
         domain = split_entity_id(entity_id)[0]
-        if not self._hass.services.has_service(domain, service):
+        allowed_keys = ALLOWED_SERVICES.get(domain, {}).get(service)
+        if allowed_keys is None or not self._hass.services.has_service(domain, service):
             raise InvalidServiceError(ErrorCode.SVC_NOT_AVAILABLE)
-        if TARGET_KEYS & data.keys():
+        if TARGET_KEYS & data.keys() or not data.keys() <= allowed_keys:
             raise RequestError(ErrorCode.WS_INVALID_REQUEST)
         return ValidatedServiceCall(domain, service, dict(data), entity_id, user.id)
 

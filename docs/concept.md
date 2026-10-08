@@ -568,7 +568,7 @@ haac_bridge:
 - `async_setup` validates the YAML with a `voluptuous` schema, builds one `EntityFilter` per user and registers the WebSocket commands.
 - Each command resolves the caller via `connection.user` – the HA user bound to the access token. The app never sends a user name; it cannot ask for another user's entities.
 - The set of visible entities is recomputed when entities are added to or removed from the state machine, so a glob matching a newly created sensor exposes it automatically.
-- Service calls are only executed if the target `entity_id` is exposed to the caller and the service belongs to the entity's domain; everything else is rejected with error code `HAB-SVC-001` or `HAB-SVC-002` (18.3).
+- Service calls are only executed if the target `entity_id` is exposed to the caller and the service is on the bridge's allowlist for the entity's domain (11.4); everything else is rejected with error code `HAB-SVC-001` or `HAB-SVC-002` (18.3).
 - History and statistics requests are filtered the same way before querying the recorder.
 - The bridge follows the HA user events: a deleted HA user, a deactivated user and a user removed from the bridge configuration lose or pause their schedules, and a deleted user's UI entry is removed (19.6).
 
@@ -683,6 +683,19 @@ Subscription (`haac_bridge/subscribe_entities`): an empty result, then events in
 - Errors that a retry at the same address cannot fix (for example `HAAC-AUTH-003`, `HAAC-BRG-001`, `HAAC-BRG-002`, `HAAC-NET-007`, `HAAC-NET-008`) do not use the back-off; the app waits for a network change or *Try again*.
 - In the background the app closes the WebSocket and rebuilds it with the reconnect steps when it returns; this saves battery and data. After the lock timeout the full start sequence runs instead (5.5, 9.2).
 - The app never sends `service_data` containing `entity_id`; the bridge sets the target itself so a manipulated payload cannot address other entities. `service_data` with `entity_id`, `device_id`, `area_id`, `floor_id` or `label_id` is rejected with `HAB-WS-001`, and the call runs in the context of the calling user.
+- The bridge carries out only these services, each with only the listed `service_data` keys; any other service is rejected with `HAB-SVC-002`, any other key with `HAB-WS-001`:
+
+| Domain | Service | Allowed `service_data` keys |
+| --- | --- | --- |
+| `switch` | `turn_on`, `turn_off`, `toggle` | – |
+| `climate` | `turn_on`, `turn_off` | – |
+| `climate` | `set_hvac_mode` | `hvac_mode` |
+| `climate` | `set_temperature` | `temperature`, `target_temp_low`, `target_temp_high` |
+| `climate` | `set_humidity` | `humidity` |
+| `climate` | `set_fan_mode`, `set_preset_mode`, `set_swing_mode`, `set_swing_horizontal_mode` | `fan_mode`, `preset_mode`, `swing_mode`, `swing_horizontal_mode` (the one of the service) |
+| `sensor` | – | – |
+
+  `toggle` is used by schedules only; the app switches with `turn_on` and `turn_off`.
 
 ## 12. Local data model
 
