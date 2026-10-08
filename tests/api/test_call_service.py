@@ -116,3 +116,91 @@ async def test_a_hanging_service_times_out(hass: HomeAssistant, client: Any) -> 
         )
 
     assert reply["error"]["code"] == "HAB-SVC-003"
+
+
+async def test_a_service_outside_the_allowlist_is_rejected(
+    hass: HomeAssistant, client: Any
+) -> None:
+    calls = async_mock_service(hass, "switch", "factory_reset")
+    reply = await _call_service(client, "switch.garage_socket", "factory_reset")
+
+    assert reply["error"]["code"] == "HAB-SVC-002"
+    assert calls == []
+
+
+async def test_unknown_service_data_is_rejected(hass: HomeAssistant, client: Any) -> None:
+    calls = async_mock_service(hass, "switch", "turn_on")
+    reply = await _call_service(client, "switch.garage_socket", "turn_on", {"brightness": 255})
+
+    assert reply["error"]["code"] == "HAB-WS-001"
+    assert calls == []
+
+
+async def test_toggle_stays_allowed_for_switches(hass: HomeAssistant, client: Any) -> None:
+    calls = async_mock_service(hass, "switch", "toggle")
+    reply = await _call_service(client, "switch.garage_socket", "toggle")
+
+    assert reply["success"], reply
+    assert len(calls) == 1
+
+
+CLIMATE_CALLS = [
+    ("turn_on", {}),
+    ("turn_off", {}),
+    ("set_hvac_mode", {"hvac_mode": "heat"}),
+    ("set_temperature", {"temperature": 21.5}),
+    ("set_temperature", {"target_temp_low": 19.0, "target_temp_high": 23.0}),
+    ("set_humidity", {"humidity": 45}),
+    ("set_fan_mode", {"fan_mode": "auto"}),
+    ("set_preset_mode", {"preset_mode": "eco"}),
+    ("set_swing_mode", {"swing_mode": "on"}),
+    ("set_swing_horizontal_mode", {"swing_horizontal_mode": "on"}),
+]
+"""Every climate call the app makes (haac-android ServiceCallFactory)."""
+
+
+@pytest.fixture
+async def climate_client(
+    hass: HomeAssistant,
+    add_user: Callable[[str], User],
+    client_for: Callable[[User], Coroutine[Any, Any, Any]],
+    setup_bridge: Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
+) -> Any:
+    """Return a client for maria, who may control climate.living_room."""
+    maria = add_user("maria")
+    hass.states.async_set("climate.living_room", "heat", {"temperature": 21})
+    await setup_bridge(
+        {"users": [{"username": "maria", "filter": {"include_entities": ["climate.living_room"]}}]}
+    )
+    return await client_for(maria)
+
+
+@pytest.mark.parametrize(("service", "data"), CLIMATE_CALLS)
+async def test_every_climate_call_of_the_app_is_allowed(
+    hass: HomeAssistant, climate_client: Any, service: str, data: dict[str, Any]
+) -> None:
+    calls = async_mock_service(hass, "climate", service)
+    reply = await _call_service(climate_client, "climate.living_room", service, data)
+
+    assert reply["success"], reply
+    assert len(calls) == 1
+    assert {key: calls[0].data[key] for key in data} == data
+
+
+@pytest.mark.parametrize(
+    ("service", "data"),
+    [
+        ("set_temperature", {"temperature": 21, "hvac_mode": "cool"}),
+        ("set_fan_mode", {"preset_mode": "eco"}),
+        ("set_aux_heat", {"aux_heat": True}),
+    ],
+)
+async def test_other_climate_calls_are_rejected(
+    hass: HomeAssistant, climate_client: Any, service: str, data: dict[str, Any]
+) -> None:
+    calls = async_mock_service(hass, "climate", service)
+    reply = await _call_service(climate_client, "climate.living_room", service, data)
+
+    assert not reply["success"]
+    assert reply["error"]["code"] in ("HAB-SVC-002", "HAB-WS-001")
+    assert calls == []
