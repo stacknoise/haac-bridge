@@ -48,5 +48,8 @@ MAX_OFFSET_MIN: Final = 180
 MISSED_RUN_GRACE: Final = timedelta(minutes=5)
 """A run that HA missed by at most this long is still carried out once at startup (concept 19.3)."""
 
+SERVICE_TIMEOUT: Final = 15
+"""Seconds a service call of the bridge may take before it counts as failed (HAB-SVC-003)."""
+
 TARGET_KEYS: Final = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
 """Keys a client must not put into service_data; the bridge sets the target itself (11.4)."""

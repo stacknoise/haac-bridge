@@ -1,5 +1,6 @@
 """ServiceCallFactory: validated service calls for haac_bridge/call_service (concept 10.3, 11.4, 18.2)."""
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,7 +10,7 @@ from homeassistant.core import Context, HomeAssistant, split_entity_id
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound, Unauthorized
 import voluptuous as vol
 
-from ..const import TARGET_KEYS
+from ..const import SERVICE_TIMEOUT, TARGET_KEYS
 from ..core.errors import EntityNotFoundError, ErrorCode, InvalidServiceError, RequestError
 from ..exposure.exposure import Exposure
 
@@ -54,16 +55,23 @@ class ServiceCallFactory:
 
 
 async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall) -> None:
-    """Run the call as the calling user, targeting only its entity; map HA errors to HAB codes."""
+    """Run the call as the calling user, targeting only its entity; map HA errors to HAB codes.
+
+    A call that takes longer than SERVICE_TIMEOUT seconds is given up and counts as failed, so a
+    hanging integration never blocks the command or a schedule run (review finding U3).
+    """
     try:
-        await hass.services.async_call(
-            call.domain,
-            call.service,
-            call.data,
-            blocking=True,
-            context=Context(user_id=call.user_id),
-            target={ATTR_ENTITY_ID: call.entity_id},
-        )
+        async with asyncio.timeout(SERVICE_TIMEOUT):
+            await hass.services.async_call(
+                call.domain,
+                call.service,
+                call.data,
+                blocking=True,
+                context=Context(user_id=call.user_id),
+                target={ATTR_ENTITY_ID: call.entity_id},
+            )
+    except TimeoutError as err:
+        raise InvalidServiceError(ErrorCode.SVC_FAILED) from err
     except Unauthorized as err:
         raise InvalidServiceError(ErrorCode.SVC_NOT_ALLOWED) from err
     except ServiceNotFound as err:
