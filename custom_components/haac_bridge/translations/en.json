@@ -94,6 +94,9 @@
     "auth_no_user": {
       "message": "The request has no signed-in Home Assistant user"
     },
+    "auth_inactive": {
+      "message": "Your Home Assistant user is deactivated"
+    },
     "svc_not_allowed": {
       "message": "You are not allowed to control this device"
     },

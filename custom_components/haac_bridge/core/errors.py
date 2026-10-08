@@ -26,6 +26,9 @@ class ErrorCode(StrEnum):
     AUTH_NO_USER = "HAB-AUTH-001"
     """The WebSocket connection has no Home Assistant user bound to its access token."""
 
+    AUTH_INACTIVE = "HAB-AUTH-002"
+    """The Home Assistant user bound to the connection is deactivated."""
+
     SVC_NOT_ALLOWED = "HAB-SVC-001"
     """The target entity is not exposed to the calling user."""
 
@@ -80,6 +83,7 @@ APP_CODES: Final[dict[ErrorCode, str | None]] = {
     ErrorCode.CFG_INVALID: None,
     ErrorCode.CFG_UNKNOWN_USER: None,
     ErrorCode.AUTH_NO_USER: "HAAC-AUTH-003",
+    ErrorCode.AUTH_INACTIVE: "HAAC-AUTH-006",
     ErrorCode.SVC_NOT_ALLOWED: "HAAC-BRG-003",
     ErrorCode.SVC_NOT_AVAILABLE: "HAAC-BRG-004",
     ErrorCode.SVC_FAILED: "HAAC-BRG-005",
@@ -123,7 +127,7 @@ class ConfigError(HaacBridgeError):
 
 
 class NotAllowedError(HaacBridgeError):
-    """The caller could not be identified (area AUTH)."""
+    """The caller could not be identified or is deactivated (area AUTH)."""
 
     default_code = ErrorCode.AUTH_NO_USER
 
