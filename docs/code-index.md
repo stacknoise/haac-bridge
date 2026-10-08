@@ -152,8 +152,12 @@ Lists every module, class and function of the integration with signature, file a
 | `FilterFactory` | `class FilterFactory` | `custom_components/haac_bridge/exposure/filter_factory.py` | Creates entity filters with HA's entityfilter helper, so rules match the HomeKit Bridge. |
 | `FilterFactory.create` | `def create(self, entry: UserEntry) -> EntityPredicate` | `custom_components/haac_bridge/exposure/filter_factory.py` | Return the filter for one user entry; without an include rule it exposes nothing. |
 | `haac_bridge.exposure.own_entities` | `module` | `custom_components/haac_bridge/exposure/own_entities.py` | Recognises the entities HAAC Bridge creates itself, which are never exposed (concept 10.2, 19.5). |
+| `_DeletedOwnEntities` | `class _DeletedOwnEntities` | `custom_components/haac_bridge/exposure/own_entities.py` | Entity IDs of deleted entities of the platform `haac_bridge`, rebuilt after registry changes. |
+| `_DeletedOwnEntities.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/exposure/own_entities.py` | Start empty and follow the entity registry; the set is built on first use. |
+| `_DeletedOwnEntities._async_invalidate` | `def _async_invalidate(self, _event: Event[er.EventEntityRegistryUpdatedData]) -> None` | `custom_components/haac_bridge/exposure/own_entities.py` | Forget the set; an entity was created, removed or changed. |
+| `_DeletedOwnEntities.contains` | `def contains(self, entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/own_entities.py` | Return True if a deleted registry entry of the bridge's platform had this entity ID. |
 | `own_entity_checker` | `def own_entity_checker(hass: HomeAssistant) -> Callable[[str], bool]` | `custom_components/haac_bridge/exposure/own_entities.py` | Return a function that tells whether an entity ID belongs to the platform `haac_bridge`. |
-| `own_entity_checker._is_own` | `def _is_own(entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/own_entities.py` | Return True if the entity registry lists the entity under the bridge's own platform. |
+| `own_entity_checker._is_own` | `def _is_own(entity_id: str) -> bool` | `custom_components/haac_bridge/exposure/own_entities.py` | Return True if the registry lists the entity, now or deleted, under the bridge's platform. |
 
 ## entities
 

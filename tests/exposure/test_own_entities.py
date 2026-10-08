@@ -67,3 +67,36 @@ def test_is_configured(hass: HomeAssistant) -> None:
     exposure = _exposure(hass)
     assert exposure.is_configured(_user())
     assert not exposure.is_configured(_user("someone-else"))
+
+
+async def test_deleted_own_entities_stay_hidden(hass: HomeAssistant) -> None:
+    registry = er.async_get(hass)
+    registry.async_get_or_create("switch", "haac_bridge", "a", suggested_object_id="own")
+    registry.async_get_or_create("switch", "other", "b", suggested_object_id="foreign")
+    check = own_entity_checker(hass)
+    assert check("switch.own") is True
+
+    registry.async_remove("switch.own")
+    registry.async_remove("switch.foreign")
+    await hass.async_block_till_done()
+
+    assert check("switch.own") is True
+    assert check("switch.foreign") is False
+    exposure = _exposure(hass)
+    assert exposure.filter_exposed(_user(), ["switch.own", "switch.foreign"]) == ["switch.foreign"]
+
+
+async def test_a_restored_foreign_entity_with_an_old_own_id_is_not_hidden(
+    hass: HomeAssistant,
+) -> None:
+    registry = er.async_get(hass)
+    registry.async_get_or_create("switch", "haac_bridge", "a", suggested_object_id="reused")
+    check = own_entity_checker(hass)
+    registry.async_remove("switch.reused")
+    await hass.async_block_till_done()
+    assert check("switch.reused") is True
+
+    registry.async_get_or_create("switch", "other", "b", suggested_object_id="reused")
+    await hass.async_block_till_done()
+
+    assert check("switch.reused") is False
