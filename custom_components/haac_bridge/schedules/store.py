@@ -25,11 +25,13 @@ class ScheduleStore:
             hass, SCHEDULE_STORE_VERSION, SCHEDULE_STORE_KEY, private=True
         )
         self._schedules: dict[str, Schedule] = {}
+        self._sorted: list[Schedule] | None = None
 
     async def async_load(self) -> None:
         """Read the schedules from storage; a damaged entry is skipped and logged once."""
         stored = await self._store.async_load() or {}
         self._schedules = {}
+        self._sorted = None
         for raw in stored.get("schedules", []):
             try:
                 schedule = schedule_from_dict(raw)
@@ -40,8 +42,10 @@ class ScheduleStore:
 
     @property
     def schedules(self) -> list[Schedule]:
-        """Return all schedules, oldest first."""
-        return sorted(self._schedules.values(), key=lambda item: item.created_at)
+        """Return all schedules, oldest first; sorted once per change, not on every access."""
+        if self._sorted is None:
+            self._sorted = sorted(self._schedules.values(), key=lambda item: item.created_at)
+        return list(self._sorted)
 
     def get(self, schedule_id: str) -> Schedule | None:
         """Return the schedule with this id, or None."""
@@ -94,10 +98,12 @@ class ScheduleStore:
         return removed
 
     async def _async_save(self) -> None:
-        """Write all schedules to storage."""
+        """Forget the sorted list and write all schedules to storage."""
+        self._sorted = None
         await self._store.async_save({"schedules": [item.to_dict() for item in self.schedules]})
 
     async def async_remove_file(self) -> None:
         """Delete the storage file when the config entry of the bridge is removed."""
         self._schedules = {}
+        self._sorted = None
         await self._store.async_remove()

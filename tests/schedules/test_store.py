@@ -141,3 +141,25 @@ async def test_damaged_entries_are_skipped(
     store = await _loaded(hass)
     assert store.schedules == [good]
     assert caplog.text.count("damaged schedule") == 2
+
+
+async def test_the_sorted_list_follows_every_change(hass: HomeAssistant) -> None:
+    store = ScheduleStore(hass)
+    late = make_schedule(name="Late", created=CREATED + timedelta(hours=1))
+    early = make_schedule(name="Early")
+    await store.async_add(late)
+    assert [item.name for item in store.schedules] == ["Late"]
+
+    await store.async_add(early)
+    listing = store.schedules
+    listing.clear()  # a copy: the store keeps its own list
+    assert [item.name for item in store.schedules] == ["Early", "Late"]
+
+    await store.async_replace(early.with_changes(name="Earlier"))
+    assert [item.name for item in store.schedules] == ["Earlier", "Late"]
+
+    await store.async_remove([late.id])
+    assert [item.name for item in store.schedules] == ["Earlier"]
+
+    await store.async_remove_file()
+    assert store.schedules == []

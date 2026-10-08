@@ -30,6 +30,9 @@ SIGNAL_EXPOSURE_CHANGED: Final = f"{DOMAIN}_exposure_changed"
 SIGNAL_SCHEDULES_CHANGED: Final = f"{DOMAIN}_schedules_changed"
 """Dispatcher signal sent after a schedule was created, changed, run, paused or removed (19.4)."""
 
+SIGNAL_SCHEDULE_CHANGED: Final = f"{DOMAIN}_schedule_changed_{{}}"
+"""Dispatcher signal of one schedule (format it with the schedule id); only its entities follow it."""
+
 SCHEDULE_STORE_KEY: Final = f"{DOMAIN}.schedules"
 """Name of the storage file (in `.storage`) that holds the schedules (concept 19.2)."""
 

@@ -10,7 +10,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
-from ..const import MAX_SCHEDULES_PER_USER, RUN_NOW_COOLDOWN, SIGNAL_SCHEDULES_CHANGED
+from ..const import (
+    MAX_SCHEDULES_PER_USER,
+    RUN_NOW_COOLDOWN,
+    SIGNAL_SCHEDULE_CHANGED,
+    SIGNAL_SCHEDULES_CHANGED,
+)
 from ..core.errors import ErrorCode, ScheduleError
 from ..core.runtime import get_data
 from .model import (
@@ -67,9 +72,15 @@ class ScheduleManager:
         self.runner.async_cancel_all()
 
     @callback
-    def notify(self) -> None:
-        """Tell subscribers that a schedule changed, ran, was paused or was removed."""
+    def notify(self, *schedule_ids: str) -> None:
+        """Tell subscribers that schedules changed, ran, were paused or were removed.
+
+        Subscriptions and the entity manager get one general signal; the entities of each named
+        schedule get their own signal, so a run does not rewrite the state of every schedule.
+        """
         async_dispatcher_send(self._hass, SIGNAL_SCHEDULES_CHANGED)
+        for schedule_id in schedule_ids:
+            async_dispatcher_send(self._hass, SIGNAL_SCHEDULE_CHANGED.format(schedule_id))
 
     async def _async_run_due(self, schedule_id: str) -> None:
         """Run a schedule whose time has come."""
@@ -126,7 +137,7 @@ class ScheduleManager:
         self._check_exposed(user, schedule.entities)
         await self.store.async_add(schedule)
         await self.planner.async_plan(schedule.id)
-        self.notify()
+        self.notify(schedule.id)
         return schedule
 
     async def async_update(
@@ -144,7 +155,7 @@ class ScheduleManager:
         )
         await self.store.async_replace(updated)
         await self.planner.async_plan(updated.id)
-        self.notify()
+        self.notify(updated.id)
         return updated
 
     async def async_set_enabled(self, schedule_id: str, *, enabled: bool) -> None:
@@ -156,7 +167,7 @@ class ScheduleManager:
             schedule.with_changes(enabled=enabled, updated_at=dt_util.utcnow())
         )
         await self.planner.async_plan(schedule_id)
-        self.notify()
+        self.notify(schedule_id)
 
     async def async_wipe(self) -> None:
         """Delete every schedule and the storage file; called when the config entry is removed."""
@@ -164,7 +175,7 @@ class ScheduleManager:
         await self.store.async_remove_file()
         for schedule_id in schedule_ids:
             await self.planner.async_plan(schedule_id)
-        self.notify()
+        self.notify(*schedule_ids)
 
     async def async_delete(self, user: User, schedule_id: str) -> None:
         """Delete a schedule the user may edit; an unknown id is not an error."""
@@ -216,9 +227,10 @@ class ScheduleManager:
         if not replace and not remove:
             return
         await self.store.async_apply_changes(replace, remove)
-        for schedule_id in [*(item.id for item in replace), *remove]:
+        changed = [*(item.id for item in replace), *remove]
+        for schedule_id in changed:
             await self.planner.async_plan(schedule_id)
-        self.notify()
+        self.notify(*changed)
 
     async def async_remove_owner(self, owner_id: str) -> None:
         """Delete every schedule of a user, as when the HA user was deleted (concept 19.6.1)."""
@@ -231,7 +243,7 @@ class ScheduleManager:
             self._manual_runs.pop(schedule.id, None)
             await self.planner.async_plan(schedule.id)
         if removed:
-            self.notify()
+            self.notify(*(schedule.id for schedule in removed))
 
     def _require(self, schedule_id: str) -> Schedule:
         """Return the schedule or raise HAB-SCH-003."""

@@ -779,13 +779,13 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | S4 any service of the domain was allowed | Low | WP9 | Done for 0.3.0 (#81): list of services and `service_data` keys (11.4) |
 | S5 all attributes are sent to the app | Low | WP19 | Open (0.3.0) |
 | S6 YAML import resolved `!include` and `!env_var` | Low | WP4 | Done in 0.2.3 (#76) |
-| S7 no limit for subscriptions and `run_now` | Low | WP10 | Done for 0.3.0: one subscription of each kind per connection, `run_now` 10 s apart (`HAB-SCH-007`) |
+| S7 no limit for subscriptions and `run_now` | Low | WP10 | Done for 0.3.0 (#86): one subscription of each kind per connection, `run_now` 10 s apart (`HAB-SCH-007`) |
 | S8 deactivated users not refused | Low | WP6 | Done in 0.2.3 (#78): `HAB-AUTH-002` |
 | S9 CI actions not pinned | Low | WP7 | Done in 0.2.3 (#79) |
 | U2 a run due during a reload is lost | Low | WP15 | Open (0.3.0) |
 | U3 service calls without a timeout | Low | WP5 | Done in 0.2.3 (#77): 15 s |
 | U4 options flow can overwrite parallel changes | Low | WP16 | Open (0.3.0) |
-| P2 every schedule change updates all schedule entities | Low | WP12 | Open (0.3.0) |
+| P2 every schedule change updates all schedule entities | Low | WP12 | Done for 0.3.0: one signal per schedule; the owner's name is read again only when the owner changes |
 | P3 exposed set recomputed for every request | Low | WP11 | Done for 0.3.0 (#85) |
 | P4 every run writes the whole schedule file at once | Low | WP13 | Open (0.3.0) |
 | P5 runs switch one entity after another; `run_now` waits for the run | Low | WP14 | Done for 0.3.0 (#82): parallel; `run_now` replies at once |
@@ -793,8 +793,8 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | S11 `info` for unconfigured users; binding by login name | Note | WP25 | Open (1.0) |
 | U5 duplicate YAML entries for one user | Note | WP17 | Open (0.3.0) |
 | U6 wildcard check only in the UI | Note | WP17 | Open (0.3.0) |
-| P6 schedule store sorts on every access | Note | – | Open, with WP12 |
-| P7 sun trigger computes up to 367 days | Note | – | Open, with WP12 |
+| P6 schedule store sorts on every access | Note | WP12 | Done for 0.3.0: sorted once per change |
+| P7 sun trigger computes up to 367 days | Note | – | Open; only weekday sets with long polar gaps reach many days, kept as is |
 
 Decisions taken during the review: history up to 366 days instead of 31, because the app reads states of switches and climate entities over any custom range; hourly statistics up to 32 days because counters read one lead period; daily statistics up to 5 years; the service list is what the app's `ServiceCallFactory` sends plus `switch.toggle` for schedules; `run_now` replies at once. The app maps the new codes since #91: `HAB-AUTH-002` → `HAAC-AUTH-006`, `HAB-HIST-002` → `HAAC-BRG-006`. Pull request numbers refer to `stacknoise/haac-bridge` unless stated otherwise.
 

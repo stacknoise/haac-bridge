@@ -41,8 +41,9 @@ class Harness:
         """Record a due run."""
         self.calls.append(schedule_id)
 
-    def _changed(self) -> None:
+    def _changed(self, schedule_id: str) -> None:
         """Count a pause or resume."""
+        assert schedule_id
         self.changes += 1
 
     async def start(self, hass: HomeAssistant, *schedules: Schedule) -> None:
