@@ -1,10 +1,12 @@
 """Tests for the HA entities of schedules and the config entry that carries them (concept 19.5)."""
 
 from typing import Any
+from unittest.mock import patch
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.entity import Entity
 from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.haac_bridge.const import DOMAIN
@@ -261,3 +263,40 @@ async def test_unloading_the_entry_keeps_the_schedules(hass: HomeAssistant, worl
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     assert state_of(hass, "switch", schedule.id, SUFFIX_ENABLED).state == "on"
+
+
+async def test_a_run_writes_only_the_states_of_its_own_schedule(
+    hass: HomeAssistant, world: World
+) -> None:
+    async_mock_service(hass, "switch", "turn_on")
+    mine = await create(hass, world)
+    other = await create(hass, world, name="Evening light")
+    other_ids = {
+        entity_id(hass, "switch", other.id, SUFFIX_ENABLED),
+        entity_id(hass, "sensor", other.id, SUFFIX_NEXT_RUN),
+    }
+    written: list[str] = []
+    original = Entity.async_write_ha_state
+
+    def _record(self: Entity) -> None:
+        written.append(self.entity_id)
+        original(self)
+
+    with patch.object(Entity, "async_write_ha_state", _record):
+        await manager_of(hass).runner.async_run(mine.id)
+        await hass.async_block_till_done()
+
+    assert entity_id(hass, "sensor", mine.id, SUFFIX_NEXT_RUN) in written
+    assert not other_ids & set(written)
+
+
+async def test_the_owner_name_follows_a_rename_of_the_user(
+    hass: HomeAssistant, world: World
+) -> None:
+    schedule = await create(hass, world)
+    await hass.auth.async_update_user(world.anton, name="Toni")
+    await hass.async_block_till_done()
+
+    assert state_of(hass, "switch", schedule.id, SUFFIX_ENABLED).name == (
+        "HAAC Schedules Morning light (Toni)"
+    )

@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any
 
+from homeassistant.auth import EVENT_USER_UPDATED
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from ..const import DOMAIN, SIGNAL_SCHEDULES_CHANGED
+from ..const import DOMAIN, SIGNAL_SCHEDULE_CHANGED, SIGNAL_SCHEDULES_CHANGED
 from .manager import ScheduleManager
 from .model import Schedule
 
@@ -75,17 +76,35 @@ class ScheduleEntity(Entity):
         return self.schedule is not None
 
     async def async_added_to_hass(self) -> None:
-        """Refresh whenever a schedule changes, runs, is paused or removed."""
+        """Refresh when this schedule changes, runs or is paused, and when its owner is renamed."""
         self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_SCHEDULES_CHANGED, self._handle_change)
+            async_dispatcher_connect(
+                self.hass, SIGNAL_SCHEDULE_CHANGED.format(self._schedule_id), self._handle_change
+            )
+        )
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                EVENT_USER_UPDATED, self._handle_owner_change, event_filter=self._is_owner_event
+            )
         )
 
     async def async_update(self) -> None:
-        """Look up the owner's name, which can only be read asynchronously."""
+        """Look up the owner's name, which can only be read asynchronously; runs when added and on renames."""
         if (schedule := self.schedule) is None:
             return
         owner = await self.hass.auth.async_get_user(schedule.owner)
         self._owner_name = owner.name if owner else None
+
+    @callback
+    def _is_owner_event(self, event_data: Mapping[str, Any]) -> bool:
+        """Return True for a user event about this schedule's owner."""
+        schedule = self.schedule
+        return schedule is not None and event_data.get("user_id") == schedule.owner
+
+    @callback
+    def _handle_owner_change(self, _event: Event) -> None:
+        """Read the owner's name again after the owner changed."""
+        self.async_schedule_update_ha_state(True)
 
     @property
     def _label(self) -> str | None:
@@ -97,10 +116,10 @@ class ScheduleEntity(Entity):
 
     @callback
     def _handle_change(self) -> None:
-        """Refresh the state after a schedule changed; a removed schedule's entity is being removed."""
+        """Write the state after this schedule changed; a removed schedule's entity is being removed."""
         if self.schedule is None:
             return
-        self.async_schedule_update_ha_state(True)
+        self.async_write_ha_state()
 
 
 class ScheduleEnabledSwitch(ScheduleEntity, SwitchEntity):

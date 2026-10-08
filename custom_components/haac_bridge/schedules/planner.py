@@ -25,7 +25,7 @@ class SchedulePlanner:
         store: ScheduleStore,
         triggers: TriggerFactory,
         on_due: Callable[[str], Awaitable[None]],
-        on_changed: Callable[[], None],
+        on_changed: Callable[[str], None],
     ) -> None:
         """Create the planner; `on_due` runs a schedule, `on_changed` reports a pause or resume."""
         self._hass = hass
@@ -117,7 +117,7 @@ class SchedulePlanner:
             return
         new_pause = Paused(PauseReason.SUN_UNAVAILABLE, dt_util.utcnow()) if paused else None
         await self._store.async_replace(schedule.with_changes(paused=new_pause))
-        self._on_changed()
+        self._on_changed(schedule.id)
 
     def _missed(self, schedule: Schedule, now: datetime) -> bool:
         """Return whether a run was due shortly before `now` and has not happened (concept 19.3)."""

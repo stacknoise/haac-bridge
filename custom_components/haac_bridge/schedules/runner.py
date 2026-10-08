@@ -31,7 +31,7 @@ class RunHooks:
 
     remove: Callable[[list[str]], Awaitable[None]]
     replan: Callable[[str], Awaitable[None]]
-    changed: Callable[[], None]
+    changed: Callable[[str], None]
     ready: Callable[[], bool]
 
 
@@ -164,7 +164,7 @@ class ScheduleRunner:
             if value is not None
         }
         await self._store.async_replace(current.with_changes(**changes))
-        self._hooks.changed()
+        self._hooks.changed(schedule_id)
 
 
 def _result(done: int, total: int) -> RunResult:
