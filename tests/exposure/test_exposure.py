@@ -1,14 +1,22 @@
 """Tests for per-user filter evaluation, deny by default and the revision (concept 10.2, 14.2)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
 from unittest.mock import patch
 
 from homeassistant.auth.models import User
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 import pytest
 
 from custom_components.haac_bridge.config.schema import CONFIG_SCHEMA, parse_users
-from custom_components.haac_bridge.exposure.exposure import Exposure, compute_revision
+from custom_components.haac_bridge.config.users import entry_matches
+from custom_components.haac_bridge.core.runtime import get_data
+from custom_components.haac_bridge.exposure.exposure import (
+    CACHE_LIMIT,
+    Exposure,
+    compute_revision,
+)
 from custom_components.haac_bridge.exposure.filter_factory import FilterFactory
 
 YAML = {
@@ -72,17 +80,84 @@ async def test_deny_by_default(
 
 @pytest.mark.usefixtures("demo_states")
 async def test_new_entity_matching_glob_changes_revision(
-    hass: HomeAssistant, exposure: Exposure, add_user: Callable[[str], User]
+    hass: HomeAssistant,
+    add_user: Callable[[str], User],
+    setup_bridge: Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
 ) -> None:
     anton = add_user("anton")
-    before = exposure.snapshot(hass, anton)
+    await setup_bridge(YAML["haac_bridge"])
+    before = get_data(hass).exposure.snapshot(hass, anton)
     hass.states.async_set("sensor.cellar_humidity", "70")
-    after = exposure.snapshot(hass, anton)
+    after = get_data(hass).exposure.snapshot(hass, anton)
     assert "sensor.cellar_humidity" in after.entity_ids
     assert after.revision != before.revision
 
     hass.states.async_remove("sensor.cellar_humidity")
-    assert exposure.snapshot(hass, anton).revision == before.revision
+    assert get_data(hass).exposure.snapshot(hass, anton).revision == before.revision
+
+
+@pytest.mark.usefixtures("demo_states")
+async def test_answers_are_cached_per_user_and_entity(
+    hass: HomeAssistant, exposure: Exposure, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    module = "custom_components.haac_bridge.exposure.exposure"
+    with patch(f"{module}.entry_matches", wraps=entry_matches) as matches:
+        for _ in range(3):
+            assert exposure.is_exposed(anton, "switch.garage_socket")
+            first = exposure.exposed_entity_ids(hass, anton)
+            first.clear()  # callers get a copy, never the cached list
+    assert matches.call_count == 1  # anton is the first entry: one lookup for all calls
+    assert exposure._decisions == {(anton.id, "switch.garage_socket"): True}
+    assert exposure._exposed_sets[anton.id] == exposure.exposed_entity_ids(hass, anton) != []
+
+
+@pytest.mark.usefixtures("demo_states")
+async def test_a_login_name_added_later_is_picked_up(
+    hass: HomeAssistant,
+    add_user: Callable[[str], User],
+    setup_bridge: Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
+) -> None:
+    await setup_bridge(YAML["haac_bridge"])
+    guest = add_user("someone")
+    exposure = get_data(hass).exposure
+    assert not exposure.is_exposed(guest, "switch.office_fan")
+
+    guest.credentials[0].data["username"] = "guest"
+    await hass.auth.async_update_user(guest, name="Guest")
+    await hass.async_block_till_done()
+
+    assert get_data(hass).exposure.is_exposed(guest, "switch.office_fan")
+
+
+@pytest.mark.usefixtures("demo_states")
+async def test_an_entity_taken_over_by_the_bridge_is_hidden_at_once(
+    hass: HomeAssistant,
+    add_user: Callable[[str], User],
+    setup_bridge: Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
+) -> None:
+    anton = add_user("anton")
+    await setup_bridge(YAML["haac_bridge"])
+    exposure = get_data(hass).exposure
+    assert exposure.is_exposed(anton, "sensor.attic_humidity")  # cached as exposed
+
+    entry = er.async_get(hass).async_get_or_create(
+        "sensor", "haac_bridge", "x", suggested_object_id="attic_humidity"
+    )
+    await hass.async_block_till_done()
+    assert entry.entity_id == "sensor.attic_humidity"
+    hass.states.async_set("sensor.attic_humidity", "40")
+
+    assert not exposure.is_exposed(anton, "sensor.attic_humidity")
+    assert "sensor.attic_humidity" not in exposure.exposed_entity_ids(hass, anton)
+
+
+async def test_the_decision_cache_is_bounded(hass: HomeAssistant) -> None:
+    exposure = Exposure(parse_users(CONFIG_SCHEMA(YAML)), FilterFactory())
+    user = User(name="Anton", perm_lookup=None, id="u1")  # type: ignore[arg-type]
+    for i in range(CACHE_LIMIT + 5):
+        exposure.is_exposed(user, f"sensor.s{i}")
+    assert len(exposure._decisions) <= CACHE_LIMIT
 
 
 async def test_revision_is_order_independent() -> None:

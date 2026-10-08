@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import hashlib
 
 from homeassistant.auth.models import User
-from homeassistant.core import HomeAssistant, split_entity_id
+from homeassistant.core import HomeAssistant, callback, split_entity_id
 
 from ..config.schema import UserEntry
 from ..config.users import entry_matches
@@ -30,6 +30,10 @@ class _UserRule:
     predicate: EntityPredicate
 
 
+CACHE_LIMIT = 10_000
+"""Most cached (user, entity) answers; the cache starts over when it is full."""
+
+
 def _nothing_excluded(entity_id: str) -> bool:
     """Exclude no entity; the default when the caller has no entities of its own to hide."""
     return False
@@ -44,9 +48,33 @@ class Exposure:
         filters: FilterFactory,
         is_own_entity: Callable[[str], bool] = _nothing_excluded,
     ) -> None:
-        """Build one filter per configured user entry; `is_own_entity` marks entities never exposed."""
+        """Build one filter per configured user entry; `is_own_entity` marks entities never exposed.
+
+        Answers are cached (review finding P1, P3): the rule per user, the decision per user and
+        entity, and the exposed set per user. The `async_invalidate_*` methods clear them.
+        """
         self._rules = [_UserRule(entry, filters.create(entry)) for entry in entries]
         self._is_own_entity = is_own_entity
+        self._rule_by_user: dict[str, _UserRule | None] = {}
+        self._decisions: dict[tuple[str, str], bool] = {}
+        self._exposed_sets: dict[str, list[str]] = {}
+
+    @callback
+    def async_invalidate_users(self) -> None:
+        """Forget everything; a HA user was added, changed or removed (login names can change)."""
+        self._rule_by_user.clear()
+        self.async_invalidate_registry()
+
+    @callback
+    def async_invalidate_registry(self) -> None:
+        """Forget decisions and sets; the entity registry changed (own entities, renamed IDs)."""
+        self._decisions.clear()
+        self._exposed_sets.clear()
+
+    @callback
+    def async_invalidate_states(self) -> None:
+        """Forget the exposed sets; an entity appeared in or left the state machine."""
+        self._exposed_sets.clear()
 
     def is_configured(self, user: User) -> bool:
         """Return True if the user has an entry in the YAML or the UI configuration."""
@@ -59,8 +87,17 @@ class Exposure:
         """
         if split_entity_id(entity_id)[0] not in SUPPORTED_DOMAINS:
             return False
+        key = (user.id, entity_id)
+        if (decision := self._decisions.get(key)) is not None:
+            return decision
         rule = self._rule_for(user)
-        return rule is not None and rule.predicate(entity_id) and not self._is_own_entity(entity_id)
+        decision = (
+            rule is not None and rule.predicate(entity_id) and not self._is_own_entity(entity_id)
+        )
+        if len(self._decisions) >= CACHE_LIMIT:
+            self._decisions.clear()
+        self._decisions[key] = decision
+        return decision
 
     def filter_exposed(self, user: User, entity_ids: list[str]) -> list[str]:
         """Return the requested IDs the user may see, sorted and without duplicates."""
@@ -71,11 +108,14 @@ class Exposure:
         rule = self._rule_for(user)
         if rule is None:
             return []
-        return sorted(
-            state.entity_id
-            for state in hass.states.async_all(SUPPORTED_DOMAINS)
-            if rule.predicate(state.entity_id) and not self._is_own_entity(state.entity_id)
-        )
+        if (cached := self._exposed_sets.get(user.id)) is None:
+            cached = sorted(
+                state.entity_id
+                for state in hass.states.async_all(SUPPORTED_DOMAINS)
+                if rule.predicate(state.entity_id) and not self._is_own_entity(state.entity_id)
+            )
+            self._exposed_sets[user.id] = cached
+        return list(cached)
 
     def configured_names(self, user: User) -> dict[str, str]:
         """Return the names from `entity_config` that apply to the user (global, then own)."""
@@ -90,8 +130,13 @@ class Exposure:
         return ExposureSnapshot(entity_ids, exposed, compute_revision(entity_ids, names))
 
     def _rule_for(self, user: User) -> _UserRule | None:
-        """Return the first rule whose entry refers to the user."""
-        return next((rule for rule in self._rules if entry_matches(rule.entry, user)), None)
+        """Return the first rule whose entry refers to the user, looked up once per user."""
+        try:
+            return self._rule_by_user[user.id]
+        except KeyError:
+            rule = next((rule for rule in self._rules if entry_matches(rule.entry, user)), None)
+            self._rule_by_user[user.id] = rule
+            return rule
 
 
 def compute_revision(entity_ids: list[str], names: Mapping[str, str] | None = None) -> str:
