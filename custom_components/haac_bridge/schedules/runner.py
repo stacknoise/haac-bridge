@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import logging
 
 from homeassistant.auth.models import User
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
 from ..core.errors import ErrorCode, HaacBridgeError
@@ -44,6 +44,22 @@ class ScheduleRunner:
         self._store = store
         self._hooks = hooks
         self._locks: dict[str, asyncio.Lock] = {}
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    @callback
+    def async_run_in_background(self, schedule_id: str) -> None:
+        """Start a run without waiting for it; the result arrives as a schedule change (concept 19.4)."""
+        task = self._hass.async_create_background_task(
+            self.async_run(schedule_id), name=f"haac_bridge run {schedule_id}"
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    @callback
+    def async_cancel_all(self) -> None:
+        """Cancel the runs started in the background, e.g. one waiting to retry, when HA stops."""
+        for task in list(self._tasks):
+            task.cancel()
 
     async def async_run(self, schedule_id: str) -> None:
         """Run a schedule now; a run of the same schedule that is still going on finishes first."""
@@ -75,21 +91,23 @@ class ScheduleRunner:
         await self._async_record(schedule.id, _result(done, len(schedule.entities)))
 
     async def _async_switch_all(self, user: User, schedule: Schedule, targets: list[str]) -> int:
-        """Switch the entities, the unavailable ones after a short wait; return how many worked."""
+        """Switch the entities in parallel, the unavailable ones after a short wait; return how many worked."""
         service = schedule.action.value
         ready = [entity for entity in targets if not self._is_unavailable(entity)]
         later = [entity for entity in targets if entity not in ready]
-        done = sum([await self._async_switch_one(user, entity, service) for entity in ready])
+        done = await self._async_switch_many(user, ready, service)
         if later:
             await self._async_wait_before_retry()
-            done += sum(
-                [
-                    await self._async_switch_one(user, entity, service)
-                    for entity in later
-                    if not self._is_unavailable(entity)
-                ]
-            )
+            available = [entity for entity in later if not self._is_unavailable(entity)]
+            done += await self._async_switch_many(user, available, service)
         return done
+
+    async def _async_switch_many(self, user: User, entity_ids: list[str], service: str) -> int:
+        """Switch the entities at the same time; return how many worked."""
+        results = await asyncio.gather(
+            *(self._async_switch_one(user, entity_id, service) for entity_id in entity_ids)
+        )
+        return sum(results)
 
     async def _async_wait_before_retry(self) -> None:
         """Wait before unavailable entities are tried once more."""

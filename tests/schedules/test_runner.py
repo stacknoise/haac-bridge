@@ -237,3 +237,41 @@ async def test_a_hanging_service_fails_the_run_and_frees_the_schedule(
         assert stored.last_run.result is RunResult.FAILED
         # The lock is free again: a second run finishes as well.
         await asyncio.wait_for(runner.async_run(schedule.id), timeout=5)
+
+
+async def test_entities_are_switched_at_the_same_time(hass: HomeAssistant, world: World) -> None:
+    both_called = asyncio.Event()
+    seen: list[str] = []
+
+    async def _wait_for_both(call: ServiceCall) -> None:
+        seen.append(call.data["entity_id"])
+        if len(seen) == 2:
+            both_called.set()
+        await asyncio.wait_for(both_called.wait(), 2)
+
+    hass.services.async_register("switch", "turn_on", _wait_for_both)
+    schedule = await add(hass, world.anton.id)
+    await manager_of(hass).runner.async_run(schedule.id)
+
+    stored = manager_of(hass).store.get(schedule.id)
+    assert stored is not None
+    assert stored.last_run is not None
+    assert stored.last_run.result is RunResult.OK
+
+
+async def test_stopping_cancels_a_run_waiting_to_retry(hass: HomeAssistant, world: World) -> None:
+    async_mock_service(hass, "switch", "turn_on")
+    hass.states.async_set("switch.office_fan", "unavailable")
+    schedule = await add(hass, world.anton.id)
+    runner = manager_of(hass).runner
+
+    runner.async_run_in_background(schedule.id)
+    await asyncio.sleep(0)
+    tasks = list(runner._tasks)
+    assert len(tasks) == 1
+    manager_of(hass).async_stop()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    await asyncio.sleep(0)
+
+    assert tasks[0].cancelled()
+    assert not runner._tasks

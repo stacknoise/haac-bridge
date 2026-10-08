@@ -602,7 +602,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/schedules/create` | `name`, `when`, `action`, `entities[]`, `enabled` | The created schedule; always owned by the caller (19.4) |
 | `haac_bridge/schedules/update` | `schedule_id`, `updated_at` of the edited version and the changed fields | The updated schedule; `HAB-SCH-004` if it changed in the meantime (19.4) |
 | `haac_bridge/schedules/delete` | `schedule_id` | Empty result; an unknown `schedule_id` is not an error (19.4) |
-| `haac_bridge/schedules/run_now` | `schedule_id` | Empty result after the run; does not change the plan (19.4) |
+| `haac_bridge/schedules/run_now` | `schedule_id` | Empty result as soon as the run has started; its `last_run` follows with `schedules_changed`; does not change the plan (19.4) |
 | `haac_bridge/subscribe_schedules` | – | Empty result, then `schedules_changed` events with the new `revision` (19.4) |
 
 ### 11.3 Message examples
@@ -1512,7 +1512,7 @@ All commands go through the existing command wrapper (HAB error codes, 18.3). Re
 {"id": 22, "type": "event", "event": {"schedules_changed": {"revision": "7c0a…19ef"}}}
 ```
 
-`update`, `delete` and `run_now` name the schedule with `schedule_id`, because `id` is the message id of the WebSocket protocol. `update` needs the `updated_at` of the version the app edited (optimistic concurrency); a mismatch returns `HAB-SCH-004`. `delete` of an unknown `schedule_id` is not an error. `run_now` runs the schedule once without changing the plan.
+`update`, `delete` and `run_now` name the schedule with `schedule_id`, because `id` is the message id of the WebSocket protocol. `update` needs the `updated_at` of the version the app edited (optimistic concurrency); a mismatch returns `HAB-SCH-004`. `delete` of an unknown `schedule_id` is not an error. `run_now` starts one run of the schedule without changing the plan and replies at once; the run switches its entities in parallel, and its result arrives as `last_run` with the next `schedules_changed`.
 
 ### 19.5 Entities in HA
 
