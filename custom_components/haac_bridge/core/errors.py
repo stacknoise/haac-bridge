@@ -44,6 +44,9 @@ class ErrorCode(StrEnum):
     HIST_UNAVAILABLE = "HAB-HIST-001"
     """Recorder or history is not loaded, or the query against it failed."""
 
+    HIST_TOO_LONG = "HAB-HIST-002"
+    """The requested history or statistics period is longer than the bridge allows."""
+
     SCH_INVALID = "HAB-SCH-001"
     """A schedule failed validation (name, time, days, action or entities)."""
 
@@ -89,6 +92,7 @@ APP_CODES: Final[dict[ErrorCode, str | None]] = {
     ErrorCode.SVC_FAILED: "HAAC-BRG-005",
     ErrorCode.ENT_NOT_FOUND: "HAAC-ENT-001",
     ErrorCode.HIST_UNAVAILABLE: "HAAC-BRG-006",
+    ErrorCode.HIST_TOO_LONG: "HAAC-BRG-006",
     ErrorCode.SCH_INVALID: "HAAC-SCH-003",
     ErrorCode.SCH_RUN_FAILED: "HAAC-SCH-007",
     ErrorCode.SCH_NOT_FOUND: "HAAC-SCH-001",

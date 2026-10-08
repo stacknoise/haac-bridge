@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
+from ..const import MAX_HISTORY_ENTITIES
 from ..core.caller import require_user
 from ..core.command import bridge_command
 from ..core.runtime import get_data
@@ -20,7 +21,9 @@ from ..history.queries import (
 )
 
 PERIOD_FIELDS = {
-    vol.Required("entity_ids"): vol.All(cv.ensure_list, [cv.entity_id]),
+    vol.Required("entity_ids"): vol.All(
+        cv.ensure_list, [cv.entity_id], vol.Length(max=MAX_HISTORY_ENTITIES)
+    ),
     vol.Required("start"): utc_datetime,
     vol.Optional("end"): utc_datetime,
 }

@@ -178,3 +178,68 @@ async def test_unknown_statistic_type_is_rejected(client: Any) -> None:
         },
     )
     assert reply["error"]["code"] == "HAB-WS-001"
+
+
+async def test_at_most_50_entities_per_request(client: Any) -> None:
+    entity_ids = [f"sensor.s{i}" for i in range(51)]
+    reply = await _send(
+        client,
+        {
+            "type": "haac_bridge/history",
+            "entity_ids": entity_ids,
+            "start": _iso(-timedelta(hours=1)),
+        },
+    )
+    assert reply["error"]["code"] == "HAB-WS-001"
+
+    reply = await _send(
+        client,
+        {
+            "type": "haac_bridge/history",
+            "entity_ids": entity_ids[:50],
+            "start": _iso(-timedelta(hours=1)),
+        },
+    )
+    assert reply["success"], reply
+
+
+@pytest.mark.parametrize(
+    ("command", "extra", "allowed", "too_long"),
+    [
+        ("haac_bridge/history", {}, timedelta(days=366), timedelta(days=367)),
+        ("haac_bridge/statistics", {"period": "hour"}, timedelta(days=32), timedelta(days=33)),
+        ("haac_bridge/statistics", {"period": "day"}, timedelta(days=1830), timedelta(days=1831)),
+        ("haac_bridge/statistics", {"period": "month"}, timedelta(days=1830), timedelta(days=1831)),
+    ],
+)
+async def test_the_period_is_limited(
+    client: Any,
+    command: str,
+    extra: dict[str, str],
+    allowed: timedelta,
+    too_long: timedelta,
+) -> None:
+    end = dt_util.utcnow().replace(microsecond=0)
+    base = {"type": command, "entity_ids": ["sensor.living_room_temperature"], **extra}
+
+    reply = await _send(
+        client, {**base, "start": (end - allowed).isoformat(), "end": end.isoformat()}
+    )
+    assert reply["success"], reply
+
+    reply = await _send(
+        client, {**base, "start": (end - too_long).isoformat(), "end": end.isoformat()}
+    )
+    assert reply["error"]["code"] == "HAB-HIST-002"
+
+
+async def test_an_open_end_counts_up_to_now(client: Any) -> None:
+    reply = await _send(
+        client,
+        {
+            "type": "haac_bridge/history",
+            "entity_ids": ["sensor.living_room_temperature"],
+            "start": _iso(-timedelta(days=400)),
+        },
+    )
+    assert reply["error"]["code"] == "HAB-HIST-002"

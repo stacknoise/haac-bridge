@@ -6,7 +6,7 @@ recorder's executor, like Home Assistant's own history and statistics commands.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
 from typing import Any, Final
 
@@ -17,6 +17,7 @@ import homeassistant.util.dt as dt_util
 from sqlalchemy.exc import SQLAlchemyError
 import voluptuous as vol
 
+from ..const import MAX_HISTORY_PERIOD, MAX_HOURLY_STATISTICS_PERIOD, MAX_STATISTICS_PERIOD
 from ..core.errors import ErrorCode, HistoryError, RequestError
 
 PERIODS: Final = ("hour", "day", "week", "month")
@@ -46,6 +47,16 @@ class TimeRange:
             raise RequestError(ErrorCode.WS_INVALID_REQUEST)
 
     @property
+    def length(self) -> timedelta:
+        """Return the length of the period; an open end counts up to now."""
+        return (self.end or dt_util.utcnow()) - self.start
+
+    def check_length(self, maximum: timedelta) -> None:
+        """Raise HAB-HIST-002 if the period is longer than `maximum`."""
+        if self.length > maximum:
+            raise HistoryError(ErrorCode.HIST_TOO_LONG)
+
+    @property
     def in_future(self) -> bool:
         """Return True if the period starts after now, so there is nothing recorded."""
         return self.start > dt_util.utcnow()
@@ -58,6 +69,7 @@ async def async_history(
     minimal_response: bool,
 ) -> dict[str, list[dict[str, Any]]]:
     """Return significant state changes per entity in HA's compressed state format."""
+    period.check_length(MAX_HISTORY_PERIOD)
     return await _async_run(
         hass,
         partial(
@@ -84,6 +96,9 @@ async def async_statistics(
     types: list[str],
 ) -> dict[str, list[dict[str, Any]]]:
     """Return long-term statistics per entity; `start` and `end` of each row in milliseconds."""
+    period.check_length(
+        MAX_HOURLY_STATISTICS_PERIOD if resolution == "hour" else MAX_STATISTICS_PERIOD
+    )
     return await _async_run(
         hass, partial(_statistics_in_ms, hass, set(entity_ids), period, resolution, set(types))
     )

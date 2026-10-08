@@ -569,7 +569,7 @@ haac_bridge:
 - Each command resolves the caller via `connection.user` – the HA user bound to the access token. The app never sends a user name; it cannot ask for another user's entities.
 - The set of visible entities is recomputed when entities are added to or removed from the state machine, so a glob matching a newly created sensor exposes it automatically.
 - Service calls are only executed if the target `entity_id` is exposed to the caller and the service is on the bridge's allowlist for the entity's domain (11.4); everything else is rejected with error code `HAB-SVC-001` or `HAB-SVC-002` (18.3).
-- History and statistics requests are filtered the same way before querying the recorder.
+- History and statistics requests are filtered the same way before querying the recorder. One request names at most 50 entities (more → `HAB-WS-001`); `history` covers at most 366 days, hourly `statistics` at most 32 days and daily, weekly or monthly `statistics` at most 5 years (longer → `HAB-HIST-002`). An open `end` counts up to now.
 - The bridge follows the HA user events: a deleted HA user, a deactivated user and a user removed from the bridge configuration lose or pause their schedules, and a deleted user's UI entry is removed (19.6).
 
 ## 11. Communication protocol and API specification
@@ -1403,6 +1403,7 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 | HAB-SVC-003 | Home Assistant could not carry out the action | HAAC-BRG-005 |
 | HAB-ENT-001 | This device no longer exists in Home Assistant | HAAC-ENT-001 |
 | HAB-HIST-001 | History is not available on this server | HAAC-BRG-006 |
+| HAB-HIST-002 | The chosen period is too long | HAAC-BRG-006 |
 | HAB-SCH-001 | The schedule is not valid | HAAC-SCH-003 |
 | HAB-SCH-002 | A device could not be switched by the schedule | HAAC-SCH-007 (run result, not a command reply) |
 | HAB-SCH-003 | This schedule does not exist | HAAC-SCH-001 |

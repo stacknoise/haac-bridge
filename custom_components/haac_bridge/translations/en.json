@@ -112,6 +112,9 @@
     "hist_unavailable": {
       "message": "History is not available on this server"
     },
+    "hist_too_long": {
+      "message": "The chosen period is too long"
+    },
     "sch_invalid": {
       "message": "The schedule is not valid"
     },
