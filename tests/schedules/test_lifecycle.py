@@ -8,7 +8,7 @@ from homeassistant.auth.models import User
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.util import slugify
 import pytest
 from pytest_homeassistant_custom_component.common import async_mock_service
@@ -295,3 +295,32 @@ async def test_a_new_manager_waits_for_the_users(hass: HomeAssistant) -> None:
 
     assert manager.users_ready is False
     assert manager.store.get(stray.id) is not None
+
+
+async def test_a_deleted_schedule_sensor_is_never_exposed(
+    hass: HomeAssistant, world: World, client_for: Callable[[User], Any]
+) -> None:
+    schedule = await create(hass, world.anton)
+    registry = er.async_get(hass)
+    sensor_id = next(
+        entry.entity_id
+        for entry in registry.entities.values()
+        if entry.platform == DOMAIN and entry.domain == "sensor"
+    )
+    hass.config_entries.async_update_entry(
+        entry_of(hass),
+        options={"users": [{"user_id": world.bob.id, "filter": {"include_domains": ["sensor"]}}]},
+    )
+    await hass.async_block_till_done()
+
+    await manager_of(hass).async_remove([schedule.id])
+    await hass.async_block_till_done()
+
+    assert not get_data(hass).exposure.is_exposed(world.bob, sensor_id)
+    client = await client_for(world.bob)
+    await client.send_json_auto_id(
+        {"type": "haac_bridge/history", "entity_ids": [sensor_id], "start": "2026-01-01T00:00:00Z"}
+    )
+    response = await client.receive_json()
+    assert response["success"]
+    assert response["result"] == {}
