@@ -61,8 +61,9 @@ class ScheduleManager:
 
     @callback
     def async_stop(self) -> None:
-        """Cancel all timers."""
+        """Cancel all timers and the runs still going on in the background."""
         self.planner.async_stop()
+        self.runner.async_cancel_all()
 
     @callback
     def notify(self) -> None:
@@ -173,9 +174,12 @@ class ScheduleManager:
         await self.async_remove([schedule_id])
 
     async def async_run_now(self, user: User, schedule_id: str) -> None:
-        """Run a schedule once now, as its owner, without changing the plan."""
+        """Start one run of a schedule now, as its owner, without changing the plan.
+
+        Returns at once; the result arrives with `schedules_changed` like any other run (concept 19.4).
+        """
         self._require_access(user, self._require(schedule_id))
-        await self.runner.async_run(schedule_id)
+        self.runner.async_run_in_background(schedule_id)
 
     async def async_sweep(self, owner_id: str | None = None) -> None:
         """Delete the schedules of users who are gone or not configured, pause those of inactive ones.

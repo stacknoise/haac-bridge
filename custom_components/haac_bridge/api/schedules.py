@@ -94,7 +94,7 @@ async def ws_schedules_delete(
 async def ws_schedules_run_now(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Run a schedule once now without changing its plan."""
+    """Start one run of a schedule now without changing its plan; the result follows as an event."""
     await get_data(hass).schedules.async_run_now(require_user(connection), msg["schedule_id"])
 
 

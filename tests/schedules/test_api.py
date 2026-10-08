@@ -1,5 +1,6 @@
 """Tests for the schedule commands: ownership, admins, validation and subscription (concept 19.4)."""
 
+import asyncio
 from collections.abc import Callable, Coroutine
 from typing import Any
 from unittest.mock import patch
@@ -283,11 +284,13 @@ async def test_run_now_switches_as_the_owner(
     schedule = await create(anton, entities=["switch.garage_socket", "switch.office_fan"])
 
     assert (await ws(anton, "schedules/run_now", schedule_id=schedule["id"]))["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert len(calls) == 2
     assert {call.context.user_id for call in calls} == {world.anton.id}
     assert [targets(call) for call in calls] == [["switch.garage_socket"], ["switch.office_fan"]]
 
     assert (await ws(root, "schedules/run_now", schedule_id=schedule["id"]))["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert len(calls) == 4
     assert {call.context.user_id for call in calls} == {world.anton.id}
 
@@ -346,3 +349,25 @@ async def test_bridge_entities_are_never_exposed_nor_schedulable(
         anton, "call_service", entity_id="switch.hidden", service="turn_off", service_data={}
     )
     assert error_code(call) == "HAB-SVC-001"
+
+
+async def test_run_now_answers_before_the_run_ends(
+    hass: HomeAssistant, world: World, client_for: CLIENT
+) -> None:
+    release = asyncio.Event()
+
+    async def _slow(call: ServiceCall) -> None:
+        await release.wait()
+
+    hass.services.async_register("switch", "turn_on", _slow)
+    anton = await client_for(world.anton)
+    schedule = await create(anton)
+
+    reply = await asyncio.wait_for(ws(anton, "schedules/run_now", schedule_id=schedule["id"]), 5)
+    assert reply["success"]
+    assert (await ws(anton, "schedules/list"))["result"]["schedules"][0]["last_run"] is None
+
+    release.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    last_run = (await ws(anton, "schedules/list"))["result"]["schedules"][0]["last_run"]
+    assert last_run["result"] == "ok"
