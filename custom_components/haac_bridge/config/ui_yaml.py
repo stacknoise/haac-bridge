@@ -3,9 +3,9 @@
 from collections.abc import Mapping
 from typing import Any
 
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.util.yaml import dump, parse_yaml
+from homeassistant.util.yaml import dump
 import voluptuous as vol
+import yaml
 
 from ..const import (
     CONF_ENTITY_CONFIG,
@@ -59,10 +59,14 @@ def import_users(text: str) -> tuple[list[dict[str, Any]], str | None]:
 
 
 def _section_of(text: str) -> dict[str, Any] | None:
-    """Return the `haac_bridge:` content of YAML [text] (or the text itself when it has no such key), or None."""
+    """Return the `haac_bridge:` content of YAML [text] (or the text itself when it has no such key), or None.
+
+    Plain YAML only: Home Assistant tags such as `!include`, `!env_var` or `!secret` are rejected,
+    so pasted text can never read files or environment variables (review finding S6).
+    """
     try:
-        data = parse_yaml(text)
-    except HomeAssistantError:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
         return None
     section = data.get(DOMAIN, data) if isinstance(data, dict) else None
     return section if isinstance(section, dict) else None

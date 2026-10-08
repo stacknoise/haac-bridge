@@ -1,6 +1,7 @@
 """Tests for the config flow and the options flow (concept 10.2)."""
 
 from collections.abc import Callable, Coroutine
+from pathlib import Path
 from typing import Any
 
 from homeassistant.auth.models import User
@@ -10,6 +11,7 @@ from homeassistant.data_entry_flow import FlowResultType
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.haac_bridge.config.ui_yaml import export_users, import_users
 from custom_components.haac_bridge.const import DOMAIN
 from custom_components.haac_bridge.core.runtime import get_data
 
@@ -286,6 +288,7 @@ async def test_import_adds_and_replaces_users(
     [
         ("users: [", "invalid_yaml"),
         ("just a sentence", "invalid_yaml"),
+        ("users:\n  - user_id: !secret token\n", "invalid_yaml"),
         ("users:\n  - user_id: abc\n    unknown_key: true\n", "invalid_config"),
         ("users: []\n", "no_users"),
         (
@@ -307,4 +310,52 @@ async def test_import_rejects_unusable_yaml(hass: HomeAssistant, text: str, erro
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": error}
+    assert entry.options == {}
+
+
+def test_an_export_imports_back_unchanged() -> None:
+    options = {
+        "users": [
+            {
+                "user_id": "abc",
+                "filter": {
+                    "include_entities": ["sensor.humidity"],
+                    "exclude_entity_globs": ["sensor.*_raw"],
+                },
+                "names": {"sensor.humidity": "Humidity: inside"},
+            }
+        ]
+    }
+
+    records, error = import_users(export_users(options))
+
+    assert error is None
+    assert records == options["users"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "users:\n  - user_id: !env_var HAAC_TEST_SECRET\n    filter:\n      include_domains: [sensor]\n",
+        "users:\n  - user_id: !include leaked.txt\n    filter:\n      include_domains: [sensor]\n",
+    ],
+)
+async def test_import_never_resolves_home_assistant_tags(
+    hass: HomeAssistant,
+    add_user: Callable[[str], User],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    text: str,
+) -> None:
+    anton = add_user("anton")
+    monkeypatch.setenv("HAAC_TEST_SECRET", anton.id)
+    (tmp_path / "leaked.txt").write_text(anton.id)
+    monkeypatch.chdir(tmp_path)
+    entry = await _add_entry(hass)
+
+    result = await _menu(hass, entry, "import_yaml")
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"yaml": text})
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_yaml"}
     assert entry.options == {}
