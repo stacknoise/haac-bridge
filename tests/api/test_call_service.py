@@ -1,7 +1,9 @@
 """Tests for haac_bridge/call_service (concept 10.3, 11.4, 14.2)."""
 
+import asyncio
 from collections.abc import Callable, Coroutine
 from typing import Any
+from unittest.mock import patch
 
 from homeassistant.auth.models import User
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -101,3 +103,16 @@ async def test_failing_service_is_reported(hass: HomeAssistant, client: Any) -> 
 
     assert reply["error"]["code"] == "HAB-SVC-003"
     assert "offline" not in reply["error"]["message"]
+
+
+async def test_a_hanging_service_times_out(hass: HomeAssistant, client: Any) -> None:
+    async def _hang(call: ServiceCall) -> None:
+        await asyncio.sleep(3600)
+
+    hass.services.async_register("switch", "turn_on", _hang)
+    with patch("custom_components.haac_bridge.services.call_factory.SERVICE_TIMEOUT", 0.05):
+        reply = await asyncio.wait_for(
+            _call_service(client, "switch.garage_socket", "turn_on"), timeout=5
+        )
+
+    assert reply["error"]["code"] == "HAB-SVC-003"

@@ -1,5 +1,6 @@
 """Tests for running a schedule: owner and exposure re-checks, retry, results (concept 19.3)."""
 
+import asyncio
 from typing import Any
 from unittest.mock import patch
 
@@ -217,3 +218,22 @@ async def test_a_run_tells_subscribers(hass: HomeAssistant, world: World) -> Non
     before = manager_of(hass).revision_for(world.anton)
     await manager_of(hass).runner.async_run(schedule.id)
     assert manager_of(hass).revision_for(world.anton) != before
+
+
+async def test_a_hanging_service_fails_the_run_and_frees_the_schedule(
+    hass: HomeAssistant, world: World
+) -> None:
+    async def _hang(call: ServiceCall) -> None:
+        await asyncio.sleep(3600)
+
+    hass.services.async_register("switch", "turn_on", _hang)
+    schedule = await add(hass, world.anton.id)
+    runner = manager_of(hass).runner
+    with patch("custom_components.haac_bridge.services.call_factory.SERVICE_TIMEOUT", 0.05):
+        await asyncio.wait_for(runner.async_run(schedule.id), timeout=5)
+        stored = manager_of(hass).store.get(schedule.id)
+        assert stored is not None
+        assert stored.last_run is not None
+        assert stored.last_run.result is RunResult.FAILED
+        # The lock is free again: a second run finishes as well.
+        await asyncio.wait_for(runner.async_run(schedule.id), timeout=5)
