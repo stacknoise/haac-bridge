@@ -45,6 +45,9 @@ MAX_NAME_LENGTH: Final = 60
 MAX_OFFSET_MIN: Final = 180
 """Limits of a schedule (concept 19.2); the offset applies to sunrise and sunset in either direction."""
 
+RUN_NOW_COOLDOWN: Final = 10
+"""Seconds after a manual run during which run_now of the same schedule is refused (HAB-SCH-007)."""
+
 MISSED_RUN_GRACE: Final = timedelta(minutes=5)
 """A run that HA missed by at most this long is still carried out once at startup (concept 19.3)."""
 

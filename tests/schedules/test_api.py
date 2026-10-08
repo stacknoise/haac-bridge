@@ -275,6 +275,14 @@ async def test_delete_is_idempotent_and_admins_may_delete_foreign(
     assert (await ws(anton, "schedules/list"))["result"]["schedules"] == []
 
 
+@pytest.fixture
+def no_cooldown() -> Any:
+    """Allow run_now of the same schedule again at once."""
+    with patch("custom_components.haac_bridge.schedules.manager.RUN_NOW_COOLDOWN", 0):
+        yield
+
+
+@pytest.mark.usefixtures("no_cooldown")
 async def test_run_now_switches_as_the_owner(
     hass: HomeAssistant, world: World, client_for: CLIENT
 ) -> None:
@@ -371,3 +379,56 @@ async def test_run_now_answers_before_the_run_ends(
     await hass.async_block_till_done(wait_background_tasks=True)
     last_run = (await ws(anton, "schedules/list"))["result"]["schedules"][0]["last_run"]
     assert last_run["result"] == "ok"
+
+
+async def test_run_now_again_within_the_cooldown_is_refused(
+    hass: HomeAssistant, world: World, client_for: CLIENT
+) -> None:
+    calls = async_mock_service(hass, "switch", "turn_on")
+    anton = await client_for(world.anton)
+    schedule = await create(anton)
+
+    assert (await ws(anton, "schedules/run_now", schedule_id=schedule["id"]))["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)
+    reply = await ws(anton, "schedules/run_now", schedule_id=schedule["id"])
+
+    assert error_code(reply) == "HAB-SCH-007"
+    assert len(calls) == 1
+
+
+@pytest.mark.usefixtures("no_cooldown")
+async def test_run_now_while_the_schedule_runs_is_refused(
+    hass: HomeAssistant, world: World, client_for: CLIENT
+) -> None:
+    release = asyncio.Event()
+
+    async def _slow(call: ServiceCall) -> None:
+        await release.wait()
+
+    hass.services.async_register("switch", "turn_on", _slow)
+    anton = await client_for(world.anton)
+    schedule = await create(anton)
+
+    assert (await ws(anton, "schedules/run_now", schedule_id=schedule["id"]))["success"]
+    assert error_code(await ws(anton, "schedules/run_now", schedule_id=schedule["id"])) == (
+        "HAB-SCH-007"
+    )
+    release.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert (await ws(anton, "schedules/run_now", schedule_id=schedule["id"]))["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_a_second_schedule_subscription_replaces_the_first(
+    world: World, client_for: CLIENT
+) -> None:
+    anton = await client_for(world.anton)
+    first = await ws(anton, "subscribe_schedules")
+    second = await ws(anton, "subscribe_schedules")
+    assert first["success"]
+    assert second["success"]
+
+    await anton.send_json_auto_id({"type": PREFIX + "schedules/create", **CREATE})
+    messages = [await anton.receive_json(), await anton.receive_json()]
+    events = [message for message in messages if message["type"] == "event"]
+    assert [event["id"] for event in events] == [second["id"]]

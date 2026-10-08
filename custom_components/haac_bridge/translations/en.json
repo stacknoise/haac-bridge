@@ -133,6 +133,9 @@
     "sch_not_allowed": {
       "message": "You are not allowed to change this schedule"
     },
+    "sch_busy": {
+      "message": "This schedule ran a moment ago, try again shortly"
+    },
     "ws_invalid_request": {
       "message": "The request could not be understood"
     },

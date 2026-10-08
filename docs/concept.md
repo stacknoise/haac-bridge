@@ -592,7 +592,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version, `instance_id`, `features` (list of optional features of the bridge, for example `["schedules"]`; missing counts as empty) and `urls` with the `internal`, `external` and `cloud` address configured in HA (each `null` if not set) (4.5) |
 | `haac_bridge/exposure/revision` | – | `revision` (hash over the exposed entity IDs and their configured names), entity count |
 | `haac_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
-| `haac_bridge/subscribe_entities` | – | Empty result, then events: `a` initial and added states, `c` changes, `r` removals (HA's compressed state format) and `exposure_changed` (11.3) |
+| `haac_bridge/subscribe_entities` | – | Empty result, then events: `a` initial and added states, `c` changes, `r` removals (HA's compressed state format) and `exposure_changed` (11.3); one per connection, a new one ends the previous |
 | `haac_bridge/call_service` | `entity_id`, `service`, `service_data` (without target keys) | Empty result, or an error reply with a HAB code (18.3) |
 | `haac_bridge/history` | `entity_ids[]`, `start`, `end`, `minimal_response` | State history per entity |
 | `haac_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
@@ -602,8 +602,8 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/schedules/create` | `name`, `when`, `action`, `entities[]`, `enabled` | The created schedule; always owned by the caller (19.4) |
 | `haac_bridge/schedules/update` | `schedule_id`, `updated_at` of the edited version and the changed fields | The updated schedule; `HAB-SCH-004` if it changed in the meantime (19.4) |
 | `haac_bridge/schedules/delete` | `schedule_id` | Empty result; an unknown `schedule_id` is not an error (19.4) |
-| `haac_bridge/schedules/run_now` | `schedule_id` | Empty result as soon as the run has started; its `last_run` follows with `schedules_changed`; does not change the plan (19.4) |
-| `haac_bridge/subscribe_schedules` | – | Empty result, then `schedules_changed` events with the new `revision` (19.4) |
+| `haac_bridge/schedules/run_now` | `schedule_id` | Empty result as soon as the run has started; its `last_run` follows with `schedules_changed`; does not change the plan; `HAB-SCH-007` while the schedule runs or within 10 s of the last manual run (19.4) |
+| `haac_bridge/subscribe_schedules` | – | Empty result, then `schedules_changed` events with the new `revision`; one per connection, a new one ends the previous (19.4) |
 
 ### 11.3 Message examples
 
@@ -774,19 +774,19 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | S1 a HA token is not limited to the bridge (13.1) | High | WP20–WP25: bridge-owned tokens, API v2 | Open, planned for bridge 1.0; needs a spike and a concept first (14.5) |
 | U1 schedules of UI users deleted while the config entry is not loaded | Medium | WP1 | Done in 0.2.3 (#73) |
 | S2 history and statistics without limits | Medium | WP8 | Done for 0.3.0 (#83): 50 entities, 366 days history, 32 days hourly and 5 years other statistics, `HAB-HIST-002` |
-| P1 costly filter for every state change of every subscription | Medium | WP3, WP11 | Domain check first done in 0.2.3 (#75); index and caches open (WP11) |
+| P1 costly filter for every state change of every subscription | Medium | WP3, WP11 | Domain check first done in 0.2.3 (#75); caches done for 0.3.0 (#85) |
 | S3 deleted bridge entities counted as exposed | Low | WP2 | Done in 0.2.3 (#74) |
 | S4 any service of the domain was allowed | Low | WP9 | Done for 0.3.0 (#81): list of services and `service_data` keys (11.4) |
 | S5 all attributes are sent to the app | Low | WP19 | Open (0.3.0) |
 | S6 YAML import resolved `!include` and `!env_var` | Low | WP4 | Done in 0.2.3 (#76) |
-| S7 no limit for subscriptions and `run_now` | Low | WP10 | Open (0.3.0) |
+| S7 no limit for subscriptions and `run_now` | Low | WP10 | Done for 0.3.0: one subscription of each kind per connection, `run_now` 10 s apart (`HAB-SCH-007`) |
 | S8 deactivated users not refused | Low | WP6 | Done in 0.2.3 (#78): `HAB-AUTH-002` |
 | S9 CI actions not pinned | Low | WP7 | Done in 0.2.3 (#79) |
 | U2 a run due during a reload is lost | Low | WP15 | Open (0.3.0) |
 | U3 service calls without a timeout | Low | WP5 | Done in 0.2.3 (#77): 15 s |
 | U4 options flow can overwrite parallel changes | Low | WP16 | Open (0.3.0) |
 | P2 every schedule change updates all schedule entities | Low | WP12 | Open (0.3.0) |
-| P3 exposed set recomputed for every request | Low | WP11 | Open (0.3.0) |
+| P3 exposed set recomputed for every request | Low | WP11 | Done for 0.3.0 (#85) |
 | P4 every run writes the whole schedule file at once | Low | WP13 | Open (0.3.0) |
 | P5 runs switch one entity after another; `run_now` waits for the run | Low | WP14 | Done for 0.3.0 (#82): parallel; `run_now` replies at once |
 | S10 manual run by an admin is logged as the owner | Note | WP18 | Open (0.3.0) |
@@ -1450,6 +1450,7 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 | HAB-SCH-004 | The schedule was changed in the meantime | HAAC-SCH-004 |
 | HAB-SCH-005 | You have reached the limit of schedules | HAAC-SCH-005 |
 | HAB-SCH-006 | You are not allowed to change this schedule | HAAC-SCH-006 |
+| HAB-SCH-007 | This schedule ran a moment ago, try again shortly | HAAC-BRG-005 |
 | HAB-WS-001 | The request could not be understood | HAAC-BRG-005 |
 | HAB-INT-000 | Something went wrong in HAAC Bridge | HAAC-BRG-005 |
 
@@ -1553,7 +1554,7 @@ All commands go through the existing command wrapper (HAB error codes, 18.3). Re
 {"id": 22, "type": "event", "event": {"schedules_changed": {"revision": "7c0a…19ef"}}}
 ```
 
-`update`, `delete` and `run_now` name the schedule with `schedule_id`, because `id` is the message id of the WebSocket protocol. `update` needs the `updated_at` of the version the app edited (optimistic concurrency); a mismatch returns `HAB-SCH-004`. `delete` of an unknown `schedule_id` is not an error. `run_now` starts one run of the schedule without changing the plan and replies at once; the run switches its entities in parallel, and its result arrives as `last_run` with the next `schedules_changed`.
+`update`, `delete` and `run_now` name the schedule with `schedule_id`, because `id` is the message id of the WebSocket protocol. `update` needs the `updated_at` of the version the app edited (optimistic concurrency); a mismatch returns `HAB-SCH-004`. `delete` of an unknown `schedule_id` is not an error. `run_now` starts one run of the schedule without changing the plan and replies at once; the run switches its entities in parallel, and its result arrives as `last_run` with the next `schedules_changed`. While the schedule runs, and for 10 seconds after a manual run, `run_now` returns `HAB-SCH-007`.
 
 ### 19.5 Entities in HA
 

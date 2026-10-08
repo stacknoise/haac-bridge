@@ -22,5 +22,6 @@ Every error of the integration carries one of these codes (format `HAB-<AREA>-<N
 | HAB-SCH-004 | The schedule was changed in the meantime | HAAC-SCH-004 | The schedule changed after the caller loaded it (optimistic concurrency). |
 | HAB-SCH-005 | You have reached the limit of schedules | HAAC-SCH-005 | The user already has the maximum number of schedules. |
 | HAB-SCH-006 | You are not allowed to change this schedule | HAAC-SCH-006 | A regular user touched a foreign schedule, or an admin tried to change a foreign entity list. |
+| HAB-SCH-007 | This schedule ran a moment ago, try again shortly | HAAC-BRG-005 | run_now while the schedule is running or within RUN_NOW_COOLDOWN of the last manual run. |
 | HAB-WS-001 | The request could not be understood | HAAC-BRG-005 | The request fields of a haac_bridge/* command failed validation. |
 | HAB-INT-000 | Something went wrong in HAAC Bridge | HAAC-BRG-005 | An exception without a HAB code reached the command wrapper. |
