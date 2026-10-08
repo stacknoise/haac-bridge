@@ -55,6 +55,11 @@ class ScheduleRunner:
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
+    def is_running(self, schedule_id: str) -> bool:
+        """Return True while a run of the schedule is going on (including its wait to retry)."""
+        lock = self._locks.get(schedule_id)
+        return lock is not None and lock.locked()
+
     @callback
     def async_cancel_all(self) -> None:
         """Cancel the runs started in the background, e.g. one waiting to retry, when HA stops."""

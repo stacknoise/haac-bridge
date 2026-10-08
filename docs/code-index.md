@@ -103,6 +103,8 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.core.runtime` | `module` | `custom_components/haac_bridge/core/runtime.py` | Runtime data of HAAC Bridge stored in hass.data (concept 18.2). |
 | `HaacBridgeData` | `class HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Factories, current exposure and the user entries of YAML and UI; created in async_setup. |
 | `get_data` | `def get_data(hass: HomeAssistant) -> HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Return the runtime data of HAAC Bridge. |
+| `haac_bridge.core.subscriptions` | `module` | `custom_components/haac_bridge/core/subscriptions.py` | Keeps one subscription of each kind per WebSocket connection (review finding S7). |
+| `async_end_subscriptions_of` | `def async_end_subscriptions_of(connection: ActiveConnection, owner_type: type) -> None` | `custom_components/haac_bridge/core/subscriptions.py` | End every subscription of the connection whose stop callback belongs to an `owner_type` object. |
 
 ## config
 
@@ -379,6 +381,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleRunner` | `class ScheduleRunner` | `custom_components/haac_bridge/schedules/runner.py` | Executes schedules one at a time per schedule. |
 | `ScheduleRunner.__init__` | `def __init__(self, hass: HomeAssistant, store: ScheduleStore, hooks: RunHooks) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Keep what a run needs. |
 | `ScheduleRunner.async_run_in_background` | `def async_run_in_background(self, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Start a run without waiting for it; the result arrives as a schedule change (concept 19.4). |
+| `ScheduleRunner.is_running` | `def is_running(self, schedule_id: str) -> bool` | `custom_components/haac_bridge/schedules/runner.py` | Return True while a run of the schedule is going on (including its wait to retry). |
 | `ScheduleRunner.async_cancel_all` | `def async_cancel_all(self) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Cancel the runs started in the background, e.g. one waiting to retry, when HA stops. |
 | `ScheduleRunner.async_run` | `async def async_run(self, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Run a schedule now; a run of the same schedule that is still going on finishes first. |
 | `ScheduleRunner._async_run_locked` | `async def _async_run_locked(self, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Validate the owner and the exposure, then switch and record the result. |
@@ -408,7 +411,7 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.schedules.subscription` | `module` | `custom_components/haac_bridge/schedules/subscription.py` | Live subscription of one app connection to schedule changes (concept 19.4). |
 | `ScheduleSubscription` | `class ScheduleSubscription` | `custom_components/haac_bridge/schedules/subscription.py` | Sends `schedules_changed` with the new revision whenever the caller's schedules change. |
 | `ScheduleSubscription.__init__` | `def __init__(self, hass: HomeAssistant, connection: ActiveConnection, msg_id: int, user: User) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Keep what is needed to compute the revision and send events; nothing is subscribed yet. |
-| `ScheduleSubscription.async_start` | `def async_start(self) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Remember the current revision and start listening. |
+| `ScheduleSubscription.async_start` | `def async_start(self) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Remember the current revision and start listening; a previous one of the connection ends. |
 | `ScheduleSubscription.async_stop` | `def async_stop(self) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Stop listening; called by HA when the app unsubscribes or the connection closes. |
 | `ScheduleSubscription._async_on_changed` | `def _async_on_changed(self) -> None` | `custom_components/haac_bridge/schedules/subscription.py` | Send an event if the caller's view of the schedules changed. |
 | `haac_bridge.schedules.triggers` | `module` | `custom_components/haac_bridge/schedules/triggers.py` | Trigger planners: when a schedule runs next and last ran (concept 19.3, 18.2 TriggerFactory). |

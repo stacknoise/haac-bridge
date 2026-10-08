@@ -126,3 +126,27 @@ async def test_reload_with_new_names_changes_the_revision(
 
     changed = (await client.receive_json())["event"]["exposure_changed"]
     assert changed["revision"] == await _revision(client) != before
+
+
+async def test_a_second_subscription_replaces_the_first(
+    hass: HomeAssistant, subscribed: tuple[Any, dict[str, Any]]
+) -> None:
+    client, _ = subscribed
+    await client.send_json_auto_id({"type": "haac_bridge/subscribe_entities"})
+    reply = await client.receive_json()
+    assert reply["success"], reply
+    second_id = reply["id"]
+    await client.receive_json()  # initial states of the second subscription
+
+    hass.states.async_set("switch.garage_socket", "off")
+    message = await client.receive_json()
+    assert message["id"] == second_id
+    assert message["event"]["c"]["switch.garage_socket"]["+"]["s"] == "off"
+
+    # Only one entity subscription is left, so the next change arrives once.
+    hass.states.async_set("switch.garage_socket", "on")
+    await hass.async_block_till_done()
+    message = await client.receive_json()
+    assert message["id"] == second_id
+    await client.send_json_auto_id({"type": "haac_bridge/exposure/revision"})
+    assert (await client.receive_json())["type"] == "result"

@@ -15,6 +15,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from ..const import SIGNAL_EXPOSURE_CHANGED
 from ..core.runtime import get_data
+from ..core.subscriptions import async_end_subscriptions_of
 from ..exposure.exposure import compute_revision
 
 ADDED = "a"
@@ -44,7 +45,11 @@ class EntitySubscription:
 
     @callback
     def async_start(self) -> dict[str, Any]:
-        """Start listening and return the initial event with the states of all exposed entities."""
+        """Start listening and return the initial event with the states of all exposed entities.
+
+        A previous entity subscription of the same connection ends first (one per connection).
+        """
+        async_end_subscriptions_of(self._connection, EntitySubscription)
         self._entity_ids = set(self._data.exposure.exposed_entity_ids(self._hass, self._user))
         self._unsubs = [
             self._hass.bus.async_listen(

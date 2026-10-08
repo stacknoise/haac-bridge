@@ -11,6 +11,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from ..const import SIGNAL_SCHEDULES_CHANGED
 from ..core.runtime import get_data
+from ..core.subscriptions import async_end_subscriptions_of
 
 SCHEDULES_CHANGED = "schedules_changed"
 
@@ -31,7 +32,8 @@ class ScheduleSubscription:
 
     @callback
     def async_start(self) -> None:
-        """Remember the current revision and start listening."""
+        """Remember the current revision and start listening; a previous one of the connection ends."""
+        async_end_subscriptions_of(self._connection, ScheduleSubscription)
         self._revision = get_data(self._hass).schedules.revision_for(self._user)
         self._unsub = async_dispatcher_connect(
             self._hass, SIGNAL_SCHEDULES_CHANGED, self._async_on_changed

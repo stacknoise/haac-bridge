@@ -65,6 +65,9 @@ class ErrorCode(StrEnum):
     SCH_NOT_ALLOWED = "HAB-SCH-006"
     """A regular user touched a foreign schedule, or an admin tried to change a foreign entity list."""
 
+    SCH_BUSY = "HAB-SCH-007"
+    """run_now while the schedule is running or within RUN_NOW_COOLDOWN of the last manual run."""
+
     WS_INVALID_REQUEST = "HAB-WS-001"
     """The request fields of a haac_bridge/* command failed validation."""
 
@@ -99,6 +102,7 @@ APP_CODES: Final[dict[ErrorCode, str | None]] = {
     ErrorCode.SCH_CONFLICT: "HAAC-SCH-004",
     ErrorCode.SCH_LIMIT: "HAAC-SCH-005",
     ErrorCode.SCH_NOT_ALLOWED: "HAAC-SCH-006",
+    ErrorCode.SCH_BUSY: "HAAC-BRG-005",
     ErrorCode.WS_INVALID_REQUEST: "HAAC-BRG-005",
     ErrorCode.INT_UNEXPECTED: "HAAC-BRG-005",
 }

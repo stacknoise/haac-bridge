@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
-from ..const import MAX_SCHEDULES_PER_USER, SIGNAL_SCHEDULES_CHANGED
+from ..const import MAX_SCHEDULES_PER_USER, RUN_NOW_COOLDOWN, SIGNAL_SCHEDULES_CHANGED
 from ..core.errors import ErrorCode, ScheduleError
 from ..core.runtime import get_data
 from .model import (
@@ -50,6 +50,7 @@ class ScheduleManager:
             self.async_remove, self.planner.async_plan, self.notify, lambda: self.users_ready
         )
         self.runner = ScheduleRunner(hass, self.store, hooks)
+        self._manual_runs: dict[str, float] = {}
 
     async def async_load(self) -> None:
         """Read the schedules from storage."""
@@ -177,8 +178,16 @@ class ScheduleManager:
         """Start one run of a schedule now, as its owner, without changing the plan.
 
         Returns at once; the result arrives with `schedules_changed` like any other run (concept 19.4).
+        While the schedule runs, and for RUN_NOW_COOLDOWN seconds after a manual run, HAB-SCH-007.
         """
         self._require_access(user, self._require(schedule_id))
+        now = self._hass.loop.time()
+        last = self._manual_runs.get(schedule_id)
+        if self.runner.is_running(schedule_id) or (
+            last is not None and now - last < RUN_NOW_COOLDOWN
+        ):
+            raise ScheduleError(ErrorCode.SCH_BUSY)
+        self._manual_runs[schedule_id] = now
         self.runner.async_run_in_background(schedule_id)
 
     async def async_sweep(self, owner_id: str | None = None) -> None:
@@ -219,6 +228,7 @@ class ScheduleManager:
         """Remove schedules, stop their timers and tell subscribers."""
         removed = await self.store.async_remove(schedule_ids)
         for schedule in removed:
+            self._manual_runs.pop(schedule.id, None)
             await self.planner.async_plan(schedule.id)
         if removed:
             self.notify()
