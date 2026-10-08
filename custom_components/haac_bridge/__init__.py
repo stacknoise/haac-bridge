@@ -1,9 +1,17 @@
 """HAAC Bridge: per-user entity exposure for the HA Android Client (concept 10)."""
 
-from homeassistant.auth import EVENT_USER_REMOVED, EVENT_USER_UPDATED
+from homeassistant.auth import EVENT_USER_ADDED, EVENT_USER_REMOVED, EVENT_USER_UPDATED
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
-from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, EVENT_STATE_CHANGED, Platform
+from homeassistant.core import (
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    ServiceCall,
+    callback,
+    split_entity_id,
+)
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.reload import async_integration_yaml_config
 from homeassistant.helpers.service import async_register_admin_service
@@ -15,7 +23,14 @@ from .api import COMMANDS
 from .config.repairs import async_check_users, async_report_invalid_config
 from .config.schema import CONFIG_SCHEMA, parse_users
 from .config.ui_users import parse_ui_users, users_of
-from .const import CONF_USER_ID, CONF_USERS, DOMAIN, SERVICE_RELOAD, SIGNAL_EXPOSURE_CHANGED
+from .const import (
+    CONF_USER_ID,
+    CONF_USERS,
+    DOMAIN,
+    SERVICE_RELOAD,
+    SIGNAL_EXPOSURE_CHANGED,
+    SUPPORTED_DOMAINS,
+)
 from .core.command import async_register_commands
 from .core.errors import ConfigError, ErrorCode
 from .core.runtime import DATA_KEY, HaacBridgeData, get_data
@@ -53,6 +68,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async_register_commands(hass, COMMANDS)
     await _async_start_schedules(hass, data.schedules)
     _async_listen_to_user_events(hass)
+    _async_follow_exposure_inputs(hass)
     if DOMAIN in config and not hass.config_entries.async_entries(DOMAIN):
         hass.async_create_task(
             hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_IMPORT}, data={})
@@ -82,6 +98,40 @@ async def _async_start_schedules(hass: HomeAssistant, schedules: ScheduleManager
         schedules.async_stop()
 
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _stop)
+
+
+def _async_follow_exposure_inputs(hass: HomeAssistant) -> None:
+    """Clear the caches of the exposure when users, the entity registry or the set of entities change.
+
+    The listeners are callbacks, so they run before any task that reacts to the same event.
+    """
+
+    @callback
+    def _users_changed(_event: Event) -> None:
+        """A HA user was added, changed or removed."""
+        get_data(hass).exposure.async_invalidate_users()
+
+    @callback
+    def _registry_changed(_event: Event) -> None:
+        """An entity was created, removed or changed in the entity registry."""
+        get_data(hass).exposure.async_invalidate_registry()
+
+    @callback
+    def _added_or_removed(event_data: EventStateChangedData) -> bool:
+        """Return True for an entity of a v1 domain that appeared or disappeared."""
+        return (
+            event_data["old_state"] is None or event_data["new_state"] is None
+        ) and split_entity_id(event_data["entity_id"])[0] in SUPPORTED_DOMAINS
+
+    @callback
+    def _states_changed(_event: Event[EventStateChangedData]) -> None:
+        """An entity appeared in or left the state machine."""
+        get_data(hass).exposure.async_invalidate_states()
+
+    for event_type in (EVENT_USER_ADDED, EVENT_USER_UPDATED, EVENT_USER_REMOVED):
+        hass.bus.async_listen(event_type, _users_changed)
+    hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _registry_changed)
+    hass.bus.async_listen(EVENT_STATE_CHANGED, _states_changed, event_filter=_added_or_removed)
 
 
 def _async_listen_to_user_events(hass: HomeAssistant) -> None:
