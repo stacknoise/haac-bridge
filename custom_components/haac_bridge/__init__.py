@@ -144,8 +144,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaacBridgeConfigEntry) -
     """Take over the UI users, follow option changes and create the entities of the schedules."""
     data = get_data(hass)
     data.ui_entries = parse_ui_users(entry.options)
-    await _async_apply(hass)
     data.schedules.users_ready = True
+    await _async_apply(hass)
     entry.runtime_data = ScheduleEntityManager(hass, data.schedules, entry)
     entry.runtime_data.async_sweep()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
