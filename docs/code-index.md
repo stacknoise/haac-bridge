@@ -82,7 +82,7 @@ Lists every module, class and function of the integration with signature, file a
 | `HaacBridgeError` | `class HaacBridgeError(HomeAssistantError)` | `custom_components/haac_bridge/core/errors.py` | Base of every exception raised by HAAC Bridge; carries an ErrorCode. |
 | `HaacBridgeError.__init__` | `def __init__(self, code: ErrorCode \| None=None, placeholders: dict[str, str] \| None=None) -> None` | `custom_components/haac_bridge/core/errors.py` | Create the error with its code and optional translation placeholders. |
 | `ConfigError` | `class ConfigError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | Error in the haac_bridge YAML configuration (area CFG). |
-| `NotAllowedError` | `class NotAllowedError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | The caller could not be identified (area AUTH). |
+| `NotAllowedError` | `class NotAllowedError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | The caller could not be identified or is deactivated (area AUTH). |
 | `InvalidServiceError` | `class InvalidServiceError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A service call was rejected or failed (area SVC). |
 | `EntityNotFoundError` | `class EntityNotFoundError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A requested entity does not exist (area ENT). |
 | `HistoryError` | `class HistoryError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | History or statistics could not be read (area HIST). |

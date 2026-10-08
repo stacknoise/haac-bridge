@@ -1384,6 +1384,7 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 | HAB-CFG-001 | The haac\_bridge configuration in configuration.yaml is invalid | – (HA admin, Repairs) |
 | HAB-CFG-002 | A user in the haac\_bridge configuration does not exist in Home Assistant | – (HA admin, Repairs) |
 | HAB-AUTH-001 | The request has no signed-in Home Assistant user | HAAC-AUTH-003 |
+| HAB-AUTH-002 | Your Home Assistant user is deactivated | HAAC-AUTH-006 |
 | HAB-SVC-001 | You are not allowed to control this device | HAAC-BRG-003 |
 | HAB-SVC-002 | This action is not available for this device | HAAC-BRG-004 |
 | HAB-SVC-003 | Home Assistant could not carry out the action | HAAC-BRG-005 |
