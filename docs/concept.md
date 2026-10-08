@@ -746,7 +746,12 @@ Mitigations:
 | Foreign device at the internal address (another Wi-Fi uses the same private IP) and receives the token | An `http://` internal address is used only after the home network check (mDNS `uuid` of this instance at this host, 4.5); `https://` addresses need a trusted or pinned certificate; `instance_id` is checked after every connection (`HAAC-NET-008`) |
 | Faked mDNS announcement with the instance's `uuid` | Needs the `uuid`, which is only announced in the home network, and an attacker in the same network; residual risk of cleartext, documented in the warning dialog. *Always use the internal address* skips the check and warns about it |
 | Access to other users' entities via the bridge | Bridge resolves user from token (`connection.user`), ignores any user field from the client, deny by default |
-| Manipulated service call to a non-exposed entity | Bridge checks `entity_id` against exposure and service against domain before calling HA |
+| Manipulated service call to a non-exposed entity | Bridge checks `entity_id` against exposure and the service and its `service_data` keys against a fixed list per domain (11.4) before calling HA |
+| Overloading HA with large history or statistics requests | At most 50 entities per request and a maximum period per kind (10.3); longer periods are refused with `HAB-HIST-002` |
+| Reading the history of another user's deleted schedule | Entities of the platform `haac_bridge` stay hidden after their deletion, too |
+| Pasted YAML that reads files or environment variables in the bridge's options flow | The import accepts plain YAML only; `!include`, `!env_var` and `!secret` are rejected |
+| A deactivated HA user keeps using the bridge | The bridge refuses the user (`HAB-AUTH-002`); HA also revokes the user's tokens, which closes open connections |
+| A hanging integration blocks commands or schedules | Bridge service calls time out after 15 s (`HAB-SVC-003`) |
 | A schedule targets an entity the owner may not see, or a schedule switch | Entities are checked against the owner's exposure when a schedule is saved and again at every run (19.3); entities of the platform `haac_bridge` are never exposed and are rejected (`HAB-SCH-001`) |
 | A schedule keeps running for a deleted, deactivated or unconfigured user | Cleanup on the HA user events, a sweep at setup and after every change of the user list, and a check of the owner at every run (19.6); the run uses `Context(user_id=<owner>)`, so HA also applies the owner's permissions |
 | The demo mode is used to reach a server or to leak a credential | The demo makes no network connection and handles no credentials; only the server ID `demo` is routed to it, and no real instance can have that ID (20.6) |
@@ -759,6 +764,39 @@ Mitigations:
 - Aligned with **OWASP MASVS** (storage, crypto, auth, network, platform) and OAuth 2.0 for Native Apps (RFC 8252) incl. PKCE for the browser fallback.
 - Release builds: R8 obfuscation, `debuggable=false`; cleartext only to private addresses, enforced by `CleartextPolicy` (4.3); only system CAs are trusted (self-signed certificates via per-instance pinning).
 - Dependency scanning (Dependabot/Renovate) and static analysis (Android Lint security checks, Detekt) in CI; `bandit` and `ruff` for the integration.
+
+### 13.4 Bridge code review (October 2026)
+
+A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium and 14 low findings plus 6 notes, each with a work package (WP). The findings are fixed one pull request per package; the state on 8 October 2026:
+
+| Finding | Severity | Work package | State |
+| --- | --- | --- | --- |
+| S1 a HA token is not limited to the bridge (13.1) | High | WP20–WP25: bridge-owned tokens, API v2 | Open, planned for bridge 1.0; needs a spike and a concept first (14.5) |
+| U1 schedules of UI users deleted while the config entry is not loaded | Medium | WP1 | Done in 0.2.3 (#73) |
+| S2 history and statistics without limits | Medium | WP8 | Done for 0.3.0 (#83): 50 entities, 366 days history, 32 days hourly and 5 years other statistics, `HAB-HIST-002` |
+| P1 costly filter for every state change of every subscription | Medium | WP3, WP11 | Domain check first done in 0.2.3 (#75); index and caches open (WP11) |
+| S3 deleted bridge entities counted as exposed | Low | WP2 | Done in 0.2.3 (#74) |
+| S4 any service of the domain was allowed | Low | WP9 | Done for 0.3.0 (#81): list of services and `service_data` keys (11.4) |
+| S5 all attributes are sent to the app | Low | WP19 | Open (0.3.0) |
+| S6 YAML import resolved `!include` and `!env_var` | Low | WP4 | Done in 0.2.3 (#76) |
+| S7 no limit for subscriptions and `run_now` | Low | WP10 | Open (0.3.0) |
+| S8 deactivated users not refused | Low | WP6 | Done in 0.2.3 (#78): `HAB-AUTH-002` |
+| S9 CI actions not pinned | Low | WP7 | Done in 0.2.3 (#79) |
+| U2 a run due during a reload is lost | Low | WP15 | Open (0.3.0) |
+| U3 service calls without a timeout | Low | WP5 | Done in 0.2.3 (#77): 15 s |
+| U4 options flow can overwrite parallel changes | Low | WP16 | Open (0.3.0) |
+| P2 every schedule change updates all schedule entities | Low | WP12 | Open (0.3.0) |
+| P3 exposed set recomputed for every request | Low | WP11 | Open (0.3.0) |
+| P4 every run writes the whole schedule file at once | Low | WP13 | Open (0.3.0) |
+| P5 runs switch one entity after another; `run_now` waits for the run | Low | WP14 | Done for 0.3.0 (#82): parallel; `run_now` replies at once |
+| S10 manual run by an admin is logged as the owner | Note | WP18 | Open (0.3.0) |
+| S11 `info` for unconfigured users; binding by login name | Note | WP25 | Open (1.0) |
+| U5 duplicate YAML entries for one user | Note | WP17 | Open (0.3.0) |
+| U6 wildcard check only in the UI | Note | WP17 | Open (0.3.0) |
+| P6 schedule store sorts on every access | Note | – | Open, with WP12 |
+| P7 sun trigger computes up to 367 days | Note | – | Open, with WP12 |
+
+Decisions taken during the review: history up to 366 days instead of 31, because the app reads states of switches and climate entities over any custom range; hourly statistics up to 32 days because counters read one lead period; daily statistics up to 5 years; the service list is what the app's `ServiceCallFactory` sends plus `switch.toggle` for schedules; `run_now` replies at once. The app maps the new codes since #91: `HAB-AUTH-002` → `HAAC-AUTH-006`, `HAB-HIST-002` → `HAAC-BRG-006`. Pull request numbers refer to `stacknoise/haac-bridge` unless stated otherwise.
 
 ## 14. Error handling, testing, roadmap and open points
 
@@ -814,6 +852,7 @@ HAAC is distributed via Google Play and as a sideload APK. Both channels use the
 
 - [x] Privacy policy page online at `https://stacknoise.com/haac/privacy/` (16.8).
 - [x] Demo mode (chapter 20) built before the first Google Play production release (14.4); in version 0.3.0.
+- [ ] Bridge-owned tokens (13.1, finding S1 in 13.4): the app would hold a revocable token that opens only `haac_bridge/*` instead of a HA token. Transport (own WebSocket endpoint or REST with server-sent events), pairing and revocation are undecided; a spike decides before bridge 1.0 (API v2).
 
 ## 15. UI mockups
 
