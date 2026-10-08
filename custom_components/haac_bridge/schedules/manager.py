@@ -39,8 +39,9 @@ class ScheduleManager:
     def __init__(self, hass: HomeAssistant) -> None:
         """Wire the store, the planner and the runner; call `async_load` and `async_start` next."""
         self._hass = hass
-        # False while the configured users are not loaded (the config entry reloads); runs wait then.
-        self.users_ready = True
+        # False until the config entry has loaded the UI users, and while it is unloaded or disabled.
+        # Runs wait and sweeps do nothing then, so UI users never look unconfigured by mistake.
+        self.users_ready = False
         self.store = ScheduleStore(hass)
         self.planner = SchedulePlanner(
             hass, self.store, TriggerFactory(hass), self._async_run_due, self.notify
@@ -181,7 +182,10 @@ class ScheduleManager:
 
         Runs after every change of the user list and at setup (concept 19.6.3). With `owner_id`
         only that user's schedules are looked at. Everything is saved once and announced once.
+        Does nothing while the UI users are not loaded (`users_ready` is False).
         """
+        if not self.users_ready:
+            return
         users = {user.id: user for user in await self._hass.auth.async_get_users()}
         exposure = get_data(self._hass).exposure
         replace: list[Schedule] = []

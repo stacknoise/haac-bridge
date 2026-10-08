@@ -223,3 +223,75 @@ async def test_a_run_waits_while_the_entry_reloads(hass: HomeAssistant, world: W
     await hass.async_block_till_done()
     await manager_of(hass).runner.async_run(schedule.id)
     assert len(calls) == 1
+
+
+async def _unloaded_with_ui_schedule(hass: HomeAssistant, world: World) -> Schedule:
+    """Give bob (a UI user) a schedule, then unload the config entry."""
+    await make_ui_user(hass, world.bob)
+    schedule = await create(hass, world.bob)
+    assert await hass.config_entries.async_unload(entry_of(hass).entry_id)
+    await hass.async_block_till_done()
+    return schedule
+
+
+async def test_a_user_update_while_unloaded_keeps_ui_schedules(
+    hass: HomeAssistant, world: World
+) -> None:
+    schedule = await _unloaded_with_ui_schedule(hass, world)
+
+    await hass.auth.async_update_user(world.bob, name="Bobby")
+    await hass.async_block_till_done()
+
+    assert manager_of(hass).store.get(schedule.id) is not None
+
+
+async def test_a_reload_while_unloaded_keeps_ui_schedules(
+    hass: HomeAssistant, world: World
+) -> None:
+    schedule = await _unloaded_with_ui_schedule(hass, world)
+    config = CONFIG_SCHEMA({"haac_bridge": {"users": []}})
+
+    with patch(YAML_CONFIG, return_value=config):
+        await async_reload(hass)
+    await hass.async_block_till_done()
+
+    assert manager_of(hass).store.get(schedule.id) is not None
+
+
+async def test_removing_another_user_while_unloaded_keeps_ui_schedules(
+    hass: HomeAssistant, world: World, add_user: Callable[..., User]
+) -> None:
+    carol = add_user("carol")
+    schedule = await _unloaded_with_ui_schedule(hass, world)
+
+    await hass.auth.async_remove_user(carol)
+    await hass.async_block_till_done()
+
+    assert manager_of(hass).store.get(schedule.id) is not None
+
+
+async def test_ui_schedules_survive_the_unload_and_run_again_after_setup(
+    hass: HomeAssistant, world: World
+) -> None:
+    calls = async_mock_service(hass, "switch", "turn_on")
+    schedule = await _unloaded_with_ui_schedule(hass, world)
+    await hass.auth.async_update_user(world.bob, name="Bobby")
+    await hass.async_block_till_done()
+
+    assert await hass.config_entries.async_setup(entry_of(hass).entry_id)
+    await hass.async_block_till_done()
+    await manager_of(hass).runner.async_run(schedule.id)
+
+    assert manager_of(hass).store.get(schedule.id) is not None
+    assert len(calls) == 1
+
+
+async def test_a_new_manager_waits_for_the_users(hass: HomeAssistant) -> None:
+    manager = ScheduleManager(hass)
+    stray = make_schedule(owner="nobody")
+    await manager.store.async_add(stray)
+
+    await manager.async_sweep()
+
+    assert manager.users_ready is False
+    assert manager.store.get(stray.id) is not None
