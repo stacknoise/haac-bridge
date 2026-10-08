@@ -1,6 +1,7 @@
 """Tests for per-user filter evaluation, deny by default and the revision (concept 10.2, 14.2)."""
 
 from collections.abc import Callable
+from unittest.mock import patch
 
 from homeassistant.auth.models import User
 from homeassistant.core import HomeAssistant
@@ -118,3 +119,11 @@ async def test_snapshot_holds_names_of_exposed_entities_only(
     assert snapshot.revision == compute_revision(
         ["switch.garage_socket"], {"switch.garage_socket": "Garage"}
     )
+
+
+def test_an_unsupported_domain_is_rejected_before_the_user_rule_is_looked_up() -> None:
+    exposure = Exposure([], FilterFactory())
+    user = User(name="Anton", perm_lookup=None, id="user-1")  # type: ignore[arg-type]
+    with patch.object(Exposure, "_rule_for", side_effect=AssertionError) as rule_for:
+        assert not exposure.is_exposed(user, "light.kitchen")
+    rule_for.assert_not_called()
