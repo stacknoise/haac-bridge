@@ -53,16 +53,14 @@ class Exposure:
         return self._rule_for(user) is not None
 
     def is_exposed(self, user: User, entity_id: str) -> bool:
-        """Return True if the entity is in a v1 domain, passes the user's filter and is not the bridge's own."""
-        rule = self._rule_for(user)
-        if rule is None:
+        """Return True if the entity is in a v1 domain, passes the user's filter and is not the bridge's own.
+
+        The domain is checked first: it is the cheapest test and rejects most state changes.
+        """
+        if split_entity_id(entity_id)[0] not in SUPPORTED_DOMAINS:
             return False
-        domain = split_entity_id(entity_id)[0]
-        return (
-            domain in SUPPORTED_DOMAINS
-            and rule.predicate(entity_id)
-            and not self._is_own_entity(entity_id)
-        )
+        rule = self._rule_for(user)
+        return rule is not None and rule.predicate(entity_id) and not self._is_own_entity(entity_id)
 
     def filter_exposed(self, user: User, entity_ids: list[str]) -> list[str]:
         """Return the requested IDs the user may see, sorted and without duplicates."""
