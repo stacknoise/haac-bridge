@@ -75,5 +75,17 @@ ALLOWED_SERVICES: Final[dict[str, dict[str, frozenset[str]]]] = {
 Matches what the app and the schedules call; anything else, even if HA has it, is refused.
 """
 
+MAX_HISTORY_ENTITIES: Final = 50
+"""Most entities one history or statistics request may name (review finding S2)."""
+
+MAX_HISTORY_PERIOD: Final = timedelta(days=366)
+"""Longest period of haac_bridge/history; the app asks for states over any custom range."""
+
+MAX_HOURLY_STATISTICS_PERIOD: Final = timedelta(days=32)
+"""Longest period of hourly statistics; the app uses them up to 31 days (plus one lead period)."""
+
+MAX_STATISTICS_PERIOD: Final = timedelta(days=5 * 366)
+"""Longest period of daily, weekly or monthly statistics."""
+
 TARGET_KEYS: Final = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
 """Keys a client must not put into service_data; the bridge sets the target itself (11.4)."""

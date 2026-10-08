@@ -15,6 +15,7 @@ Every error of the integration carries one of these codes (format `HAB-<AREA>-<N
 | HAB-SVC-003 | Home Assistant could not carry out the action | HAAC-BRG-005 | Home Assistant raised an error while executing an allowed service call. |
 | HAB-ENT-001 | This device no longer exists in Home Assistant | HAAC-ENT-001 | The requested entity does not exist in the state machine. |
 | HAB-HIST-001 | History is not available on this server | HAAC-BRG-006 | Recorder or history is not loaded, or the query against it failed. |
+| HAB-HIST-002 | The chosen period is too long | HAAC-BRG-006 | The requested history or statistics period is longer than the bridge allows. |
 | HAB-SCH-001 | The schedule is not valid | HAAC-SCH-003 | A schedule failed validation (name, time, days, action or entities). |
 | HAB-SCH-002 | A device could not be switched by the schedule | HAAC-SCH-007 | A schedule run could not switch an entity (not exposed, unavailable or not permitted). |
 | HAB-SCH-003 | This schedule does not exist | HAAC-SCH-001 | The schedule does not exist. |
