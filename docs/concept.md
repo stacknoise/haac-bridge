@@ -223,7 +223,7 @@ A HA instance is often reachable under two addresses: in the home network, e.g. 
 - **Home network check (mDNS):** the app browses `_home-assistant._tcp` (4.2) for up to 2 s. The check passes if a service with TXT `uuid` equal to `instanceUuid` is found and the host of the internal address equals the IP address of that service or the host of its TXT `base_url`/`internal_url`. Nothing has to be configured and no location permission is needed. In networks without mDNS (VLANs, some routers, the emulator) the check fails; there the user can turn on *Always use the internal address*, with a warning that the app then sends its sign-in to whatever device answers at this address in any network.
 - Otherwise the app uses the external address. If both candidates fail, the error of the last attempt is shown (e.g. `HAAC-NET-001`).
 - Each candidate is probed with `GET /auth/providers` and a short timeout (3 s) before any token is sent.
-- An instance stored before `instanceUuid` existed (schema v1) has no instance ID; it uses its stored address as before until the first successful connection saves the ID.
+- An instance stored before `instanceUuid` existed (schema v1) has no instance ID. It uses an unverified `http://` internal address only if it has no external address; otherwise the external address is used until the first successful connection saves the ID, so the refresh token never goes to an `http://` address nobody has verified.
 
 **Identity check after connecting.** After every WebSocket connection the app compares the `instance_id` from `haac_bridge/info` with `instanceUuid`. On a mismatch it closes the connection at once, does not delete the refresh token and reports `HAAC-NET-008`.
 
@@ -1317,6 +1317,7 @@ enum class ErrorCode(
 | HAAC-AUTH-004 | This server does not allow sign-in with username and password. | None |
 | HAAC-AUTH-005 | Sign-in took too long or had too many wrong codes. Please start again. | None |
 | HAAC-AUTH-006 | Home Assistant does not let this user sign in here. Ask your administrator. | None |
+| HAAC-AUTH-007 | You are signed out here, but Home Assistant could not be reached. Delete the token in Home Assistant under Profile, Security. | None |
 | HAAC-SEC-001 | Your fingerprints have changed. Please sign in with your password. | Sign in |
 | HAAC-SEC-002 | Secure storage on this device is not available. | None |
 | HAAC-SEC-003 | The app is locked. Unlock it with your fingerprint. | None |
