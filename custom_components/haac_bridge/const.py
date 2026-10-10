@@ -51,6 +51,9 @@ MAX_OFFSET_MIN: Final = 180
 RUN_NOW_COOLDOWN: Final = 10
 """Seconds after a manual run during which run_now of the same schedule is refused (HAB-SCH-007)."""
 
+RUN_RESULT_SAVE_DELAY: Final = 1
+"""Seconds run results and system pauses wait before they are written, so a burst is one write."""
+
 MISSED_RUN_GRACE: Final = timedelta(minutes=5)
 """A run that HA missed by at most this long is still carried out once at startup (concept 19.3)."""
 

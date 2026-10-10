@@ -163,7 +163,7 @@ class ScheduleRunner:
             for name, value in (("last_run", last_run), ("paused", paused))
             if value is not None
         }
-        await self._store.async_replace(current.with_changes(**changes))
+        await self._store.async_replace(current.with_changes(**changes), delay=True)
         self._hooks.changed(schedule_id)
 
 
