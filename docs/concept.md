@@ -770,33 +770,33 @@ Mitigations:
 
 ### 13.4 Bridge code review (October 2026)
 
-A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium and 14 low findings plus 6 notes, each with a work package (WP). The findings are fixed one pull request per package; the state on 8 October 2026:
+A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium and 14 low findings plus 6 notes, each with a work package (WP). The findings are fixed one pull request per package; the state on 10 October 2026, with bridge 0.3.0:
 
 | Finding | Severity | Work package | State |
 | --- | --- | --- | --- |
 | S1 a HA token is not limited to the bridge (13.1) | High | WP20–WP25: bridge-owned tokens, API v2 | Open, planned for bridge 1.0; needs a spike and a concept first (14.5) |
 | U1 schedules of UI users deleted while the config entry is not loaded | Medium | WP1 | Done in 0.2.3 (#73) |
-| S2 history and statistics without limits | Medium | WP8 | Done for 0.3.0 (#83): 50 entities, 366 days history, 32 days hourly and 5 years other statistics, `HAB-HIST-002` |
+| S2 history and statistics without limits | Medium | WP8 | Done in 0.3.0 (#83): 50 entities, 366 days history, 32 days hourly and 5 years other statistics, `HAB-HIST-002` |
 | P1 costly filter for every state change of every subscription | Medium | WP3, WP11 | Domain check first done in 0.2.3 (#75); caches done for 0.3.0 (#85) |
 | S3 deleted bridge entities counted as exposed | Low | WP2 | Done in 0.2.3 (#74) |
-| S4 any service of the domain was allowed | Low | WP9 | Done for 0.3.0 (#81): list of services and `service_data` keys (11.4) |
-| S5 all attributes are sent to the app | Low | WP19 | Done for 0.3.0: a denylist instead of the planned allowlist, because the app shows all attributes (8.1); attributes that name other entities or carry an access link are left out |
+| S4 any service of the domain was allowed | Low | WP9 | Done in 0.3.0 (#81): list of services and `service_data` keys (11.4) |
+| S5 all attributes are sent to the app | Low | WP19 | Done in 0.3.0 (#93): a denylist instead of the planned allowlist, because the app shows all attributes (8.1); attributes that name other entities or carry an access link are left out |
 | S6 YAML import resolved `!include` and `!env_var` | Low | WP4 | Done in 0.2.3 (#76) |
-| S7 no limit for subscriptions and `run_now` | Low | WP10 | Done for 0.3.0 (#86): one subscription of each kind per connection, `run_now` 10 s apart (`HAB-SCH-007`) |
+| S7 no limit for subscriptions and `run_now` | Low | WP10 | Done in 0.3.0 (#86): one subscription of each kind per connection, `run_now` 10 s apart (`HAB-SCH-007`) |
 | S8 deactivated users not refused | Low | WP6 | Done in 0.2.3 (#78): `HAB-AUTH-002` |
 | S9 CI actions not pinned | Low | WP7 | Done in 0.2.3 (#79) |
-| U2 a run due during a reload is lost | Low | WP15 | Done for 0.3.0 (#89): it waits and runs once after the setup, within 5 minutes |
+| U2 a run due during a reload is lost | Low | WP15 | Done in 0.3.0 (#89): it waits and runs once after the setup, within 5 minutes |
 | U3 service calls without a timeout | Low | WP5 | Done in 0.2.3 (#77): 15 s |
-| U4 options flow can overwrite parallel changes | Low | WP16 | Done for 0.3.0 (#91): the flow saves against the current entry (HA reads it live), and a user deleted while the form was open is not added back |
-| P2 every schedule change updates all schedule entities | Low | WP12 | Done for 0.3.0 (#87): one signal per schedule; the owner's name is read again only when the owner changes |
-| P3 exposed set recomputed for every request | Low | WP11 | Done for 0.3.0 (#85) |
-| P4 every run writes the whole schedule file at once | Low | WP13 | Done for 0.3.0 (#88): run results and system pauses are written after 1 s, together; changes by users at once |
-| P5 runs switch one entity after another; `run_now` waits for the run | Low | WP14 | Done for 0.3.0 (#82): parallel; `run_now` replies at once |
-| S10 manual run by an admin is logged as the owner | Note | WP18 | Done for 0.3.0 (#90): a manual run uses the caller's context |
+| U4 options flow can overwrite parallel changes | Low | WP16 | Done in 0.3.0 (#91): the flow saves against the current entry (HA reads it live), and a user deleted while the form was open is not added back |
+| P2 every schedule change updates all schedule entities | Low | WP12 | Done in 0.3.0 (#87): one signal per schedule; the owner's name is read again only when the owner changes |
+| P3 exposed set recomputed for every request | Low | WP11 | Done in 0.3.0 (#85) |
+| P4 every run writes the whole schedule file at once | Low | WP13 | Done in 0.3.0 (#88): run results and system pauses are written after 1 s, together; changes by users at once |
+| P5 runs switch one entity after another; `run_now` waits for the run | Low | WP14 | Done in 0.3.0 (#82): parallel; `run_now` replies at once |
+| S10 manual run by an admin is logged as the owner | Note | WP18 | Done in 0.3.0 (#90): a manual run uses the caller's context |
 | S11 `info` for unconfigured users; binding by login name | Note | WP25 | Open (1.0) |
-| U5 duplicate YAML entries for one user | Note | WP17 | Done for 0.3.0: Repairs issue `HAB-CFG-003`; the first entry is used |
-| U6 wildcard check only in the UI | Note | WP17 | Done for 0.3.0: one check (`domain.pattern`) for YAML, UI and import |
-| P6 schedule store sorts on every access | Note | WP12 | Done for 0.3.0 (#87): sorted once per change |
+| U5 duplicate YAML entries for one user | Note | WP17 | Done in 0.3.0 (#92): Repairs issue `HAB-CFG-003`; the first entry is used |
+| U6 wildcard check only in the UI | Note | WP17 | Done in 0.3.0 (#92): one check (`domain.pattern`) for YAML, UI and import |
+| P6 schedule store sorts on every access | Note | WP12 | Done in 0.3.0 (#87): sorted once per change |
 | P7 sun trigger computes up to 367 days | Note | – | Open; only weekday sets with long polar gaps reach many days, kept as is |
 
 Decisions taken during the review: history up to 366 days instead of 31, because the app reads states of switches and climate entities over any custom range; hourly statistics up to 32 days because counters read one lead period; daily statistics up to 5 years; the service list is what the app's `ServiceCallFactory` sends plus `switch.toggle` for schedules; `run_now` replies at once. The app maps the new codes since #91: `HAB-AUTH-002` → `HAAC-AUTH-006`, `HAB-HIST-002` → `HAAC-BRG-006`. Pull request numbers refer to `stacknoise/haac-bridge` unless stated otherwise.

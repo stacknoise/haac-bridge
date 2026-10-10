@@ -52,7 +52,7 @@ async def test_info(hass: HomeAssistant, anton_client: Any) -> None:
     reply = await _call(anton_client, "haac_bridge/info")
     assert reply["success"]
     assert reply["result"] == {
-        "bridge_version": "0.2.3",
+        "bridge_version": "0.3.0",
         "api_version": 1,
         "domains": ["climate", "sensor", "switch"],
         "features": ["schedules"],
