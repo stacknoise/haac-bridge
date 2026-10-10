@@ -283,7 +283,7 @@ def no_cooldown() -> Any:
 
 
 @pytest.mark.usefixtures("no_cooldown")
-async def test_run_now_switches_as_the_owner(
+async def test_run_now_switches_as_the_caller(
     hass: HomeAssistant, world: World, client_for: CLIENT
 ) -> None:
     calls = async_mock_service(hass, "switch", "turn_on")
@@ -300,7 +300,8 @@ async def test_run_now_switches_as_the_owner(
     assert (await ws(root, "schedules/run_now", schedule_id=schedule["id"]))["success"]
     await hass.async_block_till_done(wait_background_tasks=True)
     assert len(calls) == 4
-    assert {call.context.user_id for call in calls} == {world.anton.id}
+    # A manual run by an admin is logged as the admin's; the exposure stays the owner's.
+    assert {call.context.user_id for call in calls[2:]} == {world.root.id}
 
     last_run = (await ws(anton, "schedules/list"))["result"]["schedules"][0]["last_run"]
     assert last_run["result"] == "ok"
@@ -432,3 +433,25 @@ async def test_a_second_schedule_subscription_replaces_the_first(
     messages = [await anton.receive_json(), await anton.receive_json()]
     events = [message for message in messages if message["type"] == "event"]
     assert [event["id"] for event in events] == [second["id"]]
+
+
+async def test_a_manual_run_by_an_admin_keeps_the_owners_exposure(
+    hass: HomeAssistant, world: World, client_for: CLIENT
+) -> None:
+    calls = async_mock_service(hass, "switch", "turn_on")
+    lena = await client_for(world.lena)
+    root = await client_for(world.root)
+    schedule = await create(lena, entities=["switch.office_fan"])
+    # Lena may no longer see the fan; root still may: the run must use lena's exposure.
+    manager = get_data(hass).schedules
+    stored = manager.store.get(schedule["id"])
+    assert stored is not None
+    await manager.store.async_replace(
+        stored.with_changes(entities=("switch.office_fan", "switch.garage_socket"))
+    )
+
+    assert (await ws(root, "schedules/run_now", schedule_id=schedule["id"]))["success"]
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert [targets(call) for call in calls] == [["switch.office_fan"]]
+    assert calls[0].context.user_id == world.root.id

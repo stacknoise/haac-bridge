@@ -782,14 +782,14 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | S7 no limit for subscriptions and `run_now` | Low | WP10 | Done for 0.3.0 (#86): one subscription of each kind per connection, `run_now` 10 s apart (`HAB-SCH-007`) |
 | S8 deactivated users not refused | Low | WP6 | Done in 0.2.3 (#78): `HAB-AUTH-002` |
 | S9 CI actions not pinned | Low | WP7 | Done in 0.2.3 (#79) |
-| U2 a run due during a reload is lost | Low | WP15 | Done for 0.3.0: it waits and runs once after the setup, within 5 minutes |
+| U2 a run due during a reload is lost | Low | WP15 | Done for 0.3.0 (#89): it waits and runs once after the setup, within 5 minutes |
 | U3 service calls without a timeout | Low | WP5 | Done in 0.2.3 (#77): 15 s |
 | U4 options flow can overwrite parallel changes | Low | WP16 | Open (0.3.0) |
 | P2 every schedule change updates all schedule entities | Low | WP12 | Done for 0.3.0 (#87): one signal per schedule; the owner's name is read again only when the owner changes |
 | P3 exposed set recomputed for every request | Low | WP11 | Done for 0.3.0 (#85) |
 | P4 every run writes the whole schedule file at once | Low | WP13 | Done for 0.3.0 (#88): run results and system pauses are written after 1 s, together; changes by users at once |
 | P5 runs switch one entity after another; `run_now` waits for the run | Low | WP14 | Done for 0.3.0 (#82): parallel; `run_now` replies at once |
-| S10 manual run by an admin is logged as the owner | Note | WP18 | Open (0.3.0) |
+| S10 manual run by an admin is logged as the owner | Note | WP18 | Done for 0.3.0: a manual run uses the caller's context |
 | S11 `info` for unconfigured users; binding by login name | Note | WP25 | Open (1.0) |
 | U5 duplicate YAML entries for one user | Note | WP17 | Open (0.3.0) |
 | U6 wildcard check only in the UI | Note | WP17 | Open (0.3.0) |
@@ -1530,7 +1530,7 @@ Limits: at most 50 schedules per user. `next_run` is never stored; it is compute
 2. **Run.** On trigger, under a per-schedule lock:
    1. Re-validate: the schedule still exists, the owner exists and is active (`hass.auth.async_get_user`), the owner is still configured in the bridge. If the owner no longer exists or is no longer configured, the schedule is deleted (19.6) and the run is aborted; if the owner is inactive, the run is aborted and the schedule is paused.
    2. Re-check the exposure per entity with the same logic as `call_service` (`HAB-SVC-001`, `HAB-ENT-001`, `HAB-SVC-002`). Unexposed entities are skipped; if none is left the schedule is paused with `no_entities`.
-   3. Call the service with `Context(user_id=<owner>)`, so the logbook shows who triggered it. HA then applies the owner's permissions; an `Unauthorized` answer counts as failed for that entity.
+   3. Call the service with `Context(user_id=<owner>)`, so the logbook shows who triggered it. HA then applies the owner's permissions; an `Unauthorized` answer counts as failed for that entity. A manual run (`run_now`) uses the context of the user who started it, for example an admin; the entities checked are still those exposed to the owner.
    4. Entities that are `unavailable` are tried once more after 30 s; then they count as failed.
    5. Store `last_run` (result `ok` if all entities worked, `partial` if some did, `failed` if none; code `HAB-SCH-002` unless `ok`), save the store, send `schedules_changed`.
 3. **Missed runs.** If HA starts later than the planned time, the run is executed once if it is at most 5 minutes late; otherwise it is skipped and `last_run` is not changed. The same applies to a run that comes due while the bridge's config entry is unloaded or reloading: it waits and runs once after the setup if it is at most 5 minutes late.
