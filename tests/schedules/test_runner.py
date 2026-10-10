@@ -275,3 +275,15 @@ async def test_stopping_cancels_a_run_waiting_to_retry(hass: HomeAssistant, worl
 
     assert tasks[0].cancelled()
     assert not runner._tasks
+
+
+async def test_a_run_writes_its_result_with_a_delay(hass: HomeAssistant, world: World) -> None:
+    async_mock_service(hass, "switch", "turn_on")
+    schedule = await add(hass, world.anton.id)
+    store = manager_of(hass).store
+
+    with patch.object(store, "async_replace", wraps=store.async_replace) as replace:
+        await manager_of(hass).runner.async_run(schedule.id)
+
+    assert replace.call_count == 1
+    assert replace.call_args.kwargs == {"delay": True}

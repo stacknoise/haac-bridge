@@ -116,7 +116,7 @@ class SchedulePlanner:
         if paused == is_paused:
             return
         new_pause = Paused(PauseReason.SUN_UNAVAILABLE, dt_util.utcnow()) if paused else None
-        await self._store.async_replace(schedule.with_changes(paused=new_pause))
+        await self._store.async_replace(schedule.with_changes(paused=new_pause), delay=True)
         self._on_changed(schedule.id)
 
     def _missed(self, schedule: Schedule, now: datetime) -> bool:

@@ -9,7 +9,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from ..const import SCHEDULE_STORE_KEY, SCHEDULE_STORE_VERSION
+from ..const import RUN_RESULT_SAVE_DELAY, SCHEDULE_STORE_KEY, SCHEDULE_STORE_VERSION
 from ..core.errors import ErrorCode, ScheduleError
 from .model import Schedule, schedule_from_dict
 
@@ -60,11 +60,19 @@ class ScheduleStore:
         self._schedules[schedule.id] = schedule
         await self._async_save()
 
-    async def async_replace(self, schedule: Schedule) -> None:
-        """Replace an existing schedule as a whole and save; an unknown id raises HAB-SCH-003."""
+    async def async_replace(self, schedule: Schedule, *, delay: bool = False) -> None:
+        """Replace an existing schedule as a whole and save; an unknown id raises HAB-SCH-003.
+
+        With `delay`, the write waits RUN_RESULT_SAVE_DELAY seconds and covers every change made
+        until then; Home Assistant writes it at the latest when it stops. Used for run results.
+        """
         if schedule.id not in self._schedules:
             raise ScheduleError(ErrorCode.SCH_NOT_FOUND)
         self._schedules[schedule.id] = schedule
+        if delay:
+            self._sorted = None
+            self._store.async_delay_save(self._data_to_save, RUN_RESULT_SAVE_DELAY)
+            return
         await self._async_save()
 
     async def async_remove(self, schedule_ids: Iterable[str]) -> list[Schedule]:
@@ -98,9 +106,13 @@ class ScheduleStore:
         return removed
 
     async def _async_save(self) -> None:
-        """Forget the sorted list and write all schedules to storage."""
+        """Forget the sorted list and write all schedules to storage now (replaces a delayed write)."""
         self._sorted = None
-        await self._store.async_save({"schedules": [item.to_dict() for item in self.schedules]})
+        await self._store.async_save(self._data_to_save())
+
+    def _data_to_save(self) -> dict[str, Any]:
+        """Return the stored form of all schedules."""
+        return {"schedules": [item.to_dict() for item in self.schedules]}
 
     async def async_remove_file(self) -> None:
         """Delete the storage file when the config entry of the bridge is removed."""

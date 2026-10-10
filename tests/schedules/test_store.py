@@ -2,10 +2,13 @@
 
 from datetime import timedelta
 from typing import Any
+from unittest.mock import patch
 
+from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE
 from homeassistant.core import HomeAssistant
 import pytest
 
+from custom_components.haac_bridge.const import RUN_RESULT_SAVE_DELAY
 from custom_components.haac_bridge.core.errors import ErrorCode, ScheduleError
 from custom_components.haac_bridge.schedules.store import ScheduleStore
 
@@ -163,3 +166,42 @@ async def test_the_sorted_list_follows_every_change(hass: HomeAssistant) -> None
 
     await store.async_remove_file()
     assert store.schedules == []
+
+
+async def test_run_results_are_written_together_after_a_delay(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    store = await _loaded(hass)
+    schedule = make_schedule()
+    await store.async_add(schedule)
+    stored_before = hass_storage[KEY]["data"]
+
+    with (
+        patch.object(store._store, "async_save", wraps=store._store.async_save) as save,
+        patch.object(
+            store._store, "async_delay_save", wraps=store._store.async_delay_save
+        ) as delay_save,
+    ):
+        for minute in range(10):
+            await store.async_replace(schedule.with_changes(name=f"Run {minute}"), delay=True)
+    assert save.call_count == 0
+    assert {call.args[1] for call in delay_save.call_args_list} == {RUN_RESULT_SAVE_DELAY}
+    assert hass_storage[KEY]["data"] == stored_before
+    assert store.get(schedule.id).name == "Run 9"
+
+    # Home Assistant writes pending data at the latest when it stops.
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_FINAL_WRITE)
+    await hass.async_block_till_done()
+    assert hass_storage[KEY]["data"]["schedules"][0]["name"] == "Run 9"
+
+
+async def test_a_change_by_the_user_is_written_at_once(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    store = await _loaded(hass)
+    schedule = make_schedule()
+    await store.async_add(schedule)
+    await store.async_replace(schedule.with_changes(name="Run result"), delay=True)
+    await store.async_replace(schedule.with_changes(name="Renamed"))
+
+    assert hass_storage[KEY]["data"]["schedules"][0]["name"] == "Renamed"
