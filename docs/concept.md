@@ -405,7 +405,7 @@ If an entity is deleted in HA or no longer shared with the user, it stays in eve
 
 ## 8. Entity functionality per domain
 
-The app offers the same user-level functions as HA's own tile and "more info" dialogs: current state, all attributes, history and every service the entity supports. Administrative functions (renaming in the entity registry, changing device settings) stay in HA.
+The app offers the same user-level functions as HA's own tile and "more info" dialogs: current state, all attributes, history and every service the entity supports that the bridge carries out (11.4). Administrative functions (renaming in the entity registry, changing device settings) stay in HA.
 
 Which controls appear is driven by the entity's `supported_features` bitmask and attributes, not hard-coded per device, so new HA features degrade gracefully.
 
@@ -515,7 +515,7 @@ haac-bridge/                 # GitHub repo stacknoise/haac-bridge (chapter 16)
         └── api/             # haac_bridge/* commands
 ```
 
-- `manifest.json`: `"config_flow": false`, `"iot_class": "local_push"`, `"dependencies": ["websocket_api", "recorder", "history"]`, semantic `version`.
+- `manifest.json`: `"config_flow": true` with `"single_config_entry": true` (UI configuration and the entities of the schedules, 10.2, 19.5), `"iot_class": "local_push"`, `"dependencies": ["history", "recorder", "websocket_api"]`, semantic `version`.
 - `hacs.json`: name "HAAC Bridge", minimum HA version "homeassistant": "2026.9.0"; published as a custom repository (later optionally in the HACS default list).
 - Releases via GitHub tags; CI runs `hassfest` and the HACS validation action.
 
@@ -777,7 +777,7 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | S1 a HA token is not limited to the bridge (13.1) | High | WP20–WP25: bridge-owned tokens, API v2 | Open, planned for bridge 1.0; needs a spike and a concept first (14.5) |
 | U1 schedules of UI users deleted while the config entry is not loaded | Medium | WP1 | Done in 0.2.3 (#73) |
 | S2 history and statistics without limits | Medium | WP8 | Done in 0.3.0 (#83): 50 entities, 366 days history, 32 days hourly and 5 years other statistics, `HAB-HIST-002` |
-| P1 costly filter for every state change of every subscription | Medium | WP3, WP11 | Domain check first done in 0.2.3 (#75); caches done for 0.3.0 (#85) |
+| P1 costly filter for every state change of every subscription | Medium | WP3, WP11 | Domain check first done in 0.2.3 (#75); caches done in 0.3.0 (#85) |
 | S3 deleted bridge entities counted as exposed | Low | WP2 | Done in 0.2.3 (#74) |
 | S4 any service of the domain was allowed | Low | WP9 | Done in 0.3.0 (#81): list of services and `service_data` keys (11.4) |
 | S5 all attributes are sent to the app | Low | WP19 | Done in 0.3.0 (#93): a denylist instead of the planned allowlist, because the app shows all attributes (8.1); attributes that name other entities or carry an access link are left out |
@@ -799,7 +799,7 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | P6 schedule store sorts on every access | Note | WP12 | Done in 0.3.0 (#87): sorted once per change |
 | P7 sun trigger computes up to 367 days | Note | – | Open; only weekday sets with long polar gaps reach many days, kept as is |
 
-Decisions taken during the review: history up to 366 days instead of 31, because the app reads states of switches and climate entities over any custom range; hourly statistics up to 32 days because counters read one lead period; daily statistics up to 5 years; the service list is what the app's `ServiceCallFactory` sends plus `switch.toggle` for schedules; `run_now` replies at once. The app maps the new codes since #91: `HAB-AUTH-002` → `HAAC-AUTH-006`, `HAB-HIST-002` → `HAAC-BRG-006`. Pull request numbers refer to `stacknoise/haac-bridge` unless stated otherwise.
+Decisions taken during the review: history up to 366 days instead of 31, because the app reads states of switches and climate entities over any custom range; hourly statistics up to 32 days because counters read one lead period; daily statistics up to 5 years; the service list is what the app's `ServiceCallFactory` sends plus `switch.toggle` for schedules; `run_now` replies at once. The app maps the new codes: `HAB-AUTH-002` → `HAAC-AUTH-006` and `HAB-HIST-002` → `HAAC-BRG-006` since haac-android #91, `HAB-SCH-007` → `HAAC-BRG-005` since haac-android #94; `HAB-CFG-003` reaches only the HA administrator. Pull request numbers refer to `stacknoise/haac-bridge` unless stated otherwise.
 
 ## 14. Error handling, testing, roadmap and open points
 
@@ -823,7 +823,7 @@ Every error in this table is raised as a `HaacException` with an error code from
 ### 14.2 Testing
 
 - **App**: unit tests for use cases and diff logic; repository tests against MockWebServer (REST + WebSocket); Room migration tests; Compose UI tests for onboarding, layout editor and climate controls; instrumented tests for Keystore/biometric flows on real devices with and without StrongBox.
-- **Integration**: `pytest-homeassistant-custom-component` tests for YAML validation, filter evaluation per user, deny-by-default, service-call rejection, reload and `exposure_changed`.
+- **Integration**: `pytest-homeassistant-custom-component` tests for YAML validation, filter evaluation per user, deny-by-default, service-call rejection (exposure, service list and `service_data` keys, 11.4), limits of history and statistics, hidden attributes (11.3), reload and `exposure_changed`.
 - **End-to-end**: HA test instance in Docker with fixed users and demo entities; CI runs the app against it on an emulator.
 - **Security**: MASVS checklist review before release; manual MITM test with a proxy.
 
@@ -834,7 +834,7 @@ Every error in this table is raised as a `HaacException` with an error code from
 | MVP (v1.0) | Onboarding, login + fingerprint, homes/floors/rooms, switch/sensor/climate, per-user exposure, start sync, multiple HA instances with switching, internal/external address per instance |
 | v1.1 | HA area import wizard, per-room aliases, home-screen widgets and quick-settings tiles, schedules for switches (chapter 19) |
 | v1.2 | More domains (`light`, `cover`, `binary_sensor`, `lock`, `media_player`) |
-| v2.0 | Encrypted layout backup/export, UI config flow for the bridge |
+| v2.0 | Encrypted layout backup/export (the UI config flow for the bridge is already built, 10.2) |
 
 ### 14.4 Distribution
 
@@ -1393,10 +1393,11 @@ custom_components/haac_bridge/
 ├── manifest.json  const.py  services.yaml
 ├── translations/en.json     # user texts of all exceptions (18.3)
 ├── core/                    # errors.py (ErrorCode, exceptions), error_factory.py,
-│                            # response_factory.py, command.py (command wrapper)
-├── config/                  # YAML schema, resolving usernames to HA users
-├── exposure/                # filter_factory.py, per-user exposed set, revision hash
-├── entities/                # descriptor_factory.py, state subscription
+│                            # response_factory.py, command.py (command wrapper), subscriptions.py
+├── config/                  # YAML schema, UI users, resolving users, Repairs issues
+├── exposure/                # filter_factory.py, per-user exposed set with caches, revision hash, own entities
+├── entities/                # descriptor_factory.py, state subscription, attributes.py (hidden attributes, 11.3)
+├── areas/                   # floors and areas catalog for haac_bridge/areas
 ├── instance/                # instance ID and addresses for haac_bridge/info
 ├── services/                # call_factory.py: validated service calls
 ├── history/                 # filtered history and statistics
@@ -1416,8 +1417,8 @@ Factories are plain classes created once in `async_setup` and stored in `hass.da
 | Factory | Creates | Why |
 | --- | --- | --- |
 | `FilterFactory` | One `EntityFilter` per HA user from the YAML configuration | Filter rules in one place (10.2) |
-| `DescriptorFactory` | Entity descriptor per domain (switch, sensor, climate) from an HA state | Per-domain attribute selection; new domains in one place |
-| `ServiceCallFactory` | Validated service call (domain, service, data, target) | Enforces exposure and domain services (10.3) |
+| `DescriptorFactory` | Entity descriptor per domain (switch, sensor, climate) from an HA state, without the hidden attributes (11.3) | Per-domain attribute selection; new domains in one place |
+| `ServiceCallFactory` | Validated service call (domain, service, data, target) | Enforces exposure, the service list and its `service_data` keys (10.3, 11.4) |
 | `TriggerFactory` | One trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run of a schedule | Time and sun logic in one place (19.3) |
 | `ResponseFactory` | WebSocket result and error replies | One reply format incl. error code (11) |
 | `ErrorFactory` | `HaacBridgeError` from any caught exception | Error mapping in one place (18.3) |

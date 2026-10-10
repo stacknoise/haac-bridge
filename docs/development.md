@@ -38,12 +38,12 @@ custom_components/haac_bridge/
   __init__.py  config_flow.py  const.py  manifest.json  services.yaml
   sensor.py  switch.py            # HA entities of the schedules (device "HAAC Schedules")
   translations/en.json            # texts of exceptions, issues, config and options flow
-  core/        errors.py, error_factory.py, response_factory.py, command.py, caller.py, runtime.py
+  core/        errors.py, error_factory.py, response_factory.py, command.py, caller.py, runtime.py, subscriptions.py
   config/      YAML schema, UI users (options flow), resolving users, Repairs issues
-  exposure/    FilterFactory, per-user exposed set, revision hash, own entities
-  entities/    DescriptorFactory, state subscription
+  exposure/    FilterFactory, per-user exposed set with caches, revision hash, own entities
+  entities/    DescriptorFactory, state subscription, attributes.py (hidden attributes)
   services/    ServiceCallFactory (validated service calls)
-  history/     filtered history and statistics
+  history/     filtered history and statistics, limits
   areas/       areas and floors catalog (import into the app)
   instance/    instance id and addresses for haac_bridge/info
   schedules/   model, store, triggers, planner, runner, manager, entities (concept 19)
@@ -94,7 +94,14 @@ The caller is always `connection.user`; the bridge never accepts a user name or 
 2. Add the handler to `COMMANDS` in `api/__init__.py`. `async_setup` registers every entry inside the command wrapper.
 3. Return the payload, or raise a `HaacBridgeError`; never reply with `connection.send_*` yourself. A subscription returns `SubscriptionStarted(initial)`.
 4. Write tests (section 8) and document the command in concept 11.2.
-5. **API versioning:** a breaking change of any command raises `API_VERSION` in `const.py` and the major version of the integration (concept 16.4). A new optional feature is added to `FEATURES`; the app finds it in the `features` list of `haac_bridge/info`.
+5. Reuse the building blocks instead of writing them again:
+   - A subscription ends the caller's previous one of the same kind with `async_end_subscriptions_of` (`core/subscriptions.py`); one per connection.
+   - A state for the app goes through `shareable_state` or `compressed_state` (`entities/attributes.py`), never `State.as_dict()` directly.
+   - A recorder query takes its range from `TimeRange` and checks it with `check_length` against the limits in `const.py`.
+   - A service call is built by `ServiceCallFactory`; it checks `ALLOWED_SERVICES` and runs with `SERVICE_TIMEOUT`.
+   - Work that may take long (a schedule run) runs in the background (`runner.async_run_in_background`); the command replies at once.
+   - Frequent writes of the schedule store use `async_replace(..., delay=True)`; changes by users are written at once.
+6. **API versioning:** a breaking change of any command raises `API_VERSION` in `const.py` and the major version of the integration (concept 16.4). A new optional feature is added to `FEATURES`; the app finds it in the `features` list of `haac_bridge/info`.
 
 ## 4. Factory pattern (concept 18.2)
 
@@ -105,8 +112,8 @@ Factories are plain classes created once in `async_setup` and stored in `HaacBri
 | Factory | File | Creates |
 | --- | --- | --- |
 | `FilterFactory` | `exposure/filter_factory.py` | one `EntityFilter` per HA user from the YAML or UI configuration |
-| `DescriptorFactory` | `entities/descriptor_factory.py` | entity descriptor per domain (switch, sensor, climate) from an HA state |
-| `ServiceCallFactory` | `services/call_factory.py` | validated service call (domain, service, data, target); enforces exposure and domain services |
+| `DescriptorFactory` | `entities/descriptor_factory.py` | entity descriptor per domain (switch, sensor, climate) from an HA state, without hidden attributes |
+| `ServiceCallFactory` | `services/call_factory.py` | validated service call (domain, service, data, target); enforces exposure and `ALLOWED_SERVICES` with its `service_data` keys |
 | `TriggerFactory` | `schedules/triggers.py` | one trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run |
 | `ResponseFactory` | `core/response_factory.py` | WebSocket result, error and event replies |
 | `ErrorFactory` | `core/error_factory.py` | `HaacBridgeError` from any caught exception |
@@ -178,12 +185,13 @@ Every error of the bridge is a `HaacBridgeError` (derived from Home Assistant's 
 
 ### The concept document
 
-`docs/concept.md` here is a **copy**. The leading version is `docs/concept.md` in `stacknoise/haac-android`. After a change there has been merged, take the file over into this repository in its own pull request (the blob must be identical). Do not edit the copy here first.
+`docs/concept.md` here is a **copy**. The leading version is `docs/concept.md` in `stacknoise/haac-android`. After a change there has been merged, take the file over into this repository in its own pull request (the blob must be identical). Do not edit the copy here first. A bridge change that needs a concept change therefore starts with a docs pull request in the app repository.
 
 ## 10. Versions and releases
 
-- The version is in `custom_components/haac_bridge/manifest.json` (`version`) and `pyproject.toml`; both are raised together, in their own pull request (`chore(release): bump the version to X.Y.Z`).
-- Tag the merge commit `vX.Y.Z` and push the tag. `release.yml` checks that the `manifest.json` version equals the tag and creates the GitHub Release with generated notes; HACS reads the releases.
+- The version is in `custom_components/haac_bridge/manifest.json` (`version`), `pyproject.toml` and the expected `bridge_version` in `tests/api/test_commands.py`; all three are raised together, in their own pull request (`chore(release): bump the version to X.Y.Z`). A release state in the concept (for example 13.4) is changed first in the app repository (section 9).
+- Tag the merge commit `vX.Y.Z` and push the tag: `git tag -a vX.Y.Z -m vX.Y.Z <sha>` and `git push origin vX.Y.Z`. `release.yml` checks that the `manifest.json` version equals the tag and creates the GitHub Release with generated notes; HACS reads the releases. **Do not create the release in the GitHub UI first**; the workflow then fails because the release already exists.
+- A HAB code that reaches the app is mapped in the app (`BRIDGE_CODES`) in the same release; otherwise the app shows it as `HAAC-BRG-005`.
 - Tags `v*` are protected (no deleting, moving or overwriting), so check the version on `main` before tagging.
 - Semantic versioning: a breaking change of a WebSocket command raises `API_VERSION` and the major version; new optional features raise the minor version and extend `FEATURES`.
 - Existing installations update through HACS (⋮ → Redownload) and a restart of Home Assistant.
@@ -193,7 +201,8 @@ Every error of the bridge is a `HaacBridgeError` (derived from Home Assistant's 
 - Resolve the caller only from `connection.user`; never accept a user name or id from the client.
 - Deny by default: a HA user who is not configured (YAML or UI) sees no entities. A YAML entry wins over a UI entry for the same user.
 - Only the domains `switch`, `sensor` and `climate` are ever returned in v1, whatever the filter says. Entities of the platform `haac_bridge` itself are never exposed.
-- `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service belongs to the entity's domain; the bridge sets the target itself.
-- History and statistics are filtered with the same exposure before the recorder is queried.
+- `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service and its `service_data` keys are in `ALLOWED_SERVICES` (concept 11.4); the bridge sets the target itself.
+- History and statistics are filtered with the same exposure before the recorder is queried and stay within the limits of concept 10.3.
+- Attributes that name other entities or carry an access link are never sent to the app (concept 11.3).
 - Schedules check owner and exposure on every run, with the rights of the owner (concept 19.3).
 - No tokens or passwords in logs. No license headers in source files; dependencies only under Apache-2.0-compatible licenses.
