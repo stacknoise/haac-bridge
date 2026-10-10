@@ -81,7 +81,8 @@
       "unknown_user": "A user_id does not exist in Home Assistant"
     },
     "abort": {
-      "unknown": "Something went wrong, please start again"
+      "unknown": "Something went wrong, please start again",
+      "user_gone": "This Home Assistant user was deleted meanwhile, nothing was saved"
     }
   },
   "exceptions": {
