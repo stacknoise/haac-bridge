@@ -200,6 +200,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaacBridgeConfigEntry) -
     entry.runtime_data.async_sweep()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    data.schedules.runner.async_run_deferred()
     return True
 
 

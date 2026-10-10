@@ -1,6 +1,7 @@
 """Tests for the user lifecycle: deleted, deactivated and unconfigured users (concept 19.6)."""
 
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
 
@@ -220,8 +221,45 @@ async def test_a_run_waits_while_the_entry_reloads(hass: HomeAssistant, world: W
     assert manager_of(hass).store.get(schedule.id) is not None  # not deleted as "unconfigured"
 
     assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert len(calls) == 1  # the waiting run is caught up after the setup
+
     await manager_of(hass).runner.async_run(schedule.id)
+    assert len(calls) == 2
+
+
+async def test_a_run_missed_too_long_ago_is_not_caught_up(
+    hass: HomeAssistant, world: World
+) -> None:
+    calls = async_mock_service(hass, "switch", "turn_on")
+    schedule = await create(hass, world.anton)
+    entry = entry_of(hass)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await manager_of(hass).runner.async_run(schedule.id)
+    with patch("custom_components.haac_bridge.schedules.runner.MISSED_RUN_GRACE", timedelta(0)):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert calls == []
+    stored = manager_of(hass).store.get(schedule.id)
+    assert stored is not None
+    assert stored.last_run is None
+
+
+async def test_a_run_due_twice_during_a_reload_is_caught_up_once(
+    hass: HomeAssistant, world: World
+) -> None:
+    calls = async_mock_service(hass, "switch", "turn_on")
+    schedule = await create(hass, world.anton)
+    entry = entry_of(hass)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await manager_of(hass).runner.async_run(schedule.id)
+    await manager_of(hass).runner.async_run(schedule.id)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
     assert len(calls) == 1
 
 
