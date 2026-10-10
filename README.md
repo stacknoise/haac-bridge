@@ -103,6 +103,8 @@ Rules:
 
 - **Deny by default.** A user who is not configured (in the UI or in YAML) sees no entities. A listed user without any `include_*` rule also sees none.
 - An explicit exclude beats an include, as in the HomeKit Bridge.
+- Wildcards must look like `domain.pattern` (for example `sensor.*_humidity`), in YAML, in the UI and in the import.
+- Each user may appear only once in `configuration.yaml`; if two entries refer to the same user (by `username` or `user_id`), the first is used and a *Repairs* issue (`HAB-CFG-003`) names the user. A user in YAML and in the UI is fine: the YAML entry wins.
 - Only `switch`, `sensor` and `climate` entities are ever shared, whatever the filter says.
 - New entities that match a filter (for example via a glob) are shared automatically.
 - After editing the configuration, run the action **`haac_bridge.reload`** (admin only) or restart Home Assistant. Configuration problems appear under *Settings → Repairs*.

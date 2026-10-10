@@ -101,3 +101,38 @@ async def test_bare_section_means_no_users() -> None:
 async def test_invalid_user_entries_are_rejected(user: dict) -> None:
     with pytest.raises(vol.Invalid):
         CONFIG_SCHEMA({"haac_bridge": {"users": [user]}})
+
+
+@pytest.mark.parametrize("glob", ["*_humidity", "sensor.", ".x", " "])
+async def test_wildcards_must_look_like_domain_dot_pattern(glob: str) -> None:
+    for key in ("include_entity_globs", "exclude_entity_globs"):
+        with pytest.raises(vol.Invalid):
+            CONFIG_SCHEMA(
+                {
+                    "haac_bridge": {
+                        "users": [{"username": "anton", "filter": {key: [glob]}}],
+                    }
+                }
+            )
+
+
+async def test_valid_wildcards_pass() -> None:
+    config = CONFIG_SCHEMA(
+        {
+            "haac_bridge": {
+                "users": [
+                    {
+                        "username": "anton",
+                        "filter": {
+                            "include_entity_globs": ["sensor.*_humidity", "switch.*"],
+                            "exclude_entity_globs": ["*.test_*"],
+                        },
+                    }
+                ]
+            }
+        }
+    )
+    assert parse_users(config)[0].filter["include_entity_globs"] == [
+        "sensor.*_humidity",
+        "switch.*",
+    ]

@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.entityfilter import BASE_FILTER_SCHEMA
+from homeassistant.helpers.entityfilter import (
+    BASE_FILTER_SCHEMA,
+    CONF_EXCLUDE_ENTITY_GLOBS,
+    CONF_INCLUDE_ENTITY_GLOBS,
+)
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
@@ -17,6 +21,25 @@ from ..const import (
     CONF_USERS,
     DOMAIN,
 )
+
+
+def valid_glob(value: str) -> bool:
+    """Return True if a wildcard has the form `domain.pattern`, e.g. `sensor.*_humidity`."""
+    domain, dot, pattern = value.strip().partition(".")
+    return bool(domain and dot and pattern)
+
+
+def _globs_checked(rules: dict[str, Any]) -> dict[str, Any]:
+    """Voluptuous validator: reject a filter whose include or exclude wildcards are not `domain.pattern`."""
+    for key in (CONF_INCLUDE_ENTITY_GLOBS, CONF_EXCLUDE_ENTITY_GLOBS):
+        for glob in rules.get(key, []):
+            if not valid_glob(glob):
+                raise vol.Invalid(f"wildcard {glob!r} must look like domain.pattern", path=[key])
+    return rules
+
+
+FILTER_SCHEMA = vol.All(BASE_FILTER_SCHEMA, _globs_checked)
+"""HA's filter schema, plus the same wildcard check the options flow applies (finding U6)."""
 
 ENTITY_CONFIG_SCHEMA = vol.Schema(
     {
@@ -32,7 +55,7 @@ USER_SCHEMA = vol.All(
         {
             vol.Exclusive(CONF_USERNAME, "user"): cv.string,
             vol.Exclusive(CONF_USER_ID, "user"): cv.string,
-            vol.Optional(CONF_FILTER, default={}): BASE_FILTER_SCHEMA,
+            vol.Optional(CONF_FILTER, default={}): FILTER_SCHEMA,
             vol.Optional(CONF_ENTITY_CONFIG, default={}): ENTITY_CONFIG_SCHEMA,
         }
     ),

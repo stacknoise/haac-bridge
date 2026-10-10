@@ -8,6 +8,7 @@ Every error of the integration carries one of these codes (format `HAB-<AREA>-<N
 | --- | --- | --- | --- |
 | HAB-CFG-001 | The haac_bridge configuration in configuration.yaml is invalid | – (HA admin, Repairs) | The haac_bridge section in configuration.yaml failed schema validation on reload. |
 | HAB-CFG-002 | A user in the haac_bridge configuration does not exist in Home Assistant | – (HA admin, Repairs) | A `username` or `user_id` in the configuration matches no Home Assistant user. |
+| HAB-CFG-003 | Several entries of the haac_bridge configuration refer to the same user | – (HA admin, Repairs) | Several entries of configuration.yaml refer to the same Home Assistant user; the first is used. |
 | HAB-AUTH-001 | The request has no signed-in Home Assistant user | HAAC-AUTH-003 | The WebSocket connection has no Home Assistant user bound to its access token. |
 | HAB-AUTH-002 | Your Home Assistant user is deactivated | HAAC-AUTH-006 | The Home Assistant user bound to the connection is deactivated. |
 | HAB-SVC-001 | You are not allowed to control this device | HAAC-BRG-003 | The target entity is not exposed to the calling user. |

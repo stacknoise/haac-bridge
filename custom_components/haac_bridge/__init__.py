@@ -64,7 +64,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         yaml_entries=entries,
     )
     hass.data[DATA_KEY] = data
-    await async_check_users(hass, data.issue_ids, entries)
+    await async_check_users(hass, data.issue_ids, entries, entries)
     async_register_commands(hass, COMMANDS)
     await _async_start_schedules(hass, data.schedules)
     _async_listen_to_user_events(hass)
@@ -184,7 +184,7 @@ async def _async_apply(hass: HomeAssistant, *, sweep: bool = True) -> None:
     data = get_data(hass)
     entries = [*data.yaml_entries, *data.ui_entries]
     data.exposure = Exposure(entries, data.filters, own_entity_checker(hass))
-    await async_check_users(hass, data.issue_ids, entries)
+    await async_check_users(hass, data.issue_ids, entries, data.yaml_entries)
     if sweep:
         await data.schedules.async_sweep()
     async_dispatcher_send(hass, SIGNAL_EXPOSURE_CHANGED)

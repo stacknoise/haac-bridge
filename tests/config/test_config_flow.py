@@ -292,6 +292,10 @@ async def test_import_adds_and_replaces_users(
         ("users:\n  - user_id: abc\n    unknown_key: true\n", "invalid_config"),
         ("users: []\n", "no_users"),
         (
+            "users:\n  - user_id: abc\n    filter:\n      include_entity_globs: ['*_humidity']\n",
+            "invalid_config",
+        ),
+        (
             "users:\n  - username: anton\n    filter:\n      include_domains: [sensor]\n",
             "needs_user_id",
         ),

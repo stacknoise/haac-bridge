@@ -784,15 +784,15 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | S9 CI actions not pinned | Low | WP7 | Done in 0.2.3 (#79) |
 | U2 a run due during a reload is lost | Low | WP15 | Done for 0.3.0 (#89): it waits and runs once after the setup, within 5 minutes |
 | U3 service calls without a timeout | Low | WP5 | Done in 0.2.3 (#77): 15 s |
-| U4 options flow can overwrite parallel changes | Low | WP16 | Done for 0.3.0: the flow saves against the current entry (HA reads it live), and a user deleted while the form was open is not added back |
+| U4 options flow can overwrite parallel changes | Low | WP16 | Done for 0.3.0 (#91): the flow saves against the current entry (HA reads it live), and a user deleted while the form was open is not added back |
 | P2 every schedule change updates all schedule entities | Low | WP12 | Done for 0.3.0 (#87): one signal per schedule; the owner's name is read again only when the owner changes |
 | P3 exposed set recomputed for every request | Low | WP11 | Done for 0.3.0 (#85) |
 | P4 every run writes the whole schedule file at once | Low | WP13 | Done for 0.3.0 (#88): run results and system pauses are written after 1 s, together; changes by users at once |
 | P5 runs switch one entity after another; `run_now` waits for the run | Low | WP14 | Done for 0.3.0 (#82): parallel; `run_now` replies at once |
 | S10 manual run by an admin is logged as the owner | Note | WP18 | Done for 0.3.0 (#90): a manual run uses the caller's context |
 | S11 `info` for unconfigured users; binding by login name | Note | WP25 | Open (1.0) |
-| U5 duplicate YAML entries for one user | Note | WP17 | Open (0.3.0) |
-| U6 wildcard check only in the UI | Note | WP17 | Open (0.3.0) |
+| U5 duplicate YAML entries for one user | Note | WP17 | Done for 0.3.0: Repairs issue `HAB-CFG-003`; the first entry is used |
+| U6 wildcard check only in the UI | Note | WP17 | Done for 0.3.0: one check (`domain.pattern`) for YAML, UI and import |
 | P6 schedule store sorts on every access | Note | WP12 | Done for 0.3.0 (#87): sorted once per change |
 | P7 sun trigger computes up to 367 days | Note | – | Open; only weekday sets with long polar gaps reach many days, kept as is |
 
@@ -1436,6 +1436,7 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 | --- | --- | --- |
 | HAB-CFG-001 | The haac\_bridge configuration in configuration.yaml is invalid | – (HA admin, Repairs) |
 | HAB-CFG-002 | A user in the haac\_bridge configuration does not exist in Home Assistant | – (HA admin, Repairs) |
+| HAB-CFG-003 | Several entries of the haac\_bridge configuration refer to the same user | – (HA admin, Repairs) |
 | HAB-AUTH-001 | The request has no signed-in Home Assistant user | HAAC-AUTH-003 |
 | HAB-AUTH-002 | Your Home Assistant user is deactivated | HAAC-AUTH-006 |
 | HAB-SVC-001 | You are not allowed to control this device | HAAC-BRG-003 |

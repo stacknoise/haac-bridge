@@ -92,6 +92,9 @@
     "cfg_unknown_user": {
       "message": "A user in the haac_bridge configuration does not exist in Home Assistant"
     },
+    "cfg_duplicate_user": {
+      "message": "Several entries of the haac_bridge configuration refer to the same user"
+    },
     "auth_no_user": {
       "message": "The request has no signed-in Home Assistant user"
     },
@@ -152,6 +155,10 @@
     "cfg_unknown_user": {
       "title": "HAAC Bridge user not found (HAB-CFG-002)",
       "description": "The haac_bridge configuration refers to the user `{user}`, which does not exist in Home Assistant. This entry exposes nothing. Correct the `username` or `user_id` and run the action `haac_bridge.reload`."
+    },
+    "cfg_duplicate_user": {
+      "title": "HAAC Bridge user configured twice (HAB-CFG-003)",
+      "description": "{count} entries in the haac_bridge section of configuration.yaml refer to the user `{user}` (by `username` or `user_id`). Only the first entry is used. Remove or merge the others and run the action `haac_bridge.reload`."
     }
   },
   "services": {
