@@ -359,3 +359,49 @@ async def test_import_never_resolves_home_assistant_tags(
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_yaml"}
     assert entry.options == {}
+
+
+async def test_a_user_deleted_while_the_form_is_open_is_not_added_back(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    entry = await _add_entry(hass)
+    result = await _menu(hass, entry, "add_user")
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"user_id": anton.id}
+    )
+
+    await hass.auth.async_remove_user(anton)
+    await hass.async_block_till_done()
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"include_domains": ["sensor"]}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "user_gone"
+    assert entry.options.get("users", []) == []
+
+
+async def test_changes_saved_meanwhile_are_kept(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    maria = add_user("maria")
+    entry = await _add_entry(hass)
+    first = await _menu(hass, entry, "add_user")
+    first = await hass.config_entries.options.async_configure(
+        first["flow_id"], {"user_id": anton.id}
+    )
+
+    second = await _menu(hass, entry, "add_user")
+    second = await hass.config_entries.options.async_configure(
+        second["flow_id"], {"user_id": maria.id}
+    )
+    await hass.config_entries.options.async_configure(
+        second["flow_id"], {"include_domains": ["switch"]}
+    )
+    await hass.config_entries.options.async_configure(
+        first["flow_id"], {"include_domains": ["sensor"]}
+    )
+
+    assert {record["user_id"] for record in entry.options["users"]} == {anton.id, maria.id}

@@ -252,12 +252,18 @@ class HaacBridgeOptionsFlow(OptionsFlow):
             for entity_id, name in (user_input or {}).items()
             if entity_id in entity_ids and name and name.strip()
         }
-        return self._save(names)
+        return await self._async_save(names)
 
-    def _save(self, names: dict[str, str]) -> ConfigFlowResult:
-        """Store the selected user's rules and names, replacing an earlier entry of this user."""
+    async def _async_save(self, names: dict[str, str]) -> ConfigFlowResult:
+        """Store the selected user's rules and names, replacing an earlier entry of this user.
+
+        The other users are read from the entry as it is now, so changes saved meanwhile stay.
+        A user deleted in Home Assistant while the form was open is not added back (finding U4).
+        """
         if self._user_id is None:
             return self.async_abort(reason="unknown")
+        if await self.hass.auth.async_get_user(self._user_id) is None:
+            return self.async_abort(reason="user_gone")
         record = user_options(self._user_id, self._rules, names)
         others = [
             r for r in users_of(self.config_entry.options) if r[CONF_USER_ID] != self._user_id
