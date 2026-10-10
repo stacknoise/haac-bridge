@@ -58,11 +58,15 @@ class ServiceCallFactory:
         return ValidatedServiceCall(domain, service, dict(data), entity_id, user.id)
 
 
-async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall) -> None:
+async def async_execute(
+    hass: HomeAssistant, call: ValidatedServiceCall, *, context_user_id: str | None = None
+) -> None:
     """Run the call as the calling user, targeting only its entity; map HA errors to HAB codes.
 
     A call that takes longer than SERVICE_TIMEOUT seconds is given up and counts as failed, so a
     hanging integration never blocks the command or a schedule run (review finding U3).
+
+    `context_user_id` replaces the calling user in the context, for a manual run of a schedule.
     """
     try:
         async with asyncio.timeout(SERVICE_TIMEOUT):
@@ -71,7 +75,7 @@ async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall) -> None
                 call.service,
                 call.data,
                 blocking=True,
-                context=Context(user_id=call.user_id),
+                context=Context(user_id=context_user_id or call.user_id),
                 target={ATTR_ENTITY_ID: call.entity_id},
             )
     except TimeoutError as err:

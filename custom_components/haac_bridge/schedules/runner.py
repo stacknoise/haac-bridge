@@ -50,10 +50,10 @@ class ScheduleRunner:
         self._deferred: dict[str, datetime] = {}
 
     @callback
-    def async_run_in_background(self, schedule_id: str) -> None:
+    def async_run_in_background(self, schedule_id: str, triggered_by: str | None = None) -> None:
         """Start a run without waiting for it; the result arrives as a schedule change (concept 19.4)."""
         task = self._hass.async_create_background_task(
-            self.async_run(schedule_id), name=f"haac_bridge run {schedule_id}"
+            self.async_run(schedule_id, triggered_by), name=f"haac_bridge run {schedule_id}"
         )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -88,15 +88,19 @@ class ScheduleRunner:
         for task in list(self._tasks):
             task.cancel()
 
-    async def async_run(self, schedule_id: str) -> None:
-        """Run a schedule now; a run of the same schedule that is still going on finishes first."""
+    async def async_run(self, schedule_id: str, triggered_by: str | None = None) -> None:
+        """Run a schedule now; a run of the same schedule that is still going on finishes first.
+
+        `triggered_by` is the HA user who started a manual run; the services run in that user's
+        context, so the logbook names them (review finding S10). Timed runs use the owner.
+        """
         lock = self._locks.setdefault(schedule_id, asyncio.Lock())
         async with lock:
-            await self._async_run_locked(schedule_id)
+            await self._async_run_locked(schedule_id, triggered_by)
         if self._store.get(schedule_id) is None:
             self._locks.pop(schedule_id, None)
 
-    async def _async_run_locked(self, schedule_id: str) -> None:
+    async def _async_run_locked(self, schedule_id: str, triggered_by: str | None) -> None:
         """Validate the owner and the exposure, then switch and record the result."""
         schedule = self._store.get(schedule_id)
         if schedule is None:
@@ -120,25 +124,37 @@ class ScheduleRunner:
             failed = LastRun(dt_util.utcnow(), RunResult.FAILED, ErrorCode.SCH_RUN_FAILED.value)
             await self._async_pause(schedule.id, PauseReason.NO_ENTITIES, failed)
             return
-        done = await self._async_switch_all(user, schedule, targets)
+        context_user_id = triggered_by or user.id
+        if context_user_id != user.id:
+            _LOGGER.info(
+                "Schedule %s of user %s is run by user %s", schedule.id, user.id, context_user_id
+            )
+        done = await self._async_switch_all(user, schedule, targets, context_user_id)
         await self._async_record(schedule.id, _result(done, len(schedule.entities)))
 
-    async def _async_switch_all(self, user: User, schedule: Schedule, targets: list[str]) -> int:
+    async def _async_switch_all(
+        self, user: User, schedule: Schedule, targets: list[str], context_user_id: str
+    ) -> int:
         """Switch the entities in parallel, the unavailable ones after a short wait; return how many worked."""
         service = schedule.action.value
         ready = [entity for entity in targets if not self._is_unavailable(entity)]
         later = [entity for entity in targets if entity not in ready]
-        done = await self._async_switch_many(user, ready, service)
+        done = await self._async_switch_many(user, ready, service, context_user_id)
         if later:
             await self._async_wait_before_retry()
             available = [entity for entity in later if not self._is_unavailable(entity)]
-            done += await self._async_switch_many(user, available, service)
+            done += await self._async_switch_many(user, available, service, context_user_id)
         return done
 
-    async def _async_switch_many(self, user: User, entity_ids: list[str], service: str) -> int:
+    async def _async_switch_many(
+        self, user: User, entity_ids: list[str], service: str, context_user_id: str
+    ) -> int:
         """Switch the entities at the same time; return how many worked."""
         results = await asyncio.gather(
-            *(self._async_switch_one(user, entity_id, service) for entity_id in entity_ids)
+            *(
+                self._async_switch_one(user, entity_id, service, context_user_id)
+                for entity_id in entity_ids
+            )
         )
         return sum(results)
 
@@ -146,12 +162,14 @@ class ScheduleRunner:
         """Wait before unavailable entities are tried once more."""
         await asyncio.sleep(RETRY_DELAY_SECONDS)
 
-    async def _async_switch_one(self, user: User, entity_id: str, service: str) -> int:
-        """Call the service for one entity as the owner; return 1 if it worked, else 0."""
+    async def _async_switch_one(
+        self, user: User, entity_id: str, service: str, context_user_id: str
+    ) -> int:
+        """Call the service for one entity, checked against the owner; return 1 if it worked, else 0."""
         data = get_data(self._hass)
         try:
             call = data.services.create(data.exposure, user, entity_id, service, {})
-            await async_execute(self._hass, call)
+            await async_execute(self._hass, call, context_user_id=context_user_id)
         except HaacBridgeError as err:
             _LOGGER.warning("%s while a schedule switched %s", err.code, entity_id)
             return 0

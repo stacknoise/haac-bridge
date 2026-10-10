@@ -199,7 +199,7 @@ class ScheduleManager:
         ):
             raise ScheduleError(ErrorCode.SCH_BUSY)
         self._manual_runs[schedule_id] = now
-        self.runner.async_run_in_background(schedule_id)
+        self.runner.async_run_in_background(schedule_id, user.id)
 
     async def async_sweep(self, owner_id: str | None = None) -> None:
         """Delete the schedules of users who are gone or not configured, pause those of inactive ones.
