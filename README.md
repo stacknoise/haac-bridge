@@ -21,7 +21,7 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 - New entities that match a filter are shared automatically, and connected apps are told at once (`exposure_changed`), also after a configuration change.
 
 **What the app can do through the bridge**
-- Read the shared entities with their current state, and follow their live changes.
+- Read the shared entities with their current state, and follow their live changes. Attributes that name other entities (for example the members of a group) or carry an access link are left out.
 - Call services on shared entities only: the entity must be shared with the caller, the service must be on the bridge's short list for the entity's domain (the ones the app uses, see concept 11.4), and the bridge sets the target itself, so a client cannot add other targets. A call that takes longer than 15 seconds counts as failed.
 - Read history and long-term statistics of shared entities only, filtered before the recorder is queried; at most 50 entities per request, up to 366 days of history, 32 days of hourly and 5 years of daily statistics.
 - Read the Home Assistant floors and areas that hold shared entities, so the app can offer an import of levels and rooms (no entity IDs are sent).
