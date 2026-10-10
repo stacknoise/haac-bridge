@@ -75,3 +75,53 @@ async def test_invalid_reload_keeps_previous_config(
     with patch(YAML_CONFIG, return_value=_config("switch.garage_socket")):
         await hass.services.async_call("haac_bridge", "reload", blocking=True)
     assert issue_registry.async_get_issue("haac_bridge", "cfg_invalid") is None
+
+
+@pytest.mark.usefixtures("demo_states")
+async def test_a_user_configured_twice_in_yaml_is_reported(
+    hass: HomeAssistant,
+    issue_registry: ir.IssueRegistry,
+    add_user: Callable[[str], User],
+    setup_bridge: SetupBridge,
+) -> None:
+    anton = add_user("anton")
+    await setup_bridge(
+        {
+            "users": [
+                {"username": "anton", "filter": {"include_entities": ["switch.garage_socket"]}},
+                {"user_id": anton.id, "filter": {"include_entities": ["switch.office_fan"]}},
+            ]
+        }
+    )
+    issue_id = f"cfg_duplicate_user_{anton.id}"
+    issue = issue_registry.async_get_issue("haac_bridge", issue_id)
+    assert issue is not None
+    assert issue.translation_placeholders == {"user": "Anton", "count": "2"}
+    # The first entry is used.
+    assert get_data(hass).exposure.exposed_entity_ids(hass, anton) == ["switch.garage_socket"]
+
+    with patch(YAML_CONFIG, return_value=_config("switch.office_fan")):
+        await hass.services.async_call("haac_bridge", "reload", blocking=True)
+
+    assert issue_registry.async_get_issue("haac_bridge", issue_id) is None
+
+
+@pytest.mark.usefixtures("demo_states")
+async def test_a_user_in_yaml_and_in_the_ui_is_no_duplicate(
+    hass: HomeAssistant,
+    issue_registry: ir.IssueRegistry,
+    add_user: Callable[[str], User],
+    setup_bridge: SetupBridge,
+) -> None:
+    anton = add_user("anton")
+    await setup_bridge(
+        {"users": [{"username": "anton", "filter": {"include_domains": ["switch"]}}]}
+    )
+    entry = hass.config_entries.async_entries("haac_bridge")[0]
+    hass.config_entries.async_update_entry(
+        entry,
+        options={"users": [{"user_id": anton.id, "filter": {"include_domains": ["sensor"]}}]},
+    )
+    await hass.async_block_till_done()
+
+    assert issue_registry.async_get_issue("haac_bridge", f"cfg_duplicate_user_{anton.id}") is None

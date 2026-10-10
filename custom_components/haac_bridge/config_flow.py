@@ -24,6 +24,7 @@ from homeassistant.helpers.selector import (
 )
 import voluptuous as vol
 
+from .config.schema import valid_glob
 from .config.ui_users import FILTER_KEYS, INCLUDE_KEYS, user_options, users_of
 from .config.ui_yaml import export_users, import_users
 from .const import CONF_NAMES, CONF_USER_ID, CONF_USERS, DOMAIN, SUPPORTED_DOMAINS
@@ -308,5 +309,5 @@ def _user_schema(users: list[SelectOptionDict]) -> vol.Schema:
 
 
 def _globs_valid(rules: dict[str, list[str]]) -> bool:
-    """Return True if every wildcard has the form `domain.pattern`."""
-    return all("." in glob and glob.strip() for key in _GLOB_KEYS for glob in rules.get(key, []))
+    """Return True if every wildcard has the form `domain.pattern`, with the YAML schema's check."""
+    return all(valid_glob(glob) for key in _GLOB_KEYS for glob in rules.get(key, []))

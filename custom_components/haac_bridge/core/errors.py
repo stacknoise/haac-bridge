@@ -23,6 +23,9 @@ class ErrorCode(StrEnum):
     CFG_UNKNOWN_USER = "HAB-CFG-002"
     """A `username` or `user_id` in the configuration matches no Home Assistant user."""
 
+    CFG_DUPLICATE_USER = "HAB-CFG-003"
+    """Several entries of configuration.yaml refer to the same Home Assistant user; the first is used."""
+
     AUTH_NO_USER = "HAB-AUTH-001"
     """The WebSocket connection has no Home Assistant user bound to its access token."""
 
@@ -88,6 +91,7 @@ class ErrorCode(StrEnum):
 APP_CODES: Final[dict[ErrorCode, str | None]] = {
     ErrorCode.CFG_INVALID: None,
     ErrorCode.CFG_UNKNOWN_USER: None,
+    ErrorCode.CFG_DUPLICATE_USER: None,
     ErrorCode.AUTH_NO_USER: "HAAC-AUTH-003",
     ErrorCode.AUTH_INACTIVE: "HAAC-AUTH-006",
     ErrorCode.SVC_NOT_ALLOWED: "HAAC-BRG-003",
