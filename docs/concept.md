@@ -1085,7 +1085,8 @@ Until mockups exist, Claude Code builds these with the tokens from 15.2 and stan
 
 1. **A home is mandatory** (decided). The mockup notes allow unlinked levels and rooms and link a room to a home only via its level. Instead, every level and room belongs to a home, and a room links either to a level of that home or directly to the home (6.1). Consequences: no *Unlinked* chip in M-02, no *None* option for the home in M-03, and *New level* / *New room* require a home.
 2. **Entities in any number of rooms** (decided). The mockup notes say an entity sits in at most one room. Instead, an entity can be assigned to any number of rooms (7.2). In M-04, "in Kitchen" is only a hint; the row stays selectable.
-. **Salbei replaces Nocturne** (decided, October 2026). The visual style of all screens follows the Salbei handoff (15.2); the nine mockup PNGs and the 1c HTML keep their layout role but no longer show the app's colours, type or shapes. Where the Salbei handoff and a mockup disagree on layout (for example tiles as cards instead of list rows), Salbei wins.
+3. **New in the mockups, adopted in the concept**: LAN discovery (M-01), tile sizes and list arrange mode (M-05 to M-07), notification list (M-09). Their data and behaviour are defined in 4.2, 7.2, 9.1 and 12.
+4. **Salbei replaces Nocturne** (decided, October 2026). The visual style of all screens follows the Salbei handoff (15.2); the nine mockup PNGs and the 1c HTML keep their layout role but no longer show the app's colours, type or shapes. Where the Salbei handoff and a mockup disagree on layout (for example tiles as cards instead of list rows), Salbei wins.
 
 ### 15.6 App icon
 
