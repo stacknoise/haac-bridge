@@ -15,6 +15,8 @@ from homeassistant.helpers import (
     entity_registry as er,
 )
 
+from ..entities.attributes import shareable_attributes
+
 DomainFields = Callable[[State, er.RegistryEntry | None], dict[str, Any]]
 
 
@@ -66,7 +68,7 @@ class DescriptorFactory:
             "supported_features": attributes.get(ATTR_SUPPORTED_FEATURES, 0),
             "area": self._area_name(entry),
             "state": state.state,
-            "attributes": dict(attributes),
+            "attributes": shareable_attributes(attributes),
             "last_changed": state.last_changed.isoformat(),
             "last_updated": state.last_updated.isoformat(),
         }

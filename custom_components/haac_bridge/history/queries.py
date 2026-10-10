@@ -19,6 +19,7 @@ import voluptuous as vol
 
 from ..const import MAX_HISTORY_PERIOD, MAX_HOURLY_STATISTICS_PERIOD, MAX_STATISTICS_PERIOD
 from ..core.errors import ErrorCode, HistoryError, RequestError
+from ..entities.attributes import has_hidden, shareable_attributes
 
 PERIODS: Final = ("hour", "day", "week", "month")
 """Statistic periods the app may request (concept 11.2)."""
@@ -68,9 +69,9 @@ async def async_history(
     period: TimeRange,
     minimal_response: bool,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Return significant state changes per entity in HA's compressed state format."""
+    """Return significant state changes per entity in HA's compressed state format, without hidden attributes."""
     period.check_length(MAX_HISTORY_PERIOD)
-    return await _async_run(
+    result: dict[str, list[dict[str, Any]]] = await _async_run(
         hass,
         partial(
             history.get_significant_states,
@@ -86,6 +87,11 @@ async def async_history(
             compressed_state_format=True,
         ),
     )
+    for rows in result.values():
+        for row in rows:
+            if (attributes := row.get("a")) and has_hidden(attributes):
+                row["a"] = shareable_attributes(attributes)
+    return result
 
 
 async def async_statistics(

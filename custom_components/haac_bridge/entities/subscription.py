@@ -17,6 +17,7 @@ from ..const import SIGNAL_EXPOSURE_CHANGED
 from ..core.runtime import get_data
 from ..core.subscriptions import async_end_subscriptions_of
 from ..exposure.exposure import compute_revision
+from .attributes import compressed_state
 
 ADDED = "a"
 CHANGED = "c"
@@ -120,4 +121,4 @@ class EntitySubscription:
     def _compressed_states(self, entity_ids: set[str]) -> dict[str, Any]:
         """Return HA's compressed state for each entity that still has a state."""
         states = (self._hass.states.get(entity_id) for entity_id in sorted(entity_ids))
-        return {state.entity_id: state.as_compressed_state for state in states if state is not None}
+        return {state.entity_id: compressed_state(state) for state in states if state is not None}

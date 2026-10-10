@@ -652,6 +652,8 @@ Error reply (format of HA's WebSocket API, `code` = HAB code from 18.3):
 
 Subscription (`haac_bridge/subscribe_entities`): an empty result, then events in Home Assistant's compressed state format, limited to the caller's exposed entities. Keys: `s` state, `a` attributes, `lc`/`lu` last changed/updated (Unix time), `c` context; in a change, `+` holds new or changed values and `-` removed attribute names.
 
+Attributes that name other entities or carry an access link are never sent, neither in `entities/list` nor in events nor in `history`: `entity_id`, `entities`, every name ending in `_entity_id`, `entity_picture` and `access_token`. A group or min/max sensor therefore does not reveal its members. All other attributes are passed on unchanged, so the detail screen still shows them (8.1).
+
 ```json
 {"id": 14, "type": "haac_bridge/subscribe_entities"}
 {"id": 14, "type": "result", "success": true, "result": null}
@@ -749,6 +751,7 @@ Mitigations:
 | Manipulated service call to a non-exposed entity | Bridge checks `entity_id` against exposure and the service and its `service_data` keys against a fixed list per domain (11.4) before calling HA |
 | Overloading HA with large history or statistics requests | At most 50 entities per request and a maximum period per kind (10.3); longer periods are refused with `HAB-HIST-002` |
 | Reading the history of another user's deleted schedule | Entities of the platform `haac_bridge` stay hidden after their deletion, too |
+| Attributes reveal entities that are not shared (members of a group, source of a min/max sensor) or carry an access link | The bridge leaves out `entity_id`, `entities`, `*_entity_id`, `entity_picture` and `access_token` in descriptors, events and history (11.3) |
 | Pasted YAML that reads files or environment variables in the bridge's options flow | The import accepts plain YAML only; `!include`, `!env_var` and `!secret` are rejected |
 | A deactivated HA user keeps using the bridge | The bridge refuses the user (`HAB-AUTH-002`); HA also revokes the user's tokens, which closes open connections |
 | A hanging integration blocks commands or schedules | Bridge service calls time out after 15 s (`HAB-SVC-003`) |
@@ -777,7 +780,7 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | P1 costly filter for every state change of every subscription | Medium | WP3, WP11 | Domain check first done in 0.2.3 (#75); caches done for 0.3.0 (#85) |
 | S3 deleted bridge entities counted as exposed | Low | WP2 | Done in 0.2.3 (#74) |
 | S4 any service of the domain was allowed | Low | WP9 | Done for 0.3.0 (#81): list of services and `service_data` keys (11.4) |
-| S5 all attributes are sent to the app | Low | WP19 | Open (0.3.0) |
+| S5 all attributes are sent to the app | Low | WP19 | Done for 0.3.0: a denylist instead of the planned allowlist, because the app shows all attributes (8.1); attributes that name other entities or carry an access link are left out |
 | S6 YAML import resolved `!include` and `!env_var` | Low | WP4 | Done in 0.2.3 (#76) |
 | S7 no limit for subscriptions and `run_now` | Low | WP10 | Done for 0.3.0 (#86): one subscription of each kind per connection, `run_now` 10 s apart (`HAB-SCH-007`) |
 | S8 deactivated users not refused | Low | WP6 | Done in 0.2.3 (#78): `HAB-AUTH-002` |
