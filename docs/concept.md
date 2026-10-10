@@ -210,7 +210,7 @@ A HA instance is often reachable under two addresses: in the home network, e.g. 
 **Addresses.** Each instance has an *internal* and an *external* address; at least one is set.
 
 - On sign-in, the entered URL goes into the internal slot if its host is private (4.3), otherwise into the external slot. The other slot is filled from `haac_bridge/info`: internal ← `urls.internal`; external ← `urls.external`, else `urls.cloud`. Only addresses that `CleartextPolicy` allows are taken.
-- *Settings → Addresses* shows both addresses of the active instance. The user can edit or remove each one (one address always remains) and take them over from HA again (*Use addresses from Home Assistant*). A changed address is probed and must report the same `instance_id`; the access token for this check is refreshed at the working address, so the refresh token never goes to the new address while another one answers.
+- *Settings → Addresses* shows both addresses of the active instance. The user can edit or remove each one (one address always remains) and take them over from HA again (*Use addresses from Home Assistant*). A changed address is probed and must report the same `instance_id`; the access token for this check is refreshed at a stored address that answers, so the refresh token never goes to the new address. As built: if no stored address answers, the change ends with that error and nothing is sent to the new address. The new address receives the access token only if it is `https://` (the probe passed, so the system or a pin trusts it) or an `http://` host that the home network check (below) confirms with the instance's `uuid`; otherwise `HAAC-NET-006`. A refresh token that HA rejects is deleted only when it was rejected at a stored address; at an unverified address the answer counts as a connection error.
 
 **Choosing the address.** The app picks the address on app start, on an instance switch and when the network changes (`ConnectivityManager.NetworkCallback`). A change of the chosen address rebuilds the WebSocket like a reconnect (11.4).
 
@@ -765,7 +765,7 @@ Mitigations:
 ### 13.3 Standards and checks
 
 - Aligned with **OWASP MASVS** (storage, crypto, auth, network, platform) and OAuth 2.0 for Native Apps (RFC 8252) incl. PKCE for the browser fallback.
-- Release builds: R8 obfuscation, `debuggable=false`; cleartext only to private addresses, enforced by `CleartextPolicy` (4.3); only system CAs are trusted (self-signed certificates via per-instance pinning).
+- Release builds: R8 obfuscation and resource shrinking (as built: `isMinifyEnabled` and `isShrinkResources` in the application convention plugin, rules in `app/proguard-rules.pro`; the release workflow keeps `mapping.txt` as an artifact for crash reports), `debuggable=false`; cleartext only to private addresses, enforced by `CleartextPolicy` (4.3); only system CAs are trusted (self-signed certificates via per-instance pinning).
 - Dependency scanning (Dependabot/Renovate) and static analysis (Android Lint security checks, Detekt) in CI; `bandit` and `ruff` for the integration.
 
 ### 13.4 Bridge code review (October 2026)
