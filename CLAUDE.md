@@ -4,7 +4,7 @@ Home Assistant custom integration (domain `haac_bridge`) that gives the HA Andro
 
 ## Source of truth
 
-- `docs/concept.md` is the full specification shared with the app repo. Image links in it (mockups, icons) point to files that exist only in `stacknoise/haac-android`. Read the chapter that matches the task before writing code.
+- `docs/concept.md` is the full specification shared with the app repo. It is a copy: the leading version lives in `stacknoise/haac-android`; change it there first and take the file over unchanged (`docs/development.md` section 9). Image links in it (mockups, icons) point to files that exist only in `stacknoise/haac-android`. Read the chapter that matches the task before writing code.
 - Relevant chapters: 10 (integration structure, YAML, runtime), 11 (WebSocket API `haac_bridge/*`, versioning), 13 (security), 14.2 (tests), 16 (GitHub, CI, releases), 18 (development guidelines for the bridge). Chapters 3–9 and 15 describe the app and are context only.
 - Items in concept 14.5 ("Open points") are undecided. Ask, or implement behind a clearly marked TODO.
 - Integration name "HAAC Bridge", domain `haac_bridge` (final). Minimum Home Assistant version 2026.9.0, declared in `hacs.json` (`"homeassistant": "2026.9.0"`) and respected in `manifest.json`.
@@ -23,7 +23,7 @@ scripts/code_index.py     # generator for the two files above
 custom_components/haac_bridge/
   __init__.py  config_flow.py  manifest.json  const.py  services.yaml
   translations/en.json    # user texts of exceptions, issues and the config/options flow
-  core/  config/  exposure/  entities/  services/  history/  schedules/  api/   # modules by topic (concept 18.1)
+  core/  config/  exposure/  entities/  services/  history/  areas/  instance/  schedules/  api/   # modules by topic (concept 18.1)
 tests/                    # same topic structure
 .github/workflows/        # validate.yml, tests.yml, release.yml (concept 16.5)
 LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
@@ -59,8 +59,11 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 - Resolve the caller only from `connection.user`; never accept a user name or id from the client (10.3).
 - Deny by default: a HA user not configured (YAML or UI) sees no entities. YAML entries win over UI entries for the same user (10.2).
 - Only domains `switch`, `sensor`, `climate` are ever returned in v1, regardless of the filter.
-- `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service belongs to the entity's domain; the bridge sets the target itself (11.4).
-- History and statistics are filtered with the same exposure before querying the recorder.
+- `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service and its `service_data` keys are in `const.ALLOWED_SERVICES` (table in concept 11.4); the bridge sets the target itself and calls with `SERVICE_TIMEOUT`. A change of the list also changes that table.
+- History and statistics are filtered with the same exposure before querying the recorder, and stay within the limits of `const.py` (`TimeRange.check_length`, 10.3).
+- Entities of the platform `haac_bridge` are never exposed (`exposure/own_entities.py`).
+- Every state that reaches the app (list, events, history) goes through `entities/attributes.py` (`shareable_state`, `compressed_state`), so hidden attributes are never sent (11.3).
+- `Exposure` caches its answers. A new input to an exposure decision needs an `async_invalidate_*` call where that input changes (`_async_follow_exposure_inputs` in `__init__.py`).
 - A breaking change of any `haac_bridge/*` command raises `api_version` and the major version (16.4).
 
 ## Conventions
