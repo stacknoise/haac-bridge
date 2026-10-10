@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 
 from homeassistant.auth.models import User
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
+from ..const import MISSED_RUN_GRACE
 from ..core.errors import ErrorCode, HaacBridgeError
 from ..core.runtime import get_data
 from ..services.call_factory import async_execute
@@ -45,6 +47,7 @@ class ScheduleRunner:
         self._hooks = hooks
         self._locks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task[None]] = set()
+        self._deferred: dict[str, datetime] = {}
 
     @callback
     def async_run_in_background(self, schedule_id: str) -> None:
@@ -59,6 +62,25 @@ class ScheduleRunner:
         """Return True while a run of the schedule is going on (including its wait to retry)."""
         lock = self._locks.get(schedule_id)
         return lock is not None and lock.locked()
+
+    @callback
+    def async_run_deferred(self) -> None:
+        """Start the runs that came due while the users were not loaded (review finding U2).
+
+        A run that waited longer than MISSED_RUN_GRACE is dropped and logged, like a run missed
+        while Home Assistant was down (concept 19.3).
+        """
+        now = dt_util.utcnow()
+        deferred, self._deferred = self._deferred, {}
+        for schedule_id, due in deferred.items():
+            if now - due > MISSED_RUN_GRACE:
+                _LOGGER.warning(
+                    "Schedule %s was due at %s while the bridge reloaded; the run is skipped",
+                    schedule_id,
+                    due.isoformat(),
+                )
+                continue
+            self.async_run_in_background(schedule_id)
 
     @callback
     def async_cancel_all(self) -> None:
@@ -77,7 +99,13 @@ class ScheduleRunner:
     async def _async_run_locked(self, schedule_id: str) -> None:
         """Validate the owner and the exposure, then switch and record the result."""
         schedule = self._store.get(schedule_id)
-        if schedule is None or not self._hooks.ready():
+        if schedule is None:
+            return
+        if not self._hooks.ready():
+            self._deferred.setdefault(schedule_id, dt_util.utcnow())
+            _LOGGER.debug(
+                "Schedule %s is due while the users are not loaded; it waits", schedule_id
+            )
             return
         user = await self._hass.auth.async_get_user(schedule.owner)
         exposure = get_data(self._hass).exposure
