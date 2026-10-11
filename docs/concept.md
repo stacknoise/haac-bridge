@@ -484,6 +484,7 @@ Errors appear in the same list, each with its error code (17.4).
 - The bridge sends an `exposure_changed` event on the subscription when the admin reloads the integration after editing `configuration.yaml`. The app then runs steps 2–4 again without restart.
 - If the bridge reports the feature `schedules` (11.2), the app also subscribes to `haac_bridge/subscribe_schedules` and runs the schedule sync (19.7) after every connection and every `schedules_changed` event.
 - On resume from background after the lock timeout, the full start sequence runs again.
+- As built, the live states of the subscription are held in memory (`LiveStates`, one map per instance) and applied there, on the default dispatcher; tiles and the detail screen read them from there. `last_state` is written in one batch every 5 s while connected and when the connection ends (also when the app goes to the background); the offline display (14.1) shows it after a restart, and each new connection starts from it.
 
 ### 9.3 Rules
 
@@ -709,7 +710,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 | `home` | `id`, `serverId`, `name`, `icon?`, `sortOrder`, `deletedAt?` |  |
 | `floor` | `id`, `homeId` → home, `name`, `level`, `icon?`, `sortOrder`, `deletedAt?` | Cascade on home delete |
 | `room` | `id`, `homeId` → home, `floorId?` → floor, `name`, `icon?`, `sortOrder`, `deletedAt?` | Trigger: floor must belong to same home; `floorId` set null on floor delete |
-| `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `configuredName?`, `deviceClass?`, `unit?`, `stateClass?`, `displayPrecision?`, `area?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState?` (JSON: state, attributes, last changed/updated) | Cache of bridge data; filled by the sync (9.1), states kept current by the subscription |
+| `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `configuredName?`, `deviceClass?`, `unit?`, `stateClass?`, `displayPrecision?`, `area?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState?` (JSON: state, attributes, last changed/updated; written in batches, 9.2) | Cache of bridge data; filled by the sync (9.1), states kept current by the subscription |
 | `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (`SMALL` 1×1, `WIDE` 2×1, `LARGE` 2×2; 7.2), `addedAt` | Assignment; cascade on room delete; the instance follows from the room's home |
 | `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name; cascade on server delete |
 | notification | id, serverId? → server, type (added/removed/error/schedule_removed/schedule_paused), errorCode?, bridgeCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt?, detail? | Sync results and errors for M-09 (17.4); serverId is empty for errors without an instance; count = entities, schedules, or occurrences of the same error within 10 minutes (for the schedule types `entityIds` holds the schedule names and `detail` the pause reason); purged after 30 days |
