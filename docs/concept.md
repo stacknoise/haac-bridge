@@ -254,7 +254,7 @@ sequenceDiagram
 ```
 
 - **client\_id and redirect\_uri**: HA requires the `client_id` to be a URL. The app uses `client_id` = `https://stacknoise.com/haac/` and `redirect_uri` = `https://stacknoise.com/haac/auth-callback`. Because both share scheme and host, HA accepts the redirect URI without fetching anything from stacknoise.com, so login also works for HA instances without internet access. In the native flow the redirect is never opened; the app reads the authorization code from the flow result. HA shows the `client_id` as the app's identity in the login dialog and in the user's list of refresh tokens (16.8).
-- **Fallback**: if the server has no `homeassistant` provider (e.g. only trusted networks or command-line auth), the app opens `/auth/authorize` in a Chrome Custom Tab. HA then redirects to `https://stacknoise.com/haac/auth-callback`, which Android hands to the app as a verified App Link; this requires `https://stacknoise.com/.well-known/assetlinks.json` (16.8).
+- **Fallback (not built yet, 14.5)**: as built, a server without a `homeassistant` provider ends with `HAAC-AUTH-004`. The plan: if the server has no `homeassistant` provider (e.g. only trusted networks or command-line auth), the app opens `/auth/authorize` in a Chrome Custom Tab. HA then redirects to `https://stacknoise.com/haac/auth-callback`, which Android hands to the app as a verified App Link; this requires `https://stacknoise.com/.well-known/assetlinks.json` (16.8).
 - If the user has several MFA modules, HA first asks for one (`select_mfa_module`); the app picks the first module offered and then asks only for its code.
 - The password lives only in a `CharArray` for the duration of the request and is overwritten afterwards; it is never logged, persisted, put in a `String` constant or sent anywhere except to the configured HA server over TLS.
 - HTTP logging is disabled for all `/auth/*` requests, also in debug builds.
@@ -312,7 +312,7 @@ Disabling fingerprint unlock in the settings requires one last successful biomet
 
 - Re-lock after the app has been in the background longer than a configurable timeout (Settings → Security: immediately, 1, 5, 15 or 30 minutes; default 5). The lock drops all unlocked refresh tokens and runs the start routing (4.1) again: instances with fingerprint unlock show the unlock screen, the others open directly.
 - `FLAG_SECURE` on login and settings screens to keep them out of screenshots and the recent-apps preview.
-- Root/emulator detection is informational only (warning), not a hard block.
+- There is no root or emulator detection: it can be bypassed easily, and a rooted device weakens the Keystore guarantees of 5.3 whatever the app shows. Decision of the app review (13.5).
 
 ## 6. Home structure: homes, floors and rooms
 
@@ -765,7 +765,7 @@ Mitigations:
 
 ### 13.3 Standards and checks
 
-- Aligned with **OWASP MASVS** (storage, crypto, auth, network, platform) and OAuth 2.0 for Native Apps (RFC 8252) incl. PKCE for the browser fallback.
+- Aligned with **OWASP MASVS** (storage, crypto, auth, network, platform) and OAuth 2.0 for Native Apps (RFC 8252); PKCE comes with the browser fallback, which is not built yet (14.5).
 - Release builds: R8 obfuscation and resource shrinking (as built: `isMinifyEnabled` and `isShrinkResources` in the application convention plugin, rules in `app/proguard-rules.pro`; the release workflow keeps `mapping.txt` as an artifact for crash reports), `debuggable=false`; cleartext only to private addresses, enforced by `CleartextPolicy` (4.3); only system CAs are trusted (self-signed certificates via per-instance pinning).
 - Dependency scanning (Dependabot/Renovate) and static analysis (Android Lint security checks, Detekt) in CI; `bandit` and `ruff` for the integration.
 
@@ -801,6 +801,44 @@ A review of the bridge (version 0.2.2) found no critical issue: 1 high, 3 medium
 | P7 sun trigger computes up to 367 days | Note | – | Open; only weekday sets with long polar gaps reach many days, kept as is |
 
 Decisions taken during the review: history up to 366 days instead of 31, because the app reads states of switches and climate entities over any custom range; hourly statistics up to 32 days because counters read one lead period; daily statistics up to 5 years; the service list is what the app's `ServiceCallFactory` sends plus `switch.toggle` for schedules; `run_now` replies at once. The app maps the new codes: `HAB-AUTH-002` → `HAAC-AUTH-006` and `HAB-HIST-002` → `HAAC-BRG-006` since haac-android #91, `HAB-SCH-007` → `HAAC-BRG-005` since haac-android #94; `HAB-CFG-003` reaches only the HA administrator. Pull request numbers refer to `stacknoise/haac-bridge` unless stated otherwise.
+
+### 13.5 App code review (October 2026)
+
+A static review of the app (main at version 0.4.0, all 636 files, against the development guide and chapters 4, 5, 11–14, 17 and 20) found no critical issue: 3 medium and 4 low security findings, 8 performance findings and 13 deviations from the guide. The findings S-01 to S-07 of the review before were already fixed. One pull request per work package (AP, numbered AP1–AP9 because WP1–WP25 belong to 13.4); the state on 13 October 2026:
+
+| Finding | Severity | Work package | State |
+| --- | --- | --- | --- |
+| S-08 the access token went to a new, unverified address | Medium | AP1 | Done (#96): the token comes from a stored address that answers, the new address gets only the access token, over `https://` or an `http://` host the home network check confirms (4.5) |
+| S-09 `FLAG_SECURE` lost when one secure screen replaces another | Medium | AP2 | Done (#97): the window counts its secure screens; to be confirmed on a device |
+| S-10 release build without R8 | Medium | AP3 | Done (#98): R8 and resource shrinking; the release workflow keeps `mapping.txt` (13.3) |
+| S-11 connections survive a change of pins | Low | AP2 | Done (#97): idle connections and cached TLS sessions are dropped; a connection in use ends when it reconnects |
+| S-12 a foreign server could force the sign-out | Low | AP1 | Done (#96): a rejected refresh token is deleted only at a verified address |
+| S-13 CI actions per tag, PMD without checksum | Low | AP3 | Done (#98): commit SHAs, no Gradle cache in the release job, SHA-256 for PMD |
+| S-14 two token keys could be created at once | Low | AP2 | Done (#97): one lock per instance |
+| S-15 secret scanning; root/emulator hint | Info | AP3, AP9 | Secret scanning and push protection are on; the hint is dropped (decision below) |
+| P-01 every live state went through the database | High | AP5 | Done (#101): states live in memory, `last_state` is written in batches (9.2) |
+| P-02 JSON work on the main thread | Medium | AP5 | Done (#101): default dispatcher for sync and tiles |
+| P-03 request without a timeout | Medium | AP6 | Done (#100): 15 s, `HAAC-NET-001` |
+| P-04 unbounded subscription queue | Medium | AP6 | Done (#100): 4096 events, then `HAAC-NET-002` and a new sync |
+| P-05 a new session for every reconnect | Low | AP6 | Done (#100): reused per instance and address (11.4) |
+| P-06 `runBlocking` at start | Low | AP7 | Done (#102): splash screen API |
+| P-07 shortcuts published on every sync | Low | AP7 | Done (#102) |
+| P-08 chart values recomputed while dragging | Low | AP7 | Done (#102) |
+| K-01 no `@AssistedFactory` | Guide | AP9 | Decision: `SavedStateHandle` is the standard (17.2) |
+| K-02 `IllegalStateException` | Guide | AP8 | Done (#103) |
+| K-03 swallowed exceptions | Guide | AP8 | Done (#103) |
+| K-04 branching on the domain outside factories | Guide | AP8 | Done (#103): `HaDomains` in `core:common`, texts from `TileFactory` |
+| K-05 colours outside `HaacPalette` | Guide | AP8 | Done (#103) |
+| K-06 packages of `core` and logic in `:app` | Guide | AP9 | Decision: rule written down (17.1) |
+| K-07 shortcut key in `SharedPreferences` | Guide | AP8 | Done (#103): app settings DataStore, old key taken over |
+| K-08 hard-coded dispatchers | Guide | AP4 | Done (#99): `@IoDispatcher`, `@DefaultDispatcher`, `@MainDispatcher` |
+| K-09 `TooManyFunctions` suppressed five times | Guide | AP9 | Decision: exception for ViewModels, DAOs and repositories written down (development guide, `detekt.yml`) |
+| K-10 `DemoConnection` three times | Guide | AP8 | Done (#103): test fixture of `:core:network` |
+| K-11 undo across instances | Guide | AP8 | Done (#103): restores only rows of its own instance |
+| K-12 browser fallback with PKCE not built | Concept | AP9 | Decision: not built for now; open point in 14.5, 5.1 and 13.3 say so |
+| K-13 root/emulator hint not built | Concept | AP9 | Decision: dropped from 5.5 |
+
+Decisions taken: `SavedStateHandle` stays the way ViewModels get navigation arguments, because the route survives process death and no ViewModel needs an argument the route does not carry; the sub-packages of `core` and the app-wide parts of `:app` (lock, start routing, shortcuts, crash marker) are allowed as 17.1 now says, instead of a new module `feature/lock`; large ViewModels, DAOs and repositories with one small function per input or operation may exceed 11 functions with a reason; the browser fallback waits until a user reports a server without the `homeassistant` provider; root or emulator detection can be bypassed easily and a rooted device already weakens the Keystore guarantees of 5.3, so the app does not pretend to detect it. Build, lint, Detekt, tests and the code index run in the CI; S-09, S-10 and the shortcuts of K-07 still need a look on a device.
 
 ## 14. Error handling, testing, roadmap and open points
 
@@ -854,6 +892,7 @@ HAAC is distributed via Google Play and as a sideload APK. Both channels use the
 
 ### 14.5 Open points
 
+- [ ] Browser login fallback (5.1): Custom Tab, App Link `auth-callback` and PKCE for servers without a `homeassistant` provider. Not built (app review K-12, 13.5); servers without that provider end with `HAAC-AUTH-004`. Build it when a user needs it; it also needs `assetlinks.json` (16.8).
 - [x] Privacy policy page online at `https://stacknoise.com/haac/privacy/` (16.8).
 - [x] Demo mode (chapter 20) built before the first Google Play production release (14.4); in version 0.3.0.
 - [ ] Bridge-owned tokens (13.1, finding S1 in 13.4): the app would hold a revocable token that opens only `haac_bridge/*` instead of a HA token. Transport (own WebSocket endpoint or REST with server-sent events), pairing and revocation are undecided; a spike decides before bridge 1.0 (API v2).
@@ -1260,6 +1299,7 @@ com.stacknoise.haac
 - A class lives in exactly one topic. Code used by several topics moves to `core.common` (or the matching `core.*` package), never into another feature.
 - Features never depend on each other directly; they talk through interfaces in `core.*`.
 - The Gradle modules from 3.2 follow the same topics (`:core:error`, `:feature:notifications`, …).
+- The packages of `core` modules may be split by sub-topic without the layer folders, e.g. `core.network.tls`, `core.security.token`; the layers `ui`, `domain`, `data` and `di` are the rule for features (app review K-06, 13.5).
 
 ### 17.2 Factory pattern
 
@@ -1278,7 +1318,7 @@ Whenever the kind of object depends on a type or on runtime data, it is created 
 | `BridgeConnector` | The live connection of an instance: the real bridge, or the in-process demo bridge for the demo instance (chapter 20) | One place decides how an instance connects |
 | `EndpointSelector` | The address of an instance to connect to, from its addresses, the home network check and the probes | Selection rules of 4.5 in one place |
 | `ErrorFactory` | `HaacException` from any caught `Throwable` | Error mapping in one place (17.3) |
-| ViewModel factories (`@AssistedFactory`) | ViewModels with runtime parameters (`roomId`, `entityId`) | Hilt standard for runtime arguments |
+| `SavedStateHandle` (no factory) | ViewModels with navigation arguments (`roomId`, `entityId`) | Hilt injects the handle; the route survives process death. `@AssistedFactory` only for an argument the route does not carry (app review K-01, 13.5) |
 
 - Outside a factory, no code branches on the entity domain or key type to construct objects.
 - New factories are added to this table and to the code index (17.5).
