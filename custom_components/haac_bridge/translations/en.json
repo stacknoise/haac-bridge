@@ -78,7 +78,7 @@
       "invalid_config": "The YAML does not match the haac_bridge configuration",
       "no_users": "The YAML contains no users",
       "needs_user_id": "Name each user by user_id; a username cannot be imported",
-      "unknown_user": "A user_id does not exist in Home Assistant"
+      "unknown_user": "A user_id does not belong to an active Home Assistant user"
     },
     "abort": {
       "unknown": "Something went wrong, please start again",
