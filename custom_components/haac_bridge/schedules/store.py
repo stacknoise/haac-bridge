@@ -26,19 +26,31 @@ class ScheduleStore:
         )
         self._schedules: dict[str, Schedule] = {}
         self._sorted: list[Schedule] | None = None
+        self._unreadable: list[Any] = []
 
     async def async_load(self) -> None:
-        """Read the schedules from storage; a damaged entry is skipped and logged once."""
+        """Read the schedules from storage.
+
+        A damaged entry is left out of the schedules and logged once, but kept as it is and written
+        back with every save, so a later version or a manual repair can still read it.
+        """
         stored = await self._store.async_load() or {}
         self._schedules = {}
         self._sorted = None
+        self._unreadable = []
         for raw in stored.get("schedules", []):
             try:
                 schedule = schedule_from_dict(raw)
             except ScheduleError as err:
-                _LOGGER.warning("Skipping a damaged schedule in storage (%s)", err.code.value)
+                _LOGGER.warning("%s: keeping an unreadable schedule in storage as it is", err.code)
+                self._unreadable.append(raw)
                 continue
             self._schedules[schedule.id] = schedule
+
+    @property
+    def unreadable_count(self) -> int:
+        """Return how many stored entries could not be read and are kept unchanged."""
+        return len(self._unreadable)
 
     @property
     def schedules(self) -> list[Schedule]:
@@ -111,11 +123,12 @@ class ScheduleStore:
         await self._store.async_save(self._data_to_save())
 
     def _data_to_save(self) -> dict[str, Any]:
-        """Return the stored form of all schedules."""
-        return {"schedules": [item.to_dict() for item in self.schedules]}
+        """Return the stored form of all schedules, followed by the unreadable entries as they were."""
+        return {"schedules": [*(item.to_dict() for item in self.schedules), *self._unreadable]}
 
     async def async_remove_file(self) -> None:
         """Delete the storage file when the config entry of the bridge is removed."""
         self._schedules = {}
         self._sorted = None
+        self._unreadable = []
         await self._store.async_remove()
