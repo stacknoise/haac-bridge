@@ -237,23 +237,28 @@ class HaacBridgeOptionsFlow(OptionsFlow):
     async def async_step_names(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Give the explicitly included entities display names for the app; empty keeps the Home Assistant name."""
         entity_ids = sorted(self._rules.get(CONF_INCLUDE_ENTITIES, []))
+        labels = {self._names_label(entity_id): entity_id for entity_id in entity_ids}
         if user_input is None and entity_ids:
             known = self._record(self._user_id).get(CONF_NAMES, {})
             schema = vol.Schema(
                 {
-                    vol.Optional(
-                        entity_id, description={"suggested_value": known.get(entity_id)}
-                    ): str
-                    for entity_id in entity_ids
+                    vol.Optional(label, description={"suggested_value": known.get(entity_id)}): str
+                    for label, entity_id in labels.items()
                 }
             )
             return self.async_show_form(step_id="names", data_schema=schema)
         names = {
-            entity_id: name.strip()
-            for entity_id, name in (user_input or {}).items()
-            if entity_id in entity_ids and name and name.strip()
+            labels[label]: name.strip()
+            for label, name in (user_input or {}).items()
+            if label in labels and name and name.strip()
         }
         return await self._async_save(names)
+
+    def _names_label(self, entity_id: str) -> str:
+        """Return the form label of an entity: its Home Assistant friendly name with the entity_id in brackets."""
+        state = self.hass.states.get(entity_id)
+        friendly = state.name if state else None
+        return f"{friendly} ({entity_id})" if friendly and friendly != entity_id else entity_id
 
     async def _async_save(self, names: dict[str, str]) -> ConfigFlowResult:
         """Store the selected user's rules and names, replacing an earlier entry of this user.

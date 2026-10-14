@@ -409,3 +409,28 @@ async def test_changes_saved_meanwhile_are_kept(
     )
 
     assert {record["user_id"] for record in entry.options["users"]} == {anton.id, maria.id}
+
+
+async def test_names_form_shows_friendly_name_with_entity_id(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    entry = await _add_entry(hass)
+    hass.states.async_set("sensor.humidity", "40", {"friendly_name": "Living room humidity"})
+
+    result = await _menu(hass, entry, "add_user")
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"user_id": anton.id}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"include_entities": ["sensor.humidity"]}
+    )
+    assert result["step_id"] == "names"
+    label = "Living room humidity (sensor.humidity)"
+    assert [str(key) for key in result["data_schema"].schema] == [label]
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {label: "Humidity"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["users"][0]["names"] == {"sensor.humidity": "Humidity"}
