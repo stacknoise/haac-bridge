@@ -322,7 +322,7 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.schedules.manager` | `module` | `custom_components/haac_bridge/schedules/manager.py` | ScheduleManager: store, planner and runner together, and the operations of the commands (concept 19.4). |
 | `ScheduleManager` | `class ScheduleManager` | `custom_components/haac_bridge/schedules/manager.py` | Creates, changes, deletes, lists and runs schedules for the commands, as a given user. |
 | `ScheduleManager.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Wire the store, the planner and the runner; call `async_load` and `async_start` next. |
-| `ScheduleManager.async_load` | `async def async_load(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Read the schedules from storage. |
+| `ScheduleManager.async_load` | `async def async_load(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Read the schedules from storage and report entries that could not be read. |
 | `ScheduleManager.async_start` | `async def async_start(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Start planning; call when Home Assistant has started. |
 | `ScheduleManager.async_stop` | `def async_stop(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Cancel all timers and the runs still going on in the background. |
 | `ScheduleManager.notify` | `def notify(self, *schedule_ids: str) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Tell subscribers that schedules changed, ran, were paused or were removed. |
@@ -391,6 +391,8 @@ Lists every module, class and function of the integration with signature, file a
 | `SchedulePlanner._async_set_sun_pause` | `async def _async_set_sun_pause(self, schedule: Schedule, *, paused: bool) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Pause a sun schedule that has no event, or resume one whose event is back. |
 | `SchedulePlanner._missed` | `def _missed(self, schedule: Schedule, now: datetime) -> bool` | `custom_components/haac_bridge/schedules/planner.py` | Return whether a run was due shortly before `now` and has not happened (concept 19.3). |
 | `SchedulePlanner._handle_config_update` | `def _handle_config_update(self, _event: Event) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Re-plan everything after a change of the time zone or the location. |
+| `haac_bridge.schedules.repairs` | `module` | `custom_components/haac_bridge/schedules/repairs.py` | Reports stored schedules that could not be read in HA Repairs (concept 19.2). |
+| `async_sync_unreadable_issue` | `def async_sync_unreadable_issue(hass: HomeAssistant, count: int) -> None` | `custom_components/haac_bridge/schedules/repairs.py` | Create the Repairs issue for `count` unreadable stored schedules, or remove it if there are none. |
 | `haac_bridge.schedules.runner` | `module` | `custom_components/haac_bridge/schedules/runner.py` | Runs one schedule: re-checks owner and exposure, switches the entities as the owner (concept 19.3). |
 | `RunHooks` | `class RunHooks` | `custom_components/haac_bridge/schedules/runner.py` | What the runner asks the manager to do: remove schedules, re-plan one, announce a change. |
 | `ScheduleRunner` | `class ScheduleRunner` | `custom_components/haac_bridge/schedules/runner.py` | Executes schedules one at a time per schedule. |
@@ -414,7 +416,8 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.schedules.store` | `module` | `custom_components/haac_bridge/schedules/store.py` | Persistent storage of the schedules in `.storage/haac_bridge.schedules` (concept 19.2). |
 | `ScheduleStore` | `class ScheduleStore` | `custom_components/haac_bridge/schedules/store.py` | Holds all schedules in memory and writes them to storage after every change. |
 | `ScheduleStore.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/schedules/store.py` | Create an empty store; call `async_load` before use. |
-| `ScheduleStore.async_load` | `async def async_load(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Read the schedules from storage; a damaged entry is skipped and logged once. |
+| `ScheduleStore.async_load` | `async def async_load(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Read the schedules from storage. |
+| `ScheduleStore.unreadable_count` | `def unreadable_count(self) -> int` | `custom_components/haac_bridge/schedules/store.py` | Return how many stored entries could not be read and are kept unchanged. |
 | `ScheduleStore.schedules` | `def schedules(self) -> list[Schedule]` | `custom_components/haac_bridge/schedules/store.py` | Return all schedules, oldest first; sorted once per change, not on every access. |
 | `ScheduleStore.get` | `def get(self, schedule_id: str) -> Schedule \| None` | `custom_components/haac_bridge/schedules/store.py` | Return the schedule with this id, or None. |
 | `ScheduleStore.by_owner` | `def by_owner(self, owner: str) -> list[Schedule]` | `custom_components/haac_bridge/schedules/store.py` | Return the schedules of one HA user, oldest first. |
@@ -423,7 +426,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleStore.async_remove` | `async def async_remove(self, schedule_ids: Iterable[str]) -> list[Schedule]` | `custom_components/haac_bridge/schedules/store.py` | Remove the schedules with these ids, save once and return what was removed. |
 | `ScheduleStore.async_apply_changes` | `async def async_apply_changes(self, replace: Iterable[Schedule]=(), remove: Iterable[str]=()) -> list[Schedule]` | `custom_components/haac_bridge/schedules/store.py` | Replace and remove schedules together with one save; return the removed schedules. |
 | `ScheduleStore._async_save` | `async def _async_save(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Forget the sorted list and write all schedules to storage now (replaces a delayed write). |
-| `ScheduleStore._data_to_save` | `def _data_to_save(self) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/store.py` | Return the stored form of all schedules. |
+| `ScheduleStore._data_to_save` | `def _data_to_save(self) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/store.py` | Return the stored form of all schedules, followed by the unreadable entries as they were. |
 | `ScheduleStore.async_remove_file` | `async def async_remove_file(self) -> None` | `custom_components/haac_bridge/schedules/store.py` | Delete the storage file when the config entry of the bridge is removed. |
 | `haac_bridge.schedules.subscription` | `module` | `custom_components/haac_bridge/schedules/subscription.py` | Live subscription of one app connection to schedule changes (concept 19.4). |
 | `ScheduleSubscription` | `class ScheduleSubscription` | `custom_components/haac_bridge/schedules/subscription.py` | Sends `schedules_changed` with the new revision whenever the caller's schedules change. |

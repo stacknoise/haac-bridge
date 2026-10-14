@@ -6,10 +6,13 @@ from unittest.mock import patch
 
 from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 import pytest
 
-from custom_components.haac_bridge.const import RUN_RESULT_SAVE_DELAY
+from custom_components.haac_bridge.const import DOMAIN, RUN_RESULT_SAVE_DELAY
 from custom_components.haac_bridge.core.errors import ErrorCode, ScheduleError
+from custom_components.haac_bridge.schedules.manager import ScheduleManager
+from custom_components.haac_bridge.schedules.repairs import ISSUE_UNREADABLE
 from custom_components.haac_bridge.schedules.store import ScheduleStore
 
 from .conftest import CREATED, make_schedule
@@ -131,19 +134,79 @@ async def test_apply_changes_without_changes_does_not_write(
     assert KEY not in hass_storage
 
 
-async def test_damaged_entries_are_skipped(
+def _stored(*entries: Any) -> dict[str, Any]:
+    """Return a storage file holding these raw entries."""
+    return {"version": 1, "minor_version": 1, "key": KEY, "data": {"schedules": list(entries)}}
+
+
+async def test_damaged_entries_are_not_loaded_but_logged(
     hass: HomeAssistant, hass_storage: dict[str, Any], caplog: pytest.LogCaptureFixture
 ) -> None:
     good = make_schedule()
-    hass_storage[KEY] = {
-        "version": 1,
-        "minor_version": 1,
-        "key": KEY,
-        "data": {"schedules": [good.to_dict(), {"id": "broken"}, "nonsense"]},
-    }
+    hass_storage[KEY] = _stored(good.to_dict(), {"id": "broken"}, "nonsense")
     store = await _loaded(hass)
     assert store.schedules == [good]
-    assert caplog.text.count("damaged schedule") == 2
+    assert store.unreadable_count == 2
+    assert caplog.text.count("keeping an unreadable schedule") == 2
+
+
+async def test_damaged_entries_survive_every_save(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    good = make_schedule()
+    broken = {"id": "broken", "future_field": {"kept": True}}
+    hass_storage[KEY] = _stored(good.to_dict(), broken, "nonsense")
+    store = await _loaded(hass)
+
+    added = make_schedule(name="Added")
+    await store.async_add(added)
+    await store.async_replace(good.with_changes(enabled=False))
+    await store.async_remove([added.id])
+
+    saved = hass_storage[KEY]["data"]["schedules"]
+    readable = next(item for item in saved if isinstance(item, dict) and "name" in item)
+    assert readable["enabled"] is False
+    assert broken in saved
+    assert "nonsense" in saved
+    reloaded = await _loaded(hass)
+    assert reloaded.unreadable_count == 2
+
+
+async def test_delayed_saves_keep_damaged_entries_too(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    good = make_schedule()
+    hass_storage[KEY] = _stored(good.to_dict(), {"id": "broken"})
+    store = await _loaded(hass)
+    await store.async_replace(good.with_changes(enabled=False), delay=True)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_FINAL_WRITE)
+    await hass.async_block_till_done()
+    assert {"id": "broken"} in hass_storage[KEY]["data"]["schedules"]
+
+
+async def test_unreadable_entries_are_reported_in_repairs_until_they_are_gone(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    hass_storage[KEY] = _stored(make_schedule().to_dict(), {"id": "broken"})
+    await ScheduleManager(hass).async_load()
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_UNREADABLE)
+    assert issue is not None
+    assert issue.translation_placeholders == {"count": "1", "code": "HAB-SCH-001"}
+
+    hass_storage[KEY] = _stored(make_schedule().to_dict())
+    await ScheduleManager(hass).async_load()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_UNREADABLE) is None
+
+
+async def test_wiping_removes_the_entries_and_the_issue(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    hass_storage[KEY] = _stored({"id": "broken"})
+    manager = ScheduleManager(hass)
+    await manager.async_load()
+    await manager.async_wipe()
+    assert manager.store.unreadable_count == 0
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_UNREADABLE) is None
 
 
 async def test_the_sorted_list_follows_every_change(hass: HomeAssistant) -> None:

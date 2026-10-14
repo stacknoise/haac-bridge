@@ -30,6 +30,7 @@ from .model import (
     parse_when,
 )
 from .planner import SchedulePlanner
+from .repairs import async_sync_unreadable_issue
 from .runner import RunHooks, ScheduleRunner
 from .store import ScheduleStore
 from .triggers import TriggerFactory
@@ -58,8 +59,9 @@ class ScheduleManager:
         self._manual_runs: dict[str, float] = {}
 
     async def async_load(self) -> None:
-        """Read the schedules from storage."""
+        """Read the schedules from storage and report entries that could not be read."""
         await self.store.async_load()
+        async_sync_unreadable_issue(self._hass, self.store.unreadable_count)
 
     async def async_start(self) -> None:
         """Start planning; call when Home Assistant has started."""
@@ -175,6 +177,7 @@ class ScheduleManager:
         """Delete every schedule and the storage file; called when the config entry is removed."""
         schedule_ids = [schedule.id for schedule in self.store.schedules]
         await self.store.async_remove_file()
+        async_sync_unreadable_issue(self._hass, 0)
         for schedule_id in schedule_ids:
             await self.planner.async_plan(schedule_id)
         self.notify(*schedule_ids)
