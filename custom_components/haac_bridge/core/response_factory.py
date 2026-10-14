@@ -1,5 +1,6 @@
 """ResponseFactory: builds every WebSocket reply of HAAC Bridge (concept 11, 18.2)."""
 
+from functools import lru_cache
 from typing import Any
 
 from homeassistant.components import websocket_api
@@ -48,6 +49,18 @@ def _without_hidden_attributes(event: Event[EventStateChangedData]) -> Event[Eve
         state is not None and has_hidden(state.attributes) for state in (old_state, new_state)
     ):
         return event
+    return _shareable_copy(event)
+
+
+@lru_cache(maxsize=128)
+def _shareable_copy(event: Event[EventStateChangedData]) -> Event[EventStateChangedData]:
+    """Return the copy of an event without hidden attributes; one copy per event for all subscribers.
+
+    HA caches the serialized diff by event object. A fresh copy per subscriber would never hit that
+    cache and would push useful entries out of it (review finding 8). The size is HA's own.
+    """
+    old_state = event.data["old_state"]
+    new_state = event.data["new_state"]
     return Event(
         event.event_type,
         EventStateChangedData(

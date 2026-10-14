@@ -34,9 +34,9 @@ def _exposed_request(
 ) -> tuple[list[str], TimeRange]:
     """Return the requested entities the caller may see (none for a future period) and the period."""
     period = TimeRange(msg["start"], msg.get("end"))
+    user = require_user(connection)
     if period.in_future:
         return [], period
-    user = require_user(connection)
     return get_data(hass).exposure.filter_exposed(user, msg["entity_ids"]), period
 
 

@@ -99,6 +99,23 @@ async def test_history_in_the_future_is_empty(client: Any) -> None:
     assert reply["result"] == {}
 
 
+async def test_history_in_the_future_still_refuses_a_deactivated_user(
+    hass: HomeAssistant, client: Any
+) -> None:
+    anton = next(user for user in await hass.auth.async_get_users() if user.name == "Anton")
+    anton.is_active = False  # HA would also close the connection; the command must refuse anyway
+
+    reply = await _send(
+        client,
+        {
+            "type": "haac_bridge/history",
+            "entity_ids": ["switch.garage_socket"],
+            "start": _iso(timedelta(hours=1)),
+        },
+    )
+    assert reply["error"]["code"] == "HAB-AUTH-002"
+
+
 @pytest.mark.parametrize(
     "fields",
     [

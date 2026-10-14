@@ -97,4 +97,4 @@ MAX_STATISTICS_PERIOD: Final = timedelta(days=5 * 366)
 """Longest period of daily, weekly or monthly statistics."""
 
 TARGET_KEYS: Final = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
-"""Keys a client must not put into service_data; the bridge sets the target itself (11.4)."""
+"""Keys that name a target; no entry of ALLOWED_SERVICES lists one, so the bridge alone sets the target (11.4)."""
