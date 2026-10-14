@@ -283,6 +283,81 @@ async def test_import_adds_and_replaces_users(
     assert get_data(hass).exposure.is_exposed(anton, "sensor.humidity")
 
 
+async def _user_choices(hass: HomeAssistant, entry: MockConfigEntry, step: str) -> list[str]:
+    """Open a user form of the options flow and return the offered user ids."""
+    result = await _menu(hass, entry, step)
+    options = result["data_schema"].schema["user_id"].config["options"]
+    return [option["value"] for option in options]
+
+
+async def test_a_deactivated_user_can_still_be_changed_and_removed(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    entry = await _add_entry(
+        hass, {"users": [{"user_id": anton.id, "filter": {"include_domains": ["sensor"]}}]}
+    )
+    await hass.auth.async_deactivate_user(anton)
+
+    assert await _user_choices(hass, entry, "edit_user") == [anton.id]
+    result = await _menu(hass, entry, "remove_user")
+    options = result["data_schema"].schema["user_id"].config["options"]
+    assert options[0]["label"] == "Anton (deactivated)"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"user_id": anton.id}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options == {"users": []}
+
+
+async def test_a_deactivated_user_is_not_offered_to_add(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    lena = add_user("lena")
+    await hass.auth.async_deactivate_user(lena)
+    entry = await _add_entry(hass)
+
+    assert await _user_choices(hass, entry, "add_user") == [anton.id]
+
+
+async def test_import_accepts_a_configured_user_who_is_deactivated_now(
+    hass: HomeAssistant, add_user: Callable[[str], User]
+) -> None:
+    anton = add_user("anton")
+    entry = await _add_entry(
+        hass, {"users": [{"user_id": anton.id, "filter": {"include_domains": ["sensor"]}}]}
+    )
+    await hass.auth.async_deactivate_user(anton)
+    text = f"users:\n  - user_id: {anton.id}\n    filter:\n      include_domains: [switch]\n"
+
+    result = await _menu(hass, entry, "import_yaml")
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"yaml": text})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["users"][0]["filter"] == {"include_domains": ["switch"]}
+
+
+@pytest.mark.parametrize("kind", ["deactivated", "system"])
+async def test_import_rejects_users_the_form_never_offers(
+    hass: HomeAssistant, add_user: Callable[[str], User], kind: str
+) -> None:
+    if kind == "system":
+        user = await hass.auth.async_create_system_user("Supervisor")
+    else:
+        user = add_user("lena")
+        await hass.auth.async_deactivate_user(user)
+    entry = await _add_entry(hass)
+    text = f"users:\n  - user_id: {user.id}\n    filter:\n      include_domains: [sensor]\n"
+
+    result = await _menu(hass, entry, "import_yaml")
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {"yaml": text})
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "unknown_user"}
+    assert entry.options == {}
+
+
 @pytest.mark.parametrize(
     ("text", "error"),
     [

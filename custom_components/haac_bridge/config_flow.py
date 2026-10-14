@@ -58,6 +58,7 @@ MENU_REMOVE = "remove_user"
 MENU_EXPORT = "export_yaml"
 MENU_IMPORT = "import_yaml"
 CONF_YAML = "yaml"
+INACTIVE_LABEL_SUFFIX = " (deactivated)"
 
 
 class HaacBridgeConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -120,7 +121,7 @@ class HaacBridgeOptionsFlow(OptionsFlow):
         text = (user_input or {}).get(CONF_YAML, "")
         if user_input is not None:
             records, error = import_users(text)
-            if error is None and not await self._async_all_exist(records):
+            if error is None and not await self._async_all_importable(records):
                 error = "unknown_user"
             if error is None:
                 imported = {record[CONF_USER_ID]: record for record in records}
@@ -140,10 +141,10 @@ class HaacBridgeOptionsFlow(OptionsFlow):
         )
         return self.async_show_form(step_id=MENU_IMPORT, data_schema=schema, errors=errors)
 
-    async def _async_all_exist(self, records: list[dict[str, Any]]) -> bool:
-        """Return True if every record names an existing Home Assistant user."""
-        users = {user.id for user in await self.hass.auth.async_get_users()}
-        return all(record[CONF_USER_ID] in users for record in records)
+    async def _async_all_importable(self, records: list[dict[str, Any]]) -> bool:
+        """Return True if every record names a user the form offers or one that already has an entry."""
+        allowed = {user["value"] for user in await self._async_users()} | self._configured_ids()
+        return all(record[CONF_USER_ID] in allowed for record in records)
 
     async def async_step_add_user(
         self, user_input: dict[str, Any] | None = None
@@ -282,23 +283,35 @@ class HaacBridgeOptionsFlow(OptionsFlow):
             (r for r in users_of(self.config_entry.options) if r[CONF_USER_ID] == user_id), {}
         )
 
-    async def _async_users(self) -> list[SelectOptionDict]:
-        """Return every active, non-system Home Assistant user as a select option."""
+    async def _async_users(self, *, include_inactive: bool = False) -> list[SelectOptionDict]:
+        """Return every non-system Home Assistant user as a select option; deactivated ones only on request."""
         users = await self.hass.auth.async_get_users()
         return [
-            SelectOptionDict(value=user.id, label=user.name or user.id)
+            SelectOptionDict(
+                value=user.id,
+                label=(user.name or user.id) + ("" if user.is_active else INACTIVE_LABEL_SUFFIX),
+            )
             for user in sorted(users, key=lambda u: (u.name or "").casefold())
-            if user.is_active and not user.system_generated
+            if (user.is_active or include_inactive) and not user.system_generated
         ]
 
+    def _configured_ids(self) -> set[str]:
+        """Return the ids of the users that already have an entry."""
+        return {record[CONF_USER_ID] for record in users_of(self.config_entry.options)}
+
     async def _async_configured_users(self) -> list[SelectOptionDict]:
-        """Return the users that already have an entry."""
-        configured = {record[CONF_USER_ID] for record in users_of(self.config_entry.options)}
-        return [user for user in await self._async_users() if user["value"] in configured]
+        """Return the users that already have an entry, deactivated ones included.
+
+        A deactivated user keeps the entry and the schedules, so both must stay editable and
+        removable (review finding 3).
+        """
+        configured = self._configured_ids()
+        users = await self._async_users(include_inactive=True)
+        return [user for user in users if user["value"] in configured]
 
     async def _async_free_users(self) -> list[SelectOptionDict]:
-        """Return the users that have no entry yet."""
-        configured = {record[CONF_USER_ID] for record in users_of(self.config_entry.options)}
+        """Return the active users that have no entry yet."""
+        configured = self._configured_ids()
         return [user for user in await self._async_users() if user["value"] not in configured]
 
 
