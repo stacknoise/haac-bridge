@@ -184,6 +184,18 @@ async def test_update_of_an_unknown_schedule(world: World, client_for: CLIENT) -
     assert error_code(reply) == "HAB-SCH-003"
 
 
+@pytest.mark.parametrize("updated_at", ["", "yesterday", "2026-13-45T99:00:00"])
+async def test_update_with_an_unparsable_version_is_an_invalid_request(
+    world: World, client_for: CLIENT, updated_at: str
+) -> None:
+    anton = await client_for(world.anton)
+    schedule = await create(anton)
+    reply = await ws(
+        anton, "schedules/update", schedule_id=schedule["id"], updated_at=updated_at, name="X"
+    )
+    assert error_code(reply) == "HAB-WS-001"
+
+
 async def test_update_with_invalid_values(world: World, client_for: CLIENT) -> None:
     anton = await client_for(world.anton)
     schedule = await create(anton)

@@ -10,7 +10,7 @@ from homeassistant.core import Context, HomeAssistant, split_entity_id
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound, Unauthorized
 import voluptuous as vol
 
-from ..const import ALLOWED_SERVICES, SERVICE_TIMEOUT, TARGET_KEYS
+from ..const import ALLOWED_SERVICES, SERVICE_TIMEOUT
 from ..core.errors import EntityNotFoundError, ErrorCode, InvalidServiceError, RequestError
 from ..exposure.exposure import Exposure
 
@@ -53,7 +53,7 @@ class ServiceCallFactory:
         allowed_keys = ALLOWED_SERVICES.get(domain, {}).get(service)
         if allowed_keys is None or not self._hass.services.has_service(domain, service):
             raise InvalidServiceError(ErrorCode.SVC_NOT_AVAILABLE)
-        if TARGET_KEYS & data.keys() or not data.keys() <= allowed_keys:
+        if not data.keys() <= allowed_keys:
             raise RequestError(ErrorCode.WS_INVALID_REQUEST)
         return ValidatedServiceCall(domain, service, dict(data), entity_id, user.id)
 

@@ -11,6 +11,8 @@ from homeassistant.exceptions import HomeAssistantError
 import pytest
 from pytest_homeassistant_custom_component.common import async_mock_service
 
+from custom_components.haac_bridge.const import ALLOWED_SERVICES, TARGET_KEYS
+
 CONFIG = {
     "users": [
         {
@@ -92,6 +94,14 @@ async def test_target_in_service_data_is_rejected(
 
     assert reply["error"]["code"] == "HAB-WS-001"
     assert calls == []
+
+
+def test_no_allowed_service_lists_a_target_key() -> None:
+    """The bridge sets the target itself; service_data keys that name one must never be allowed."""
+    listed = {
+        key for services in ALLOWED_SERVICES.values() for keys in services.values() for key in keys
+    }
+    assert not listed & TARGET_KEYS
 
 
 async def test_failing_service_is_reported(hass: HomeAssistant, client: Any) -> None:

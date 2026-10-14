@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import hashlib
 from typing import Any
 
@@ -16,7 +17,7 @@ from ..const import (
     SIGNAL_SCHEDULE_CHANGED,
     SIGNAL_SCHEDULES_CHANGED,
 )
-from ..core.errors import ErrorCode, ScheduleError
+from ..core.errors import ErrorCode, RequestError, ScheduleError
 from ..core.runtime import get_data
 from .model import (
     Paused,
@@ -37,6 +38,17 @@ from .triggers import TriggerFactory
 
 SCOPE_OWN = "own"
 SCOPE_ALL = "all"
+
+
+def _parse_version(updated_at: str) -> datetime:
+    """Return the version a client sends back, or raise HAB-WS-001 if it is no date and time."""
+    try:
+        version = dt_util.parse_datetime(updated_at)
+    except ValueError:
+        version = None
+    if version is None:
+        raise RequestError(ErrorCode.WS_INVALID_REQUEST)
+    return version
 
 
 class ScheduleManager:
@@ -151,7 +163,7 @@ class ScheduleManager:
         owner = await self._hass.auth.async_get_user(self._require(schedule_id).owner)
         current = self._require(schedule_id)
         self._require_access(user, current)
-        if dt_util.parse_datetime(updated_at) != current.updated_at:
+        if _parse_version(updated_at) != current.updated_at:
             raise ScheduleError(ErrorCode.SCH_CONFLICT)
         changes = self._parse_changes(user, current, fields)
         updated = self._without_ended_pause(
