@@ -33,6 +33,7 @@ class Harness:
         self.store = ScheduleStore(hass)
         self.calls: list[str] = []
         self.changes = 0
+        self.changed_ids: list[str] = []
         self.planner = SchedulePlanner(
             hass, self.store, TriggerFactory(hass), self._run, self._changed
         )
@@ -42,8 +43,9 @@ class Harness:
         self.calls.append(schedule_id)
 
     def _changed(self, schedule_id: str) -> None:
-        """Count a pause or resume."""
+        """Count a new planned time, a pause or a resume."""
         assert schedule_id
+        self.changed_ids.append(schedule_id)
         self.changes += 1
 
     async def start(self, hass: HomeAssistant, *schedules: Schedule) -> None:
@@ -171,6 +173,40 @@ async def test_time_zone_change_replans(
     harness.planner.async_stop()
 
 
+@pytest.mark.usefixtures("berlin")
+async def test_a_new_planned_time_is_reported(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-10-05 05:00:00+00:00")
+    schedule = make_schedule()
+    harness = Harness(hass)
+    await harness.start(hass, schedule)
+    assert harness.changed_ids == [schedule.id]  # planned for the first time
+
+    await harness.planner.async_plan_all()
+    assert harness.changed_ids == [schedule.id]  # same time again: nothing to report
+
+    await hass.config.async_update(time_zone="Asia/Tokyo")
+    await hass.async_block_till_done()
+    assert harness.changed_ids == [schedule.id] * 2  # time zone change moved the run
+    harness.planner.async_stop()
+
+
+@pytest.mark.usefixtures("berlin")
+async def test_cancelling_a_plan_is_reported(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-10-05 05:00:00+00:00")
+    schedule = make_schedule()
+    harness = Harness(hass)
+    await harness.start(hass, schedule)
+    await harness.store.async_replace(schedule.with_changes(enabled=False))
+    await harness.planner.async_plan(schedule.id)
+    assert harness.planner.planned_run(schedule.id) is None
+    assert harness.changed_ids == [schedule.id] * 2
+    harness.planner.async_stop()
+
+
 @pytest.mark.parametrize(
     ("now", "extra", "runs"),
     [
@@ -221,12 +257,12 @@ async def test_sun_schedule_without_event_is_paused_and_resumes(
     assert stored.paused is not None
     assert stored.paused.reason is PauseReason.SUN_UNAVAILABLE
     assert harness.planner.planned_run(schedule.id) is None
-    assert harness.changes == 1
+    assert harness.changes == 1  # the pause; the planned time stays empty
 
     await harness.planner.async_plan_all()
     resumed = harness.store.get(schedule.id)
     assert resumed is not None
     assert resumed.paused is None
     assert harness.planner.planned_run(schedule.id) is not None
-    assert harness.changes == 2
+    assert harness.changes == 3  # the resume and the new planned time
     harness.planner.async_stop()

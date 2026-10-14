@@ -27,7 +27,7 @@ class SchedulePlanner:
         on_due: Callable[[str], Awaitable[None]],
         on_changed: Callable[[str], None],
     ) -> None:
-        """Create the planner; `on_due` runs a schedule, `on_changed` reports a pause or resume."""
+        """Create the planner; `on_due` runs a schedule, `on_changed` reports a new planned time or pause."""
         self._hass = hass
         self._store = store
         self._triggers = triggers
@@ -63,7 +63,18 @@ class SchedulePlanner:
             await self.async_plan(schedule.id)
 
     async def async_plan(self, schedule_id: str, after: datetime | None = None) -> None:
-        """Plan the next run of one schedule, or cancel its timer if it is not active."""
+        """Plan the next run of one schedule, or cancel its timer if it is not active.
+
+        A changed planned time is reported, so sensors and subscribers follow a re-plan after the
+        start or after a time zone or location change (review findings 1 and 2).
+        """
+        previous = self._planned.get(schedule_id)
+        await self._async_plan(schedule_id, after)
+        if self._planned.get(schedule_id) != previous:
+            self._on_changed(schedule_id)
+
+    async def _async_plan(self, schedule_id: str, after: datetime | None) -> None:
+        """Replace the timer of one schedule by one for its next run, if it needs one."""
         self._cancel(schedule_id)
         schedule = self._store.get(schedule_id)
         if schedule is None or not self._plannable(schedule):

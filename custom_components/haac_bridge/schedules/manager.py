@@ -96,16 +96,18 @@ class ScheduleManager:
         return self.store.schedules if user.is_admin else self.store.by_owner(user.id)
 
     def revision_for(self, user: User) -> str:
-        """Return a hash over the visible schedules (id, version, pause, last run) and the scope."""
+        """Return a hash over the visible schedules (id, version, pause, last run, next run) and the scope."""
         digest = hashlib.sha256(self.scope_of(user).encode())
         for schedule in sorted(self.visible_to(user), key=lambda item: item.id):
             paused = schedule.paused
             last_run = schedule.last_run
+            planned = self.planner.planned_run(schedule.id)
             parts = (
                 schedule.id,
                 schedule.updated_at.isoformat(),
                 f"{paused.reason.value}@{paused.at.isoformat()}" if paused else "",
                 last_run.at.isoformat() if last_run else "",
+                planned.isoformat() if planned else "",
             )
             digest.update(("\t".join(parts) + "\n").encode())
         return digest.hexdigest()
