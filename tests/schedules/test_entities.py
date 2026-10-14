@@ -111,6 +111,40 @@ async def test_entities_appear_with_the_schedule(hass: HomeAssistant, world: Wor
         assert registry_entry.device_id == device.id
 
 
+async def test_the_next_run_follows_the_start_of_the_planner(
+    hass: HomeAssistant, world: World
+) -> None:
+    schedule = await create(hass, world)
+    manager = manager_of(hass)
+    # As after a restart: the sensor exists before anything is planned.
+    manager.planner.async_stop()
+    manager.notify(schedule.id)
+    await hass.async_block_till_done()
+    assert state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN).state == "unknown"
+
+    await manager.planner.async_start()
+    await hass.async_block_till_done()
+    planned = manager.planner.planned_run(schedule.id)
+    assert planned is not None
+    assert state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN).state == planned.isoformat()
+    manager.planner.async_stop()
+
+
+async def test_the_next_run_and_the_revision_follow_a_time_zone_change(
+    hass: HomeAssistant, world: World
+) -> None:
+    await hass.config.async_set_time_zone("Europe/Berlin")
+    schedule = await create(hass, world)
+    manager = manager_of(hass)
+    before = state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN).state
+    revision = manager.revision_for(world.anton)
+
+    await hass.config.async_update(time_zone="Asia/Tokyo")
+    await hass.async_block_till_done()
+    assert state_of(hass, "sensor", schedule.id, SUFFIX_NEXT_RUN).state != before
+    assert manager.revision_for(world.anton) != revision
+
+
 async def test_a_disabled_schedule_has_an_unknown_next_run(
     hass: HomeAssistant, world: World
 ) -> None:
