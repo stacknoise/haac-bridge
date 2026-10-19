@@ -1,4 +1,4 @@
-"""Next and previous run of a fixed wall-clock time with weekdays, DST-safe (concept 19.3 step 4).
+"""Next and previous run of a fixed wall-clock time on the dates of a rule, DST-safe (concept 19.3 step 4).
 
 This module needs only the standard library, so the time arithmetic can be tested on its own.
 HA's `find_next_time_expression_time` is not used: it skips the whole day when the wall time falls
@@ -7,11 +7,16 @@ into a DST gap, but a schedule must still run on that day.
 
 from __future__ import annotations
 
-from collections.abc import Collection
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
+from typing import TYPE_CHECKING
 
-SEARCH_DAYS = 9
-"""Days to look at on each side; any non-empty weekday set matches within a week."""
+if TYPE_CHECKING:
+    from .recurrence import DateRule
+
+CANDIDATE_DATES = 5
+"""Run dates looked at on each side of the time: the day before, the day and the next ones."""
+
+DAY = timedelta(days=1)
 
 MAX_GAP_MINUTES = 180
 """Longest DST gap (in minutes) the search steps through; real gaps are 30 or 60 minutes."""
@@ -39,29 +44,29 @@ def wall_instant(day: date, at: time, tz: tzinfo) -> datetime:
     return local.astimezone(UTC)
 
 
-def next_wall_run(after: datetime, days: Collection[int], at: time, tz: tzinfo) -> datetime | None:
-    """Return the first run strictly after `after` on one of `days` (0 = Monday), or None."""
-    start = after.astimezone(tz).date() - timedelta(days=1)
-    for offset in range(SEARCH_DAYS + 1):
-        day = start + timedelta(days=offset)
-        if day.weekday() not in days:
-            continue
+def next_wall_run(after: datetime, rule: DateRule, at: time, tz: tzinfo) -> datetime | None:
+    """Return the first run strictly after `after` on a date of `rule`, or None if it has ended."""
+    cursor = after.astimezone(tz).date() - 2 * DAY
+    for _ in range(CANDIDATE_DATES):
+        day = rule.next_date(cursor)
+        if day is None:
+            return None
         instant = wall_instant(day, at, tz)
         if instant > after:
             return instant
+        cursor = day
     return None
 
 
-def previous_wall_run(
-    before: datetime, days: Collection[int], at: time, tz: tzinfo
-) -> datetime | None:
-    """Return the last run at or before `before` on one of `days` (0 = Monday), or None."""
-    start = before.astimezone(tz).date() + timedelta(days=1)
-    for offset in range(SEARCH_DAYS + 1):
-        day = start - timedelta(days=offset)
-        if day.weekday() not in days:
-            continue
+def previous_wall_run(before: datetime, rule: DateRule, at: time, tz: tzinfo) -> datetime | None:
+    """Return the last run at or before `before` on a date of `rule`, or None if there is none."""
+    cursor = before.astimezone(tz).date() + DAY
+    for _ in range(CANDIDATE_DATES):
+        day = rule.previous_date(cursor)
+        if day is None:
+            return None
         instant = wall_instant(day, at, tz)
         if instant <= before:
             return instant
+        cursor = day - DAY
     return None

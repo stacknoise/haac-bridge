@@ -1,5 +1,6 @@
 """Tests for the schedule planner: timers, re-planning and missed runs (concept 19.3)."""
 
+from datetime import date
 from typing import Any
 from unittest.mock import patch
 
@@ -12,6 +13,8 @@ from custom_components.haac_bridge.schedules.model import (
     LastRun,
     Paused,
     PauseReason,
+    Repeat,
+    RepeatFreq,
     RunResult,
     Schedule,
 )
@@ -34,13 +37,19 @@ class Harness:
         self.calls: list[str] = []
         self.changes = 0
         self.changed_ids: list[str] = []
+        self.missed: list[tuple[str, Any, bool]] = []
         self.planner = SchedulePlanner(
             hass, self.store, TriggerFactory(hass), self._run, self._changed
         )
+        self.planner.on_missed = self._missed
 
     async def _run(self, schedule_id: str) -> None:
         """Record a due run."""
         self.calls.append(schedule_id)
+
+    async def _missed(self, schedule: Schedule, at: Any, *, last: bool) -> None:
+        """Record a run that HA missed."""
+        self.missed.append((schedule.id, at, last))
 
     def _changed(self, schedule_id: str) -> None:
         """Count a new planned time, a pause or a resume."""
@@ -265,4 +274,137 @@ async def test_sun_schedule_without_event_is_paused_and_resumes(
     assert resumed.paused is None
     assert harness.planner.planned_run(schedule.id) is not None
     assert harness.changes == 3  # the resume and the new planned time
+    harness.planner.async_stop()
+
+
+def _repeating(
+    freq: str, start: str, interval: int = 1, end: str | None = None, **changes: Any
+) -> Schedule:
+    """Return a schedule at 07:45 with a date rule."""
+    repeat = Repeat(
+        RepeatFreq(freq),
+        1 if freq == "once" else interval,
+        date.fromisoformat(start),
+        None if end is None else date.fromisoformat(end),
+    )
+    when = {"type": "time", "time": "07:45", "days": ALL_DAYS}
+    return make_schedule(when, repeat=repeat, **changes)
+
+
+@pytest.mark.usefixtures("berlin")
+async def test_plans_by_the_date_rule(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    freezer.move_to("2026-10-05 05:00:00+00:00")
+    every_third_day = _repeating("daily", "2026-10-04", 3)
+    monthly = _repeating("monthly", "2026-10-31")
+    later = _repeating("weekly", "2026-11-02", 2)
+    harness = Harness(hass)
+    await harness.start(hass, every_third_day, monthly, later)
+    assert harness.planner.planned_run(every_third_day.id) == utc(2026, 10, 7, 5, 45)
+    assert harness.planner.planned_run(monthly.id) == utc(2026, 10, 31, 6, 45)
+    assert harness.planner.planned_run(later.id) == utc(2026, 11, 2, 6, 45)
+    assert harness.planner.next_runs(every_third_day) == [
+        utc(2026, 10, 7, 5, 45),
+        utc(2026, 10, 10, 5, 45),
+        utc(2026, 10, 13, 5, 45),
+    ]
+    harness.planner.async_stop()
+
+
+@pytest.mark.usefixtures("berlin")
+async def test_a_one_off_run_is_the_last_one(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-10-05 05:00:00+00:00")
+    schedule = _repeating("once", "2026-10-06")
+    harness = Harness(hass)
+    await harness.start(hass, schedule)
+    assert harness.planner.planned_run(schedule.id) == utc(2026, 10, 6, 5, 45)
+    assert not harness.planner.ends_with_run(schedule.id)
+
+    await _fire(hass, freezer, "2026-10-06 05:45:01+00:00")
+    assert harness.calls == [schedule.id]
+    assert harness.planner.planned_run(schedule.id) is None
+    assert harness.planner.ends_with_run(schedule.id)
+    assert harness.planner.next_runs(schedule) == []
+    assert harness.planner.is_expired(schedule)
+    harness.planner.async_stop()
+
+
+@pytest.mark.usefixtures("berlin")
+async def test_the_run_on_the_end_date_is_the_last_one(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-10-05 05:00:00+00:00")
+    schedule = _repeating("daily", "2026-10-05", end="2026-10-06")
+    harness = Harness(hass)
+    await harness.start(hass, schedule)
+
+    await _fire(hass, freezer, "2026-10-05 05:45:01+00:00")
+    assert harness.planner.planned_run(schedule.id) == utc(2026, 10, 6, 5, 45)
+    assert not harness.planner.ends_with_run(schedule.id)
+    assert not harness.planner.is_expired(schedule)
+
+    await _fire(hass, freezer, "2026-10-06 05:45:01+00:00")
+    assert harness.calls == [schedule.id] * 2
+    assert harness.planner.ends_with_run(schedule.id)
+    harness.planner.async_stop()
+
+
+@pytest.mark.usefixtures("berlin")
+async def test_a_disabled_one_off_in_the_past_is_expired_and_not_planned(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-10-07 05:00:00+00:00")
+    schedule = _repeating("once", "2026-10-06", enabled=False)
+    harness = Harness(hass)
+    await harness.start(hass, schedule)
+    assert harness.planner.planned_run(schedule.id) is None
+    assert not harness.planner.ends_with_run(schedule.id)
+    assert harness.planner.is_expired(schedule)
+    assert harness.calls == []
+    assert harness.missed == []  # a disabled schedule did not miss anything
+    harness.planner.async_stop()
+
+
+@pytest.mark.usefixtures("berlin")
+async def test_a_run_within_the_grace_is_made_up_also_for_the_last_run(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-10-06 05:47:00+00:00")  # two minutes after the planned run
+    schedule = _repeating("once", "2026-10-06")
+    harness = Harness(hass)
+    await harness.start(hass, schedule)
+    assert harness.calls == [schedule.id]
+    assert harness.planner.ends_with_run(schedule.id)
+    assert harness.missed == []
+    harness.planner.async_stop()
+
+
+@pytest.mark.usefixtures("berlin")
+async def test_a_last_run_missed_beyond_the_grace_is_reported_as_the_last(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-10-06 07:00:00+00:00")  # 75 minutes late
+    schedule = _repeating("once", "2026-10-06")
+    harness = Harness(hass)
+    await harness.start(hass, schedule)
+    assert harness.calls == []
+    assert harness.missed == [(schedule.id, utc(2026, 10, 6, 5, 45), True)]
+    harness.planner.async_stop()
+
+
+@pytest.mark.usefixtures("berlin")
+async def test_a_run_missed_beyond_the_grace_is_reported_for_a_repeating_schedule(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-10-06 07:00:00+00:00")
+    missed = _repeating("daily", "2026-10-01")
+    ran = _repeating(
+        "daily", "2026-10-01", last_run=LastRun(utc(2026, 10, 6, 5, 45, 3), RunResult.OK)
+    )
+    changed_later = _repeating("daily", "2026-10-01", updated_at=utc(2026, 10, 6, 6, 0))
+    harness = Harness(hass)
+    await harness.start(hass, missed, ran, changed_later)
+    assert harness.calls == []
+    assert harness.missed == [(missed.id, utc(2026, 10, 6, 5, 45), False)]
     harness.planner.async_stop()

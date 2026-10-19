@@ -10,10 +10,18 @@ from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
 
-from ..const import MISSED_RUN_GRACE
-from .model import Paused, PauseReason, Schedule
+from ..const import MISSED_RUN_GRACE, NEXT_RUNS_COUNT
+from .model import (
+    Paused,
+    PauseReason,
+    RepeatFreq,
+    Schedule,
+    check_repeat,
+    parse_repeat,
+    parse_when,
+)
 from .store import ScheduleStore
-from .triggers import TriggerFactory
+from .triggers import Trigger, TriggerFactory
 
 
 class SchedulePlanner:
@@ -27,14 +35,20 @@ class SchedulePlanner:
         on_due: Callable[[str], Awaitable[None]],
         on_changed: Callable[[str], None],
     ) -> None:
-        """Create the planner; `on_due` runs a schedule, `on_changed` reports a new planned time or pause."""
+        """Create the planner.
+
+        `on_due` runs a schedule and `on_changed` reports a new planned time or pause.
+        The manager sets `on_missed` to be told about a run HA missed (concept 19.10, 19.11).
+        """
         self._hass = hass
         self._store = store
         self._triggers = triggers
         self._on_due = on_due
         self._on_changed = on_changed
+        self.on_missed: Callable[..., Awaitable[None]] | None = None
         self._unsubs: dict[str, CALLBACK_TYPE] = {}
         self._planned: dict[str, datetime] = {}
+        self._ended: set[str] = set()
         self._unsub_config: CALLBACK_TYPE | None = None
 
     async def async_start(self) -> None:
@@ -44,9 +58,28 @@ class SchedulePlanner:
             EVENT_CORE_CONFIG_UPDATE, self._handle_config_update
         )
         now = dt_util.utcnow()
-        for schedule in self._store.schedules:
-            if schedule.id in self._unsubs and self._missed(schedule, now):
+        for schedule in list(self._store.schedules):
+            if schedule.id not in self._unsubs and schedule.id not in self._ended:
+                continue
+            if self._missed(schedule, now):
                 self._hass.async_create_task(self._on_due(schedule.id))
+            else:
+                await self._async_report_missed(schedule, now)
+
+    async def _async_report_missed(self, schedule: Schedule, now: datetime) -> None:
+        """Tell `on_missed` about the last planned run that HA missed by more than the grace.
+
+        It counts if it fell after the last change of the schedule and no run followed it. The
+        run is the last one of the schedule if the planner found no later date (concept 19.10).
+        """
+        previous = self._trigger(schedule).previous_run(now)
+        if (
+            self.on_missed is not None
+            and previous is not None
+            and schedule.updated_at <= previous
+            and (schedule.last_run is None or schedule.last_run.at < previous)
+        ):
+            await self.on_missed(schedule, previous, last=schedule.id in self._ended)
 
     @callback
     def async_stop(self) -> None:
@@ -79,9 +112,13 @@ class SchedulePlanner:
         schedule = self._store.get(schedule_id)
         if schedule is None or not self._plannable(schedule):
             return
-        next_run = self._triggers.create(schedule.when).next_run(after or dt_util.utcnow())
+        reference = after or dt_util.utcnow()
+        next_run = self._trigger(schedule).next_run(reference)
         if next_run is None:
-            await self._async_set_sun_pause(schedule, paused=True)
+            if self._triggers.is_ended(schedule.when, schedule.repeat, reference):
+                self._ended.add(schedule_id)
+            else:
+                await self._async_set_sun_pause(schedule, paused=True)
             return
         if schedule.paused is not None:
             await self._async_set_sun_pause(schedule, paused=False)
@@ -94,9 +131,43 @@ class SchedulePlanner:
         """Return when the schedule runs next, or None if it is not planned."""
         return self._planned.get(schedule_id)
 
+    def ends_with_run(self, schedule_id: str) -> bool:
+        """Return whether the run that is due now is the last one of the schedule (concept 19.10).
+
+        True after the planner found no further date for an enabled, active schedule: the run of a
+        one-off schedule or of one that reached its end date, which removes the schedule.
+        """
+        return schedule_id in self._ended
+
+    def next_runs(self, schedule: Schedule) -> list[datetime]:
+        """Return the next runs of a planned schedule, none if it is disabled, paused or expired."""
+        if schedule.id not in self._planned:
+            return []
+        return self._triggers.upcoming(
+            schedule.when, schedule.repeat, dt_util.utcnow(), NEXT_RUNS_COUNT
+        )
+
+    def is_expired(self, schedule: Schedule) -> bool:
+        """Return whether the schedule has no date left, e.g. a one-off in the past (concept 19.10)."""
+        return self._triggers.is_ended(schedule.when, schedule.repeat, dt_util.utcnow())
+
+    def preview(self, raw_when: object, raw_repeat: object) -> list[datetime]:
+        """Return the next runs of a draft that is not saved, or raise HAB-SCH-001 / HAB-SCH-009."""
+        now = dt_util.utcnow()
+        repeat = parse_repeat(raw_repeat, dt_util.as_local(now).date())
+        when = parse_when(raw_when, days_required=repeat.freq is RepeatFreq.WEEKLY)
+        if raw_repeat is not None:
+            check_repeat(repeat, when, now)
+        return self._triggers.upcoming(when, repeat, now, NEXT_RUNS_COUNT)
+
+    def _trigger(self, schedule: Schedule) -> Trigger:
+        """Return the trigger of a schedule for its time and its date rule."""
+        return self._triggers.create(schedule.when, schedule.repeat)
+
     def _cancel(self, schedule_id: str) -> None:
         """Cancel the timer of one schedule."""
         self._planned.pop(schedule_id, None)
+        self._ended.discard(schedule_id)
         if (unsub := self._unsubs.pop(schedule_id, None)) is not None:
             unsub()
 
@@ -132,7 +203,7 @@ class SchedulePlanner:
 
     def _missed(self, schedule: Schedule, now: datetime) -> bool:
         """Return whether a run was due shortly before `now` and has not happened (concept 19.3)."""
-        previous = self._triggers.create(schedule.when).previous_run(now)
+        previous = self._trigger(schedule).previous_run(now)
         if previous is None or now - previous > MISSED_RUN_GRACE or schedule.created_at > previous:
             return False
         return schedule.last_run is None or schedule.last_run.at < previous

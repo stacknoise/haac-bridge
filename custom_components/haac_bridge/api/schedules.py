@@ -17,6 +17,7 @@ SCHEDULE_FIELDS = {
     vol.Optional("action"): object,
     vol.Optional("entities"): object,
     vol.Optional("enabled"): object,
+    vol.Optional("repeat"): object,
 }
 """Content of a schedule; checked in detail by the manager so a bad value gives HAB-SCH-001."""
 
@@ -26,7 +27,7 @@ def _fields(msg: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in msg.items()
-        if key in {"name", "when", "action", "entities", "enabled"}
+        if key in {"name", "when", "action", "entities", "enabled", "repeat"}
     }
 
 
@@ -56,6 +57,7 @@ async def ws_schedules_list(
         vol.Required("action"): object,
         vol.Required("entities"): object,
         vol.Optional("enabled"): object,
+        vol.Optional("repeat"): object,
     },
 )
 async def ws_schedules_create(
@@ -80,6 +82,21 @@ async def ws_schedules_update(
     user = require_user(connection)
     schedule = await manager.async_update(user, msg["schedule_id"], msg["updated_at"], _fields(msg))
     return await manager.async_describe(schedule, user)
+
+
+@bridge_command(
+    "haac_bridge/schedules/preview",
+    {vol.Required("when"): object, vol.Optional("repeat"): object},
+)
+async def ws_schedules_preview(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> dict[str, Any]:
+    """Return the next runs of a draft schedule without saving it."""
+    require_user(connection)
+    planner = get_data(hass).schedules.planner
+    return {
+        "next_runs": [run.isoformat() for run in planner.preview(msg["when"], msg.get("repeat"))]
+    }
 
 
 @bridge_command("haac_bridge/schedules/delete", {vol.Required("schedule_id"): str})

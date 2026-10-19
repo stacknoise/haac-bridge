@@ -3,6 +3,8 @@
 from datetime import UTC, datetime, time
 from zoneinfo import ZoneInfo
 
+from custom_components.haac_bridge.schedules.model import Repeat
+from custom_components.haac_bridge.schedules.recurrence import DateRule, RecurrenceFactory
 from custom_components.haac_bridge.schedules.wall_time import (
     next_wall_run,
     previous_wall_run,
@@ -10,8 +12,15 @@ from custom_components.haac_bridge.schedules.wall_time import (
 )
 
 BERLIN = ZoneInfo("Europe/Berlin")
-ALL_DAYS = frozenset(range(7))
-WEEKDAYS = frozenset(range(5))
+
+
+def weekly(days: set[int]) -> DateRule:
+    """Return the rule for these weekdays, every week."""
+    return RecurrenceFactory().create(Repeat(), days)
+
+
+ALL_DAYS = weekly(set(range(7)))
+WEEKDAYS = weekly(set(range(5)))
 
 
 def utc(*args: int) -> datetime:
@@ -46,7 +55,7 @@ def test_next_run_skips_days_that_are_not_selected() -> None:
 def test_weekday_is_the_local_day() -> None:
     # 23:30 UTC on Sunday is already Monday 01:30 in Berlin.
     moment = utc(2026, 10, 4, 23, 30)
-    assert local(next_wall_run(moment, frozenset({0}), time(2, 0), BERLIN)) == (
+    assert local(next_wall_run(moment, weekly({0}), time(2, 0), BERLIN)) == (
         "2026-10-05 02:00 CEST"
     )
 

@@ -16,7 +16,8 @@ from ..const import MISSED_RUN_GRACE
 from ..core.errors import ErrorCode, HaacBridgeError
 from ..core.runtime import get_data
 from ..services.call_factory import async_execute
-from .model import LastRun, Paused, PauseReason, RunResult, Schedule
+from .model import LastRun, Paused, PauseReason, RepeatFreq, RunResult, RunTrigger, Schedule
+from .run_entries import record_run
 from .store import ScheduleStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,12 +30,16 @@ UNAVAILABLE = "unavailable"
 
 @dataclass(frozen=True, slots=True)
 class RunHooks:
-    """What the runner asks the manager to do: remove schedules, re-plan one, announce a change."""
+    """What the runner asks the manager to do: remove schedules, re-plan one, announce a change.
+
+    `ends` tells whether the planned run of a schedule is its last one (concept 19.10).
+    """
 
     remove: Callable[[list[str]], Awaitable[None]]
     replan: Callable[[str], Awaitable[None]]
     changed: Callable[[str], None]
     ready: Callable[[], bool]
+    ends: Callable[[str], bool]
 
 
 class ScheduleRunner:
@@ -129,8 +134,22 @@ class ScheduleRunner:
             _LOGGER.info(
                 "Schedule %s of user %s is run by user %s", schedule.id, user.id, context_user_id
             )
+        removes = self._removes_after_run(schedule, triggered_by)
         done = await self._async_switch_all(user, schedule, targets, context_user_id)
-        await self._async_record(schedule.id, _result(done, len(schedule.entities)))
+        last_run = await self._async_record(schedule.id, _result(done, len(schedule.entities)))
+        if removes:
+            trigger = RunTrigger.PLAN if triggered_by is None else RunTrigger.MANUAL
+            record_run(self._hass, schedule, last_run, trigger, removed=True)
+            await self._hooks.remove([schedule.id])
+
+    def _removes_after_run(self, schedule: Schedule, triggered_by: str | None) -> bool:
+        """Return whether this run removes the schedule: the last planned run, or any run of a one-off.
+
+        A manual run (`triggered_by`) removes only a one-off schedule (concept 19.10).
+        """
+        if triggered_by is None:
+            return self._hooks.ends(schedule.id)
+        return schedule.repeat.freq is RepeatFreq.ONCE
 
     async def _async_switch_all(
         self, user: User, schedule: Schedule, targets: list[str], context_user_id: str
@@ -180,10 +199,12 @@ class ScheduleRunner:
         state = self._hass.states.get(entity_id)
         return state is not None and state.state == UNAVAILABLE
 
-    async def _async_record(self, schedule_id: str, result: RunResult) -> None:
-        """Store the outcome of a run on the schedule as it is now."""
+    async def _async_record(self, schedule_id: str, result: RunResult) -> LastRun:
+        """Store the outcome of a run on the schedule as it is now and return it."""
         code = None if result is RunResult.OK else ErrorCode.SCH_RUN_FAILED.value
-        await self._async_update(schedule_id, last_run=LastRun(dt_util.utcnow(), result, code))
+        last_run = LastRun(dt_util.utcnow(), result, code)
+        await self._async_update(schedule_id, last_run=last_run)
+        return last_run
 
     async def _async_pause(
         self, schedule_id: str, reason: PauseReason, last_run: LastRun | None = None

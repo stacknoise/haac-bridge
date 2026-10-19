@@ -114,7 +114,8 @@ Factories are plain classes created once in `async_setup` and stored in `HaacBri
 | `FilterFactory` | `exposure/filter_factory.py` | one `EntityFilter` per HA user from the YAML or UI configuration |
 | `DescriptorFactory` | `entities/descriptor_factory.py` | entity descriptor per domain (switch, sensor, climate) from an HA state, without hidden attributes |
 | `ServiceCallFactory` | `services/call_factory.py` | validated service call (domain, service, data, target); enforces exposure and `ALLOWED_SERVICES` with its `service_data` keys |
-| `TriggerFactory` | `schedules/triggers.py` | one trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run |
+| `TriggerFactory` | `schedules/triggers.py` | one trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run on the dates of a rule |
+| `RecurrenceFactory` | `schedules/recurrence.py` | one date rule per `repeat.freq` (`once`, `daily`, `weekly`, `monthly`, `yearly`) with `matches`, `next_date` and `previous_date` |
 | `ResponseFactory` | `core/response_factory.py` | WebSocket result, error and event replies |
 | `ErrorFactory` | `core/error_factory.py` | `HaacBridgeError` from any caught exception |
 

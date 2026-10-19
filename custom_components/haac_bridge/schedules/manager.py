@@ -20,18 +20,25 @@ from ..const import (
 from ..core.errors import ErrorCode, RequestError, ScheduleError
 from ..core.runtime import get_data
 from .model import (
+    LastRun,
     Paused,
     PauseReason,
+    RepeatFreq,
+    RunResult,
+    RunTrigger,
     Schedule,
+    check_repeat,
     new_schedule,
     parse_action,
     parse_enabled,
     parse_entities,
     parse_name,
+    parse_repeat,
     parse_when,
 )
 from .planner import SchedulePlanner
 from .repairs import async_sync_unreadable_issue
+from .run_entries import record_run
 from .runner import RunHooks, ScheduleRunner
 from .store import ScheduleStore
 from .triggers import TriggerFactory
@@ -62,10 +69,19 @@ class ScheduleManager:
         self.users_ready = False
         self.store = ScheduleStore(hass)
         self.planner = SchedulePlanner(
-            hass, self.store, TriggerFactory(hass), self._async_run_due, self.notify
+            hass,
+            self.store,
+            TriggerFactory(hass),
+            self._async_run_due,
+            self.notify,
         )
+        self.planner.on_missed = self._async_log_missed
         hooks = RunHooks(
-            self.async_remove, self.planner.async_plan, self.notify, lambda: self.users_ready
+            self.async_remove,
+            self.planner.async_plan,
+            self.notify,
+            lambda: self.users_ready,
+            self.planner.ends_with_run,
         )
         self.runner = ScheduleRunner(hass, self.store, hooks)
         self._manual_runs: dict[str, float] = {}
@@ -99,6 +115,16 @@ class ScheduleManager:
     async def _async_run_due(self, schedule_id: str) -> None:
         """Run a schedule whose time has come."""
         await self.runner.async_run(schedule_id)
+
+    async def _async_log_missed(self, schedule: Schedule, at: datetime, *, last: bool) -> None:
+        """Log a run HA missed; if it was the last one, the schedule is removed (concept 19.10)."""
+        record_run(
+            self._hass, schedule, LastRun(at, RunResult.MISSED), RunTrigger.PLAN, removed=last
+        )
+        if last:
+            await self.async_remove([schedule.id])
+        else:
+            self.notify(schedule.id)
 
     @staticmethod
     def scope_of(user: User) -> str:
@@ -135,6 +161,8 @@ class ScheduleManager:
             "owner_name": owner.name if owner else None,
             "own": schedule.owner == user.id,
             "next_run": planned.isoformat() if planned else None,
+            "next_runs": [run.isoformat() for run in self.planner.next_runs(schedule)],
+            "expired": self.planner.is_expired(schedule),
         }
 
     async def async_list(self, user: User) -> dict[str, Any]:
@@ -169,6 +197,8 @@ class ScheduleManager:
         updated = self._without_ended_pause(
             current.with_changes(updated_at=dt_util.utcnow(), **changes), owner
         )
+        if updated.enabled and (not current.enabled or "repeat" in changes or "when" in changes):
+            self._require_dates_left(updated)
         await self.store.async_replace(updated)
         await self.planner.async_plan(updated.id)
         self.notify(updated.id)
@@ -179,6 +209,8 @@ class ScheduleManager:
         schedule = self._require(schedule_id)
         if schedule.enabled == enabled:
             return
+        if enabled:
+            self._require_dates_left(schedule)
         await self.store.async_replace(
             schedule.with_changes(enabled=enabled, updated_at=dt_util.utcnow())
         )
@@ -275,6 +307,11 @@ class ScheduleManager:
         if schedule.owner != user.id and not user.is_admin:
             raise ScheduleError(ErrorCode.SCH_NOT_ALLOWED)
 
+    def _require_dates_left(self, schedule: Schedule) -> None:
+        """Raise HAB-SCH-009 if the schedule has no date left, e.g. a one-off in the past (concept 19.10)."""
+        if self.planner.is_expired(schedule):
+            raise ScheduleError(ErrorCode.SCH_IN_PAST)
+
     def _check_exposed(self, user: User, entities: tuple[str, ...]) -> None:
         """Require every entity to be exposed to the user; the bridge's own entities never are."""
         exposure = get_data(self._hass).exposure
@@ -288,10 +325,10 @@ class ScheduleManager:
         parsers = {
             "name": parse_name,
             "enabled": parse_enabled,
-            "when": parse_when,
             "action": parse_action,
         }
         changes = {name: parse(fields[name]) for name, parse in parsers.items() if name in fields}
+        changes.update(self._parse_dates(schedule, fields))
         if "entities" in fields:
             entities = parse_entities(fields["entities"])
             if entities != schedule.entities:
@@ -300,6 +337,26 @@ class ScheduleManager:
                 self._check_exposed(user, entities)
                 changes["entities"] = entities
         return changes
+
+    @staticmethod
+    def _parse_dates(schedule: Schedule, fields: dict[str, Any]) -> dict[str, Any]:
+        """Return the validated `when` and `repeat` of an update; the weekdays belong to a weekly rule.
+
+        A new date rule gets today as its start date if it has none, and its dates are checked
+        against the current time (concept 19.10).
+        """
+        if "when" not in fields and "repeat" not in fields:
+            return {}
+        today = dt_util.as_local(dt_util.utcnow()).date()
+        repeat = parse_repeat(fields["repeat"], today) if "repeat" in fields else schedule.repeat
+        weekly = repeat.freq is RepeatFreq.WEEKLY
+        when = (
+            parse_when(fields["when"], days_required=weekly) if "when" in fields else schedule.when
+        )
+        if weekly and not when.days:
+            raise ScheduleError(ErrorCode.SCH_INVALID)
+        check_repeat(repeat, when)
+        return {"when": when, "repeat": repeat}
 
     def _with_owner_state(self, schedule: Schedule, owner: User) -> Schedule:
         """Return the schedule paused if its owner is inactive, or resumed if its pause has ended."""
