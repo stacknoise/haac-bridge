@@ -1,7 +1,6 @@
 """Tests for one-off and repeating schedules: commands, removal after the last run (concept 19.10)."""
 
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 
@@ -15,13 +14,9 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.haac_bridge.core.errors import ErrorCode, ScheduleError
-from custom_components.haac_bridge.core.runtime import get_data
 from custom_components.haac_bridge.schedules.model import (
     Repeat,
     RepeatFreq,
-    RunEntry,
-    RunResult,
-    RunTrigger,
     Schedule,
 )
 
@@ -32,17 +27,6 @@ from .test_runner import add, manager_of
 CLIENT = Callable[[User], Coroutine[Any, Any, Any]]
 MORNING = {"type": "time", "time": "07:45"}
 WEEKLY_MORNING = {**MORNING, "days": ALL_DAYS}
-
-
-@dataclass
-class LogRecorder:
-    """A run log that keeps what the bridge writes to it."""
-
-    entries: list[RunEntry] = field(default_factory=list)
-
-    def record(self, entry: RunEntry) -> None:
-        """Keep the entry."""
-        self.entries.append(entry)
 
 
 def repeat_of(freq: str, start: date, *, interval: int = 1, end: date | None = None) -> Repeat:
@@ -56,11 +40,9 @@ def iso(day: date) -> str:
 
 
 @pytest.fixture
-def log(hass: HomeAssistant, world: World) -> LogRecorder:
-    """Replace the run log of the bridge by a recorder."""
-    recorder = LogRecorder()
-    get_data(hass).run_log = recorder
-    return recorder
+def log(hass: HomeAssistant, world: World) -> Callable[[], list[dict[str, Any]]]:
+    """Return a function that lists the run log entries of Anton."""
+    return lambda: manager_of(hass).run_log.runs_of(world.anton.id)
 
 
 async def fire(hass: HomeAssistant, freezer: FrozenDateTimeFactory, moment: str) -> None:
@@ -80,7 +62,10 @@ async def plan(hass: HomeAssistant, schedule: Schedule) -> None:
 
 @pytest.mark.usefixtures("berlin")
 async def test_a_one_off_schedule_is_removed_after_its_run(
-    hass: HomeAssistant, world: World, log: LogRecorder, freezer: FrozenDateTimeFactory
+    hass: HomeAssistant,
+    world: World,
+    log: Callable[[], list[dict[str, Any]]],
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     freezer.move_to("2026-10-19 05:00:00+00:00")
     calls = async_mock_service(hass, "switch", "turn_on")
@@ -98,15 +83,15 @@ async def test_a_one_off_schedule_is_removed_after_its_run(
     assert len(calls) == 2
     assert manager_of(hass).store.get(schedule.id) is None
     assert manager_of(hass).planner.planned_run(schedule.id) is None
-    [entry] = log.entries
-    assert (entry.schedule_id, entry.owner, entry.name) == (
+    [entry] = log()
+    assert (entry["schedule_id"], entry["owner"], entry["name"]) == (
         schedule.id,
         world.anton.id,
         schedule.name,
     )
-    assert (entry.result, entry.trigger, entry.removed, entry.notify) == (
-        RunResult.OK,
-        RunTrigger.PLAN,
+    assert (entry["result"], entry["trigger"], entry["removed"], entry["notify"]) == (
+        "ok",
+        "plan",
         True,
         True,
     )
@@ -114,7 +99,10 @@ async def test_a_one_off_schedule_is_removed_after_its_run(
 
 @pytest.mark.usefixtures("berlin")
 async def test_a_one_off_schedule_is_removed_also_when_the_run_fails(
-    hass: HomeAssistant, world: World, log: LogRecorder, freezer: FrozenDateTimeFactory
+    hass: HomeAssistant,
+    world: World,
+    log: Callable[[], list[dict[str, Any]]],
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     freezer.move_to("2026-10-19 05:00:00+00:00")
     async_mock_service(hass, "switch", "turn_on")
@@ -128,13 +116,16 @@ async def test_a_one_off_schedule_is_removed_also_when_the_run_fails(
     await plan(hass, schedule)
     await fire(hass, freezer, "2026-10-19 05:45:01+00:00")
     assert manager_of(hass).store.get(schedule.id) is None
-    [entry] = log.entries
-    assert (entry.result, entry.code, entry.removed) == (RunResult.FAILED, "HAB-SCH-002", True)
+    [entry] = log()
+    assert (entry["result"], entry["code"], entry["removed"]) == ("failed", "HAB-SCH-002", True)
 
 
 @pytest.mark.usefixtures("berlin")
 async def test_the_last_run_before_the_end_date_removes_the_schedule(
-    hass: HomeAssistant, world: World, log: LogRecorder, freezer: FrozenDateTimeFactory
+    hass: HomeAssistant,
+    world: World,
+    log: Callable[[], list[dict[str, Any]]],
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     freezer.move_to("2026-10-19 05:00:00+00:00")
     async_mock_service(hass, "switch", "turn_on")
@@ -148,16 +139,19 @@ async def test_the_last_run_before_the_end_date_removes_the_schedule(
 
     await fire(hass, freezer, "2026-10-19 05:45:01+00:00")
     assert manager_of(hass).store.get(schedule.id) is not None
-    assert [entry.removed for entry in log.entries] == []  # the runner's own entries come with B3
+    assert [entry["removed"] for entry in log()] == [False]
 
     await fire(hass, freezer, "2026-10-20 05:45:01+00:00")
     assert manager_of(hass).store.get(schedule.id) is None
-    assert [entry.removed for entry in log.entries] == [True]
+    assert [entry["removed"] for entry in log()] == [False, True]
 
 
 @pytest.mark.usefixtures("berlin")
 async def test_a_schedule_without_an_end_date_stays(
-    hass: HomeAssistant, world: World, log: LogRecorder, freezer: FrozenDateTimeFactory
+    hass: HomeAssistant,
+    world: World,
+    log: Callable[[], list[dict[str, Any]]],
+    freezer: FrozenDateTimeFactory,
 ) -> None:
     freezer.move_to("2026-10-19 05:00:00+00:00")
     async_mock_service(hass, "switch", "turn_on")
@@ -168,11 +162,11 @@ async def test_a_schedule_without_an_end_date_stays(
     await fire(hass, freezer, "2026-10-19 05:45:01+00:00")
     assert manager_of(hass).store.get(schedule.id) is not None
     assert manager_of(hass).planner.planned_run(schedule.id) == utc(2027, 10, 19, 5, 45)
-    assert log.entries == []
+    assert [entry["removed"] for entry in log()] == [False]
 
 
 async def test_run_now_removes_a_one_off_schedule_after_the_run(
-    hass: HomeAssistant, world: World, log: LogRecorder
+    hass: HomeAssistant, world: World, log: Callable[[], list[dict[str, Any]]]
 ) -> None:
     calls = async_mock_service(hass, "switch", "turn_on")
     tomorrow = date.today() + timedelta(days=1)
@@ -183,13 +177,13 @@ async def test_run_now_removes_a_one_off_schedule_after_the_run(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert len(calls) == 2
     assert manager_of(hass).store.get(schedule.id) is None
-    [entry] = log.entries
-    assert (entry.trigger, entry.removed) == (RunTrigger.MANUAL, True)
+    [entry] = log()
+    assert (entry["trigger"], entry["removed"]) == ("manual", True)
 
 
 @pytest.mark.parametrize("freq", ["daily", "weekly", "monthly", "yearly"])
 async def test_run_now_keeps_a_repeating_schedule(
-    hass: HomeAssistant, world: World, log: LogRecorder, freq: str
+    hass: HomeAssistant, world: World, log: Callable[[], list[dict[str, Any]]], freq: str
 ) -> None:
     async_mock_service(hass, "switch", "turn_on")
     today = date.today()
@@ -202,11 +196,11 @@ async def test_run_now_keeps_a_repeating_schedule(
     await manager_of(hass).async_run_now(world.anton, schedule.id)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert manager_of(hass).store.get(schedule.id) is not None
-    assert log.entries == []
+    assert [entry["removed"] for entry in log()] == [False]
 
 
 async def test_a_missed_last_run_is_logged_and_removes_the_schedule(
-    hass: HomeAssistant, world: World, log: LogRecorder
+    hass: HomeAssistant, world: World, log: Callable[[], list[dict[str, Any]]]
 ) -> None:
     schedule = await add(
         hass,
@@ -220,26 +214,28 @@ async def test_a_missed_last_run_is_logged_and_removes_the_schedule(
     assert planner.on_missed is not None
     await planner.on_missed(schedule, at, last=True)
     assert manager_of(hass).store.get(schedule.id) is None
-    [entry] = log.entries
-    assert (entry.at, entry.result, entry.trigger, entry.removed, entry.notify) == (
-        at,
-        RunResult.MISSED,
-        RunTrigger.PLAN,
+    [entry] = log()
+    assert (entry["at"], entry["result"], entry["trigger"], entry["removed"], entry["notify"]) == (
+        at.isoformat(),
+        "missed",
+        "plan",
         True,
         True,
     )
 
 
 async def test_a_missed_run_that_is_not_the_last_is_logged_and_the_schedule_stays(
-    hass: HomeAssistant, world: World, log: LogRecorder
+    hass: HomeAssistant, world: World, log: Callable[[], list[dict[str, Any]]]
 ) -> None:
     schedule = await add(hass, world.anton.id, when=WEEKLY_MORNING)
     planner = manager_of(hass).planner
     assert planner.on_missed is not None
     await planner.on_missed(schedule, utc(2026, 10, 19, 5, 45), last=False)
     assert manager_of(hass).store.get(schedule.id) is not None
-    [entry] = log.entries
-    assert (entry.result, entry.removed) == (RunResult.MISSED, False)
+    [entry] = log()
+    assert (entry["result"], entry["removed"]) == ("missed", False)
+    await planner.on_missed(schedule, utc(2026, 10, 19, 5, 45), last=False)
+    assert len(log()) == 1  # the same missed run is logged once
 
 
 # --- the commands --------------------------------------------------------------------------------

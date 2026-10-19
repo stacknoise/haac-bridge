@@ -18,6 +18,7 @@ SCHEDULE_FIELDS = {
     vol.Optional("entities"): object,
     vol.Optional("enabled"): object,
     vol.Optional("repeat"): object,
+    vol.Optional("notify"): object,
 }
 """Content of a schedule; checked in detail by the manager so a bad value gives HAB-SCH-001."""
 
@@ -27,7 +28,7 @@ def _fields(msg: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in msg.items()
-        if key in {"name", "when", "action", "entities", "enabled", "repeat"}
+        if key in {"name", "when", "action", "entities", "enabled", "repeat", "notify"}
     }
 
 
@@ -58,6 +59,7 @@ async def ws_schedules_list(
         vol.Required("entities"): object,
         vol.Optional("enabled"): object,
         vol.Optional("repeat"): object,
+        vol.Optional("notify"): object,
     },
 )
 async def ws_schedules_create(
@@ -97,6 +99,19 @@ async def ws_schedules_preview(
     return {
         "next_runs": [run.isoformat() for run in planner.preview(msg["when"], msg.get("repeat"))]
     }
+
+
+@bridge_command(
+    "haac_bridge/schedules/runs",
+    {vol.Optional("log_id"): str, vol.Optional("after_seq"): vol.All(int, vol.Range(min=0))},
+)
+async def ws_schedules_runs(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> dict[str, Any]:
+    """Return the caller's own run log entries after the cursor; a different `log_id` returns all."""
+    return get_data(hass).schedules.runs_for(
+        require_user(connection), msg.get("log_id"), msg.get("after_seq", 0)
+    )
 
 
 @bridge_command("haac_bridge/schedules/delete", {vol.Required("schedule_id"): str})

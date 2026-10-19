@@ -12,6 +12,7 @@ from .schedules import (
     ws_schedules_preview,
     ws_schedules_revision,
     ws_schedules_run_now,
+    ws_schedules_runs,
     ws_schedules_update,
     ws_subscribe_schedules,
 )
@@ -33,5 +34,6 @@ COMMANDS = (
     ws_schedules_delete,
     ws_schedules_run_now,
     ws_schedules_preview,
+    ws_schedules_runs,
     ws_subscribe_schedules,
 )
