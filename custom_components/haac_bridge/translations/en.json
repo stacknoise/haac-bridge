@@ -45,7 +45,7 @@
       },
       "filter": {
         "title": "What may this user see?",
-        "description": "Only switches, sensors and climate devices are ever shown. Include at least one domain, entity or wildcard. An exclusion always wins over an inclusion. Wildcards look like `sensor.*_humidity`.",
+        "description": "Only switches, sensors, binary sensors and climate devices are ever shown. Binary sensors can show who is home or whether a door is open, so include single entities rather than the whole domain. Include at least one domain, entity or wildcard. An exclusion always wins over an inclusion. Wildcards look like `sensor.*_humidity`.",
         "data": {
           "include_domains": "Include domains",
           "include_entities": "Include entities",

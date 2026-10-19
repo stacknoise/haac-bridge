@@ -54,7 +54,7 @@ async def test_info(hass: HomeAssistant, anton_client: Any) -> None:
     assert reply["result"] == {
         "bridge_version": "0.4.0",
         "api_version": 1,
-        "domains": ["climate", "sensor", "switch"],
+        "domains": ["binary_sensor", "climate", "sensor", "switch"],
         "features": ["schedules", "entity_disable", "schedule_repeat", "schedule_runs"],
         "ha_version": HA_VERSION,
         "instance_id": await instance_id.async_get(hass),

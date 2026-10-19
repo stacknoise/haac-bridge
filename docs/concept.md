@@ -22,7 +22,7 @@ Product name of the app: **HA Android Client**, short form **HAAC**. The compani
 
 | Area | In scope (v1) | Out of scope (later) |
 | --- | --- | --- |
-| Entity domains | `switch`, `sensor`, `climate` | `light`, `cover`, `binary_sensor`, `media_player`, `lock`, … |
+| Entity domains | `switch`, `sensor`, `binary_sensor`, `climate` | `light`, `cover`, `media_player`, `lock`, … |
 | HA instances | Several instances, one active at a time, switch at any time | Entities of several instances combined in one view |
 | Login | HA username/password (incl. MFA) per instance, fingerprint unlock | Passkeys |
 | Structure | Home → Floor → Room, Home → Room (per instance) | Sharing layouts between devices/users |
@@ -366,7 +366,7 @@ The app only ever sees entities that the HAAC Bridge exposes to the logged-in HA
 
 - After the home structure exists, the user opens *Add entities* in a room or in the global entity list.
 - The app calls `haac_bridge/entities/list` (chapter 11) and receives, per exposed entity: `entity_id`, domain, HA friendly name, the name from the bridge configuration (`configured_name`, 10.2) if the admin set one, device class, unit, icon, supported features, HA area name and the current state with attributes.
-- The picker groups entities by domain (Switches, Sensors, Climate) and optionally by HA area, with search by name or `entity_id`.
+- The picker groups entities by domain (Switches, Sensors, Binary sensors, Climate) and optionally by HA area, with search by name or `entity_id`.
 - Entities already assigned to the current room are marked; unassigned entities are highlighted.
 
 ### 7.2 Assigning and removing
@@ -494,6 +494,47 @@ For sensitive switches a user can turn on a switch guard: a tap on the tile does
 - **Local only** (decided): like aliases and tile sizes the guard is a local aid, stored per device and instance in `entity_guard` (12) and never written to HA; setting it needs no connection. It is a hurdle against mistaken taps, not a permission: in HA, in other apps and by schedules the switch stays switchable. To keep a switch away from a user, the admin removes it from the exposure (10.2).
 - **Code:** `SwitchGuard` (direction, `requiresConfirmation(target)`) in `feature.entities.domain`; one function in the switching path checks it before `ServiceCallFactory`, so tile, list and detail share it. No new error codes: cancelling is not an error.
 
+### 8.6 Binary sensor (`binary_sensor`)
+
+Binary sensors are read-only like sensors (8.3): the app shows a tile with the state in words, a detail screen and a timeline; there is no control. HA sends only `on` and `off` (and `unavailable`, `unknown`); what that means depends on the `device_class`, so the app translates it with a fixed table (M-29 to M-32).
+
+| `device_class` | `on` | `off` | Level at `on` |
+| --- | --- | --- | --- |
+| `door`, `garage_door`, `window`, `opening` | Open | Closed | Active |
+| `lock` (`on` means unlocked) | Unlocked | Locked | Active |
+| `motion` | Motion | No motion | Active |
+| `moving` | Moving | Still | Active |
+| `occupancy` | Occupied | Clear | Active |
+| `presence` | Home | Away | Active |
+| `smoke` | Smoke detected | No smoke | Alarm |
+| `gas` | Gas detected | No gas | Alarm |
+| `carbon_monoxide` | CO detected | No CO | Alarm |
+| `moisture` | Wet | Dry | Alarm |
+| `safety` | Unsafe | Safe | Alarm |
+| `tamper` | Tampered | Not tampered | Alarm |
+| `problem` | Problem | OK | Alarm |
+| `heat` | Hot | Normal | Alarm |
+| `cold` | Cold | Normal | Alarm |
+| `battery` | Low | Normal | Alarm |
+| `battery_charging` | Charging | Not charging | Active |
+| `connectivity` | Connected | Disconnected | Active |
+| `plug` | Plugged in | Unplugged | Active |
+| `power` | Power | No power | Active |
+| `running` | Running | Not running | Active |
+| `light` | Light | Dark | Active |
+| `sound` | Sound | Quiet | Active |
+| `vibration` | Vibration | No vibration | Active |
+| `update` | Update available | Up to date | Active |
+| none or unknown | On | Off | Active |
+
+- **Level.** *Active* tints the tile like a switched-on switch (`accentTint`, border `accentBorder`). *Alarm* draws the error colours (`danger`, `dangerContainer`) with a warning icon and the text; colour never carries the meaning alone, and the TalkBack text is "name, state text" (decided). `off` is always neutral. A `lock` that is unlocked is *Active*, not *Alarm* (decided). The table lives as data in `feature.entities.domain`; only `TileFactory` branches on the domain (17.2).
+- **Tile (M-29, M-32).** 1×1 by default, the other sizes as for every tile (7.2). Icon field, name and state text; 2×1 and 2×2 add the line *since 14:32* or *since 2 h* from `last_changed` (relative up to 24 h, then with the date). A tap does nothing; a long press opens the menu *Details*, *Rename*, *Remove from this room*, without *Deactivate* (7.5, only what has a control can be deactivated) and without the switch guard (8.5). `unavailable` and `unknown` show *Not available* (14.1), a withdrawn entity as in 7.4. An unknown or missing class falls back to the last row of the table.
+- **Detail (M-31).** Icon, state text and the raw HA state, `entity_id`, last change, HA names and all attributes (8.1); no controls.
+- **History (M-31).** A timeline of states from `haac_bridge/history`, never statistics (binary sensors have none). The legend uses the words of the class (*Open* / *Closed*); *Active* is drawn in `chartGreen`, *Alarm* in `chartMagenta`, `off` neutral, gaps for `unavailable` and `unknown` as in 8.1. Below the chart a line states the changes and the time in the `on` state in the chosen range ("7 changes, 3 h 20 min open"), calculated from the same rows (decided).
+- **Picker (M-30).** *Add entities* gets a fourth tab *Binary sensors* between *Sensors* and *Climate*; it appears only if the bridge delivers such entities.
+- **Not available for binary sensors:** deactivating (7.5), switch guard (8.5), schedules (19) and every service call (11.4, `HAB-SVC-002`). State changes create no entry in the notification list (decided): the app closes its connection in the background, so such a list would be unreliable.
+- **Old and new versions.** An app without this chapter shows a binary sensor as a plain tile with the raw state and the entity id as the tab; a bridge without it delivers none. `api_version` stays 1 and there is no feature flag (decided).
+
 ## 9. Synchronization on app start
 
 On every start and on every instance switch (after unlock) the app compares the locally cached list of exposed entities with the bridge's current list and reports what was added or withdrawn; the check is cheap because the bridge first returns a revision hash.
@@ -594,7 +635,7 @@ haac_bridge:
 | `entity_config.<entity_id>.name` | Default display name in the app (`configured_name`, 7.3), global or under `users[]`; the per-user entry wins. It never exposes an entity by itself |
 
 - Filters are built with HA's own `entityfilter` helper, so evaluation order is identical to the HomeKit Bridge (explicit exclude beats include).
-- Independently of the filter, only the v1 domains `switch`, `sensor`, `climate` are ever returned.
+- Independently of the filter, only the v1 domains `switch`, `sensor`, `binary_sensor`, `climate` are ever returned. Binary sensors can reveal presence and access (who is home, which door is open): the README and the filter form of the integration say so, and recommend including single entities instead of the whole domain `binary_sensor`.
 - Entities of the platform `haac_bridge` itself (the entities the bridge creates for schedules, 19.5) are never exposed, whatever the filter says. Otherwise a filter such as "all switches" would let a user, or a schedule, address a schedule switch.
 - **Deny by default**: a HA user not listed under `users` gets an empty list. Unknown usernames are logged as a warning at startup.
 - A listed user whose filter has no `include_*` rule (empty filter or excludes only) also gets an empty list and a warning in the log. This deliberately deviates from the HomeKit Bridge, where such a filter would expose everything not excluded.
@@ -627,7 +668,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 
 | Command | Request fields | Response |
 | --- | --- | --- |
-| `haac_bridge/info` | – | Bridge version, API version, supported domains, HA version, `instance_id`, `features` (list of optional features of the bridge, for example `["schedules"]`; missing counts as empty) and `urls` with the `internal`, `external` and `cloud` address configured in HA (each `null` if not set) (4.5) |
+| `haac_bridge/info` | – | Bridge version, API version, supported domains (including `binary_sensor`), HA version, `instance_id`, `features` (list of optional features of the bridge, for example `["schedules"]`; missing counts as empty) and `urls` with the `internal`, `external` and `cloud` address configured in HA (each `null` if not set) (4.5) |
 | `haac_bridge/exposure/revision` | – | `revision` (hash over the exposed entity IDs and their configured names), entity count |
 | `haac_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
 | `haac_bridge/subscribe_entities` | – | Empty result, then events: `a` initial and added states, `c` changes, `r` removals (HA's compressed state format) and `exposure_changed` (11.3); one per connection, a new one ends the previous |
@@ -739,6 +780,7 @@ Attributes that name other entities or carry an access link are never sent, neit
 | `climate` | `set_humidity` | `humidity` |
 | `climate` | `set_fan_mode`, `set_preset_mode`, `set_swing_mode`, `set_swing_horizontal_mode` | `fan_mode`, `preset_mode`, `swing_mode`, `swing_horizontal_mode` (the one of the service) |
 | `sensor` | – | – |
+| `binary_sensor` | – | – |
 
   `toggle` is used by schedules only; the app switches with `turn_on` and `turn_off`.
 
@@ -761,6 +803,7 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 
 - Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync. Migration 3 → 4 creates `notification`. Migration 4 → 5 creates `home`, `floor` and `room` (ids are random UUIDs, `sortOrder` leaves gaps of 1024) and the two triggers that reject a room whose floor belongs to another home; Room cannot declare triggers, so a new database gets them from a database callback. Migration 5 → 6 creates `room_entity` and `entity_alias`. Migration 6 → 7 creates `schedule`, which fills at the next schedule sync. Migration 7 → 8 adds the columns of 7.5, 19.10 and 19.11 with defaults (`disabled` 0, `repeatFreq` `weekly`, `repeatInterval` 1, `notify` 0, `blockedBy` and `nextRuns` `[]`, `expired` 0), the run log cursor `scheduleRunLogId?` and `scheduleRunSeq?` in `server`, and the empty table `entity_guard`; the next sync fills them.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
+- Binary sensors (8.6) need no schema change: `exposed_entity.domain`, `deviceClass` and `lastState` carry the new domain, the database stays at version 8.
 - Non-sensitive preferences (theme, unlock window, lock timeout) live in a typed DataStore (JSON via kotlinx.serialization). Whether an instance uses fingerprint unlock is not a separate flag: it follows from the key that protects its token file (5.3).
 
 The active instance is stored as `activeServerId` in DataStore. `home`, `exposed_entity`, `entity_alias` and `schedule` reference `server.id` with cascade delete, so removing an instance removes all of its data in one transaction.
@@ -915,7 +958,7 @@ Every error in this table is raised as a `HaacException` with an error code from
 | --- | --- |
 | MVP (v1.0) | Onboarding, login + fingerprint, homes/floors/rooms, switch/sensor/climate, per-user exposure, start sync, multiple HA instances with switching, internal/external address per instance |
 | v1.1 | HA area import wizard, per-room aliases, home-screen widgets and quick-settings tiles, schedules for switches (chapter 19) |
-| v1.2 | More domains (`light`, `cover`, `binary_sensor`, `lock`, `media_player`) |
+| v1.2 | More domains (`light`, `cover`, `lock`, `media_player`); `binary_sensor` was brought forward (8.6) |
 | v2.0 | Encrypted layout backup/export (the UI config flow for the bridge is already built, 10.2) |
 
 ### 14.4 Distribution
@@ -1170,6 +1213,19 @@ Designed in October 2026 in the Salbei style, light and dark (`docs/mockups/png/
 
 ![M-24 One-off date](mockups/png/M-24-editor-once-date.png) ![M-25 One-off detail](mockups/png/M-25-detail-once.png) ![M-26 Run notifications](mockups/png/M-26-run-notifications.png) ![M-27 Switch guard dialog](mockups/png/M-27-guard-confirm.png) ![M-28 Switch guard settings](mockups/png/M-28-guard-settings.png)
 
+#### M-29 to M-32 Binary sensors (8.6)
+
+Designed in October 2026 in the Salbei style, light and dark (`docs/mockups/png/M-29-*.png` to `M-32-*.png`; interactive source: `docs/mockups/haac-binaersensoren-mockups.html`). The texts are German sample data; UI strings follow 15.1.
+
+| Screen | Content |
+| --- | --- |
+| M-29 | Room with binary sensor tiles: active, neutral, not available, 2×1 with *since 2 h* (8.6) |
+| M-30 | *Add entities* with the tab *Binary sensors* (7.1, 8.6) |
+| M-31 | Detail of a binary sensor: state text, raw state, timeline with legend and the line of changes (8.1, 8.6) |
+| M-32 | Tile states: neutral, active, alarm, not available, unlocked lock, unknown class, withdrawn; timeline with alarm (8.6, 7.4) |
+
+![M-29 Room](mockups/png/M-29-room-binary-sensors.png) ![M-30 Add](mockups/png/M-30-add-binary-sensors.png) ![M-31 Detail](mockups/png/M-31-binary-sensor-detail.png) ![M-32 States](mockups/png/M-32-tile-states.png)
+
 ### 15.4 Screens not yet designed
 
 Until mockups exist, Claude Code builds these with the tokens from 15.2 and standard Material 3 patterns.
@@ -1181,7 +1237,7 @@ Until mockups exist, Claude Code builds these with the tokens from 15.2 and stan
 | Demo entry on M-01 (*Try the demo*) and the demo banner | 20.4 |
 | Fingerprint prompt, unlock and lock screen | 5.4, 5.5 |
 | Settings (instances, appearance, fingerprint toggle, unlock window, lock timeout, logout, diagnostics) | 4.4, 5.4, 5.5, 9.3, 15.2 |
-| Entity detail: switch, sensor, climate incl. history | 8 |
+| Entity detail: switch, sensor, binary sensor, climate incl. history | 8 |
 | New home and new room forms | 6 |
 | Offline and error states | 14.1 |
 
@@ -1353,7 +1409,7 @@ com.stacknoise.haac
     ├── onboarding           # server entry, login
     ├── instance             # instances, switching
     ├── layout               # homes, floors, rooms
-    ├── entities             # picker, room grid, controls (switch, sensor, climate), sync
+    ├── entities             # picker, room grid, controls (switch, sensor, binary sensor, climate), sync
     ├── notifications        # notification list incl. errors (M-09)
     ├── schedules            # schedule list, editor, detail, admin views (M-10 to M-18)
     └── settings             # settings, about, licenses
@@ -1371,8 +1427,8 @@ Whenever the kind of object depends on a type or on runtime data, it is created 
 
 | Factory | Creates | Why |
 | --- | --- | --- |
-| `EntityControlFactory` | Control model and UI spec per entity domain (switch, sensor, climate) | New domains (v1.2) are added in one place instead of `when (domain)` checks across the app |
-| `TileFactory` | Tile spec with default size per domain (7.2) | Tile rules in one place |
+| `EntityControlFactory` | Control model and UI spec per entity domain (switch, sensor, climate; binary sensors have none) | New domains (v1.2) are added in one place instead of `when (domain)` checks across the app |
+| `TileFactory` | Tile spec with default size per domain, and the state text, icon and level of a binary sensor from its `device_class` (7.2, 8.6) | Tile rules in one place |
 | `HistoryChartFactory` | History query (states or statistics) and chart kind per entity (8.1 – 8.4) | Chart rules per domain and `state_class` in one place |
 | `ServiceCallFactory` | Typed `haac_bridge/call_service` requests, checked against `supported_features` | Only valid service calls leave the app (8) |
 | `BridgeMessageFactory` | WebSocket commands with message IDs | Message format and ID sequence in one place (11) |
@@ -1523,7 +1579,7 @@ Factories are plain classes created once in `async_setup` and stored in `hass.da
 | Factory | Creates | Why |
 | --- | --- | --- |
 | `FilterFactory` | One `EntityFilter` per HA user from the YAML configuration | Filter rules in one place (10.2) |
-| `DescriptorFactory` | Entity descriptor per domain (switch, sensor, climate) from an HA state, without the hidden attributes (11.3) | Per-domain attribute selection; new domains in one place |
+| `DescriptorFactory` | Entity descriptor per domain (switch, sensor, binary sensor, climate) from an HA state, without the hidden attributes (11.3) | Per-domain attribute selection; new domains in one place |
 | `ServiceCallFactory` | Validated service call (domain, service, data, target) | Enforces exposure, the service list and its `service_data` keys (10.3, 11.4) |
 | `TriggerFactory` | One trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run of a schedule | Time and sun logic in one place (19.3) |
 | `RecurrenceFactory` | One date rule per `repeat.freq` (`once`, `daily`, `weekly`, `monthly`, `yearly`) with `matches(date)` and `next_date(after)` | Calendar rules in one place (19.10) |
@@ -1828,6 +1884,7 @@ The app talks to the bridge only through two small interfaces: `BridgeChannel` (
 
 | Kind | Content |
 | --- | --- |
+| Binary sensors | `binary_sensor.demo_front_door` (class `door`, closed), `binary_sensor.demo_hallway_motion` (`motion`, active), `binary_sensor.demo_smoke_detector` (`smoke`, clear); no services, history as on/off periods (8.6) |
 | Switches | `switch.demo_living_room_light` "Living room light", `switch.demo_kitchen_light` "Kitchen light", `switch.demo_bedroom_lamp` "Bedroom lamp", `switch.demo_socket` "Socket"; some on, some off |
 | Sensors | `sensor.demo_temperature` (device class `temperature`, `state_class` `measurement`, °C), `sensor.demo_energy` (device class `energy`, `state_class` `total_increasing`, kWh) |
 | Climate | `climate.demo_thermostat`: modes `off`, `heat`, `auto`; target 21 °C, current 20.5 °C, step 0.5, `hvac_action`; supported features: target temperature |
@@ -1840,6 +1897,7 @@ The app talks to the bridge only through two small interfaces: `BridgeChannel` (
 - **History is generated.** `history` and `statistics` return deterministic series computed from the entity ID and the requested window (a daily curve for temperature, a rising counter for energy, a few on/off periods for switches, heating and cooling phases for the thermostat). They are not stored.
 - **Schedules** follow the rules of chapter 19: validation, the limits (50 schedules, 20 entities, offset ±180 minutes), `revision`, `schedules_changed`, optimistic concurrency (`HAB-SCH-004`), `run_now` (switches the entities at once and sets `last_run`). `next_run` is computed from the weekdays and the time in the time zone of the phone; sunrise and sunset use the fixed demo times 06:30 and 19:30. **Schedules do not fire by themselves** in the demo (there is no server that waits for the time); only *Run now* switches.
 - **Extension (7.5, 19.10, 19.11).** The demo bridge reports the flags `entity_disable`, `schedule_repeat` and `schedule_runs` and implements `set_disabled`, `disabled_changed`, `repeat` with `next_runs` and `preview`, and `runs` (filled by *Run now*, since demo schedules do not fire by themselves). The switch guard (8.5) needs no bridge and works in the demo as anywhere else.
+- **Binary sensors (8.6).** The demo bridge lists `binary_sensor` in `domains` and delivers the three entities of the table with generated on/off periods as history and no statistics; they sit in the areas *Living room* (door, motion) and *Kitchen* (smoke detector) and, in a newly created demo, as 1×1 tiles in the same rooms. A saved `demo-world.json` of an existing demo instance has no version and lacks them: `DemoWorld` adds missing default entities by `entity_id` when it reads the file and keeps every saved state; the layout seeder runs only when the demo is created, so in an existing demo they appear in *Add entities* and as *new*, not in a room.
 - **Always connected.** The demo connection does not drop, so the app is never "stale" and editing is always available.
 - **Revisions** are stable: the same data gives the same revision, so a restart of the app produces no *new entity* notifications.
 
