@@ -113,6 +113,9 @@
     "ent_not_found": {
       "message": "This device no longer exists in Home Assistant"
     },
+    "ent_disabled": {
+      "message": "This device is deactivated in the app. Activate it to use it"
+    },
     "hist_unavailable": {
       "message": "History is not available on this server"
     },
@@ -139,6 +142,12 @@
     },
     "sch_busy": {
       "message": "This schedule ran a moment ago, try again shortly"
+    },
+    "sch_blocked": {
+      "message": "This schedule uses a deactivated device. Activate the device first"
+    },
+    "sch_in_past": {
+      "message": "Pick a date and time in the future"
     },
     "ws_invalid_request": {
       "message": "The request could not be understood"

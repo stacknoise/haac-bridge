@@ -1,6 +1,6 @@
 """Tests for schedule validation and (de)serialisation (concept 19.2)."""
 
-from datetime import UTC, datetime, time
+from datetime import UTC, date, datetime, time
 from typing import Any
 
 import pytest
@@ -9,9 +9,14 @@ from custom_components.haac_bridge.core.errors import ErrorCode, ScheduleError
 from custom_components.haac_bridge.schedules.model import (
     Action,
     LastRun,
+    OffReason,
     Paused,
     PauseReason,
+    Repeat,
+    RepeatFreq,
+    RunEntry,
     RunResult,
+    RunTrigger,
     WhenType,
     new_schedule,
     parse_entities,
@@ -191,3 +196,134 @@ def test_stored_form_matches_the_concept() -> None:
     assert data["paused"] is None
     assert data["last_run"] is None
     assert data["created_at"] == "2026-10-01T05:12:00+00:00"
+
+
+MONDAY = datetime(2026, 10, 19, 8, 0, tzinfo=UTC)
+
+
+def _fields(**extra: Any) -> dict[str, Any]:
+    return {**FIELDS, **extra}
+
+
+def test_extension_fields_default_for_old_schedules() -> None:
+    schedule = new_schedule("u", FIELDS, NOW)
+    assert schedule.repeat == Repeat(RepeatFreq.WEEKLY, 1)
+    assert schedule.notify is False
+    assert schedule.off_reason is None
+    legacy = schedule.to_dict()
+    for key in ("repeat", "notify", "off_reason"):
+        del legacy[key]
+    assert schedule_from_dict(legacy).repeat == Repeat()
+
+
+def test_extension_fields_round_trip() -> None:
+    fields = _fields(
+        notify=True,
+        repeat={
+            "freq": "weekly",
+            "interval": 2,
+            "start_date": "2026-10-19",
+            "end_date": "2026-12-31",
+        },
+    )
+    schedule = new_schedule("u", fields, MONDAY).with_changes(off_reason=OffReason.ENTITY_DISABLED)
+    stored = schedule.to_dict()
+    assert stored["repeat"] == fields["repeat"]
+    assert stored["off_reason"] == "entity_disabled"
+    assert schedule_from_dict(stored) == schedule
+
+
+def test_repeat_start_date_defaults_to_today() -> None:
+    schedule = new_schedule("u", _fields(repeat={"freq": "daily", "interval": 3}), MONDAY)
+    assert schedule.repeat.start_date == date(2026, 10, 19)
+
+
+def test_non_weekly_repeat_needs_no_weekdays_and_round_trips() -> None:
+    when = {"type": "time", "time": "07:00"}
+    fields = _fields(when=when, repeat={"freq": "monthly", "start_date": "2026-10-19"})
+    schedule = new_schedule("u", fields, MONDAY)
+    assert schedule.when.days == frozenset()
+    assert "days" not in schedule.when.to_dict()
+    assert schedule_from_dict(schedule.to_dict()) == schedule
+
+
+def test_weekly_repeat_needs_weekdays() -> None:
+    fields = _fields(when={"type": "time", "time": "07:00"}, repeat={"freq": "weekly"})
+    with pytest.raises(ScheduleError) as error:
+        new_schedule("u", fields, MONDAY)
+    assert error.value.code is ErrorCode.SCH_INVALID
+
+
+@pytest.mark.parametrize(
+    "repeat",
+    [
+        {"freq": "hourly"},
+        {"freq": "daily", "interval": 0},
+        {"freq": "daily", "interval": 366},
+        {"freq": "weekly", "interval": 53},
+        {"freq": "monthly", "interval": 13},
+        {"freq": "yearly", "interval": 2},
+        {"freq": "daily", "interval": True},
+        {"freq": "once"},
+        {"freq": "once", "start_date": "2026-10-26", "interval": 1},
+        {"freq": "once", "start_date": "2026-10-26", "end_date": "2026-10-27"},
+        {"freq": "once", "start_date": "26.10.2026"},
+        {"freq": "daily", "start_date": "2026-10-20", "end_date": "2026-10-19"},
+        {"freq": "daily", "start_date": "2026-10-19", "end_date": "2027-10-21"},
+        {"freq": "once", "start_date": "2027-10-21"},
+        {"freq": "daily", "other": 1},
+        "daily",
+    ],
+)
+def test_invalid_repeat_is_sch_001(repeat: Any) -> None:
+    with pytest.raises(ScheduleError) as error:
+        new_schedule("u", _fields(repeat=repeat), MONDAY)
+    assert error.value.code is ErrorCode.SCH_INVALID
+
+
+@pytest.mark.parametrize(
+    "repeat",
+    [
+        {"freq": "once", "start_date": "2026-10-18"},
+        {"freq": "once", "start_date": "2026-10-19"},
+        {"freq": "daily", "start_date": "2026-10-01", "end_date": "2026-10-18"},
+    ],
+)
+def test_past_dates_are_sch_009(repeat: dict[str, Any]) -> None:
+    # "now" is 08:00 UTC; 00:01 on the same day is past in the test time zone as well
+    when = {"type": "time", "time": "00:01", "days": [0]}
+    with pytest.raises(ScheduleError) as error:
+        new_schedule("u", _fields(when=when, repeat=repeat), MONDAY)
+    assert error.value.code is ErrorCode.SCH_IN_PAST
+
+
+def test_one_off_later_today_is_valid() -> None:
+    when = {"type": "time", "time": "23:30"}
+    repeat = {"freq": "once", "start_date": "2026-10-19"}
+    schedule = new_schedule("u", _fields(when=when, repeat=repeat), MONDAY)
+    assert schedule.repeat.freq is RepeatFreq.ONCE
+    assert "interval" not in schedule.repeat.to_dict()
+
+
+def test_one_off_in_366_days_and_end_date_after_a_year_are_valid() -> None:
+    far = {"freq": "once", "start_date": "2027-10-20"}
+    assert new_schedule("u", _fields(repeat=far), MONDAY).repeat.start_date == date(2027, 10, 20)
+    long = {"freq": "yearly", "start_date": "2026-10-19", "end_date": "2027-10-20"}
+    assert new_schedule("u", _fields(repeat=long), MONDAY).repeat.end_date == date(2027, 10, 20)
+
+
+def test_notify_must_be_boolean() -> None:
+    with pytest.raises(ScheduleError):
+        new_schedule("u", _fields(notify="yes"), NOW)
+
+
+def test_unknown_off_reason_is_rejected() -> None:
+    stored = new_schedule("u", FIELDS, NOW).to_dict()
+    stored["off_reason"] = "bored"
+    with pytest.raises(ScheduleError):
+        schedule_from_dict(stored)
+
+
+def test_run_entry_and_missed_result() -> None:
+    entry = RunEntry("s", "u", "Name", NOW, RunResult.MISSED, None, RunTrigger.PLAN, True, False)
+    assert entry.result.value == "missed"

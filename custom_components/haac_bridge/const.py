@@ -48,6 +48,20 @@ MAX_NAME_LENGTH: Final = 60
 MAX_OFFSET_MIN: Final = 180
 """Limits of a schedule (concept 19.2); the offset applies to sunrise and sunset in either direction."""
 
+MAX_INTERVAL: Final[dict[str, int]] = {
+    "daily": 365,
+    "weekly": 52,
+    "monthly": 12,
+    "yearly": 1,
+}
+"""Largest `repeat.interval` per frequency; the smallest is 1 (concept 19.10). `once` has no interval."""
+
+MAX_START_DATE_AHEAD: Final = timedelta(days=366)
+"""How far in the future the date of a one-off schedule may lie (concept 19.10)."""
+
+MAX_REPEAT_SPAN: Final = timedelta(days=366)
+"""Longest period from `start_date` to `end_date` of a repeating schedule (concept 19.10)."""
+
 RUN_NOW_COOLDOWN: Final = 10
 """Seconds after a manual run during which run_now of the same schedule is refused (HAB-SCH-007)."""
 
@@ -98,3 +112,24 @@ MAX_STATISTICS_PERIOD: Final = timedelta(days=5 * 366)
 
 TARGET_KEYS: Final = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
 """Keys that name a target; no entry of ALLOWED_SERVICES lists one, so the bridge alone sets the target (11.4)."""
+
+DISABLED_STORE_KEY: Final = f"{DOMAIN}.disabled_entities"
+"""Name of the storage file that holds the deactivated entities per user (concept 7.5)."""
+
+DISABLED_STORE_VERSION: Final = 1
+"""Version of the store of deactivated entities."""
+
+MAX_DISABLED_PER_USER: Final = 500
+"""Most entities one user can have deactivated (concept 7.5)."""
+
+RUN_LOG_STORE_KEY: Final = f"{DOMAIN}.schedule_runs"
+"""Name of the storage file that holds the run log of the schedules (concept 19.11)."""
+
+RUN_LOG_STORE_VERSION: Final = 1
+"""Version of the run log store."""
+
+RUN_LOG_RETENTION: Final = timedelta(days=30)
+"""How long a run log entry is kept (concept 19.11)."""
+
+MAX_RUN_LOG_PER_OWNER: Final = 200
+"""Most run log entries kept per owner; the oldest go first (concept 19.11)."""
