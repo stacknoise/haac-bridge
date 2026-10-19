@@ -17,7 +17,6 @@ from ..const import (
     MAX_INTERVAL,
     MAX_NAME_LENGTH,
     MAX_OFFSET_MIN,
-    MAX_REPEAT_SPAN,
     MAX_START_DATE_AHEAD,
     SCHEDULE_DOMAIN,
 )
@@ -365,8 +364,7 @@ def parse_repeat(raw: object, today: date | None = None) -> Repeat:
 def check_repeat(repeat: Repeat, when: When, now: datetime | None = None) -> None:
     """Raise if the dates of a new or changed rule are out of range (concept 19.10).
 
-    A date or time in the past is HAB-SCH-009; a one-off date more than 366 days ahead or an
-    `end_date` more than 366 days after `start_date` is HAB-SCH-001.
+    A date or time in the past is HAB-SCH-009; a one-off date more than 366 days ahead is HAB-SCH-001.
     """
     local = dt_util.as_local(now or dt_util.utcnow())
     today = local.date()
@@ -386,8 +384,6 @@ def check_repeat(repeat: Repeat, when: When, now: datetime | None = None) -> Non
     elif repeat.end_date is not None:
         if repeat.end_date < today:
             raise ScheduleError(ErrorCode.SCH_IN_PAST)
-        if repeat.start_date is not None and repeat.end_date - repeat.start_date > MAX_REPEAT_SPAN:
-            raise _invalid()
 
 
 def parse_off_reason(raw: object) -> OffReason | None:

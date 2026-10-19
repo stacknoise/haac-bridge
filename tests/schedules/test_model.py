@@ -269,7 +269,6 @@ def test_weekly_repeat_needs_weekdays() -> None:
         {"freq": "once", "start_date": "2026-10-26", "end_date": "2026-10-27"},
         {"freq": "once", "start_date": "26.10.2026"},
         {"freq": "daily", "start_date": "2026-10-20", "end_date": "2026-10-19"},
-        {"freq": "daily", "start_date": "2026-10-19", "end_date": "2027-10-21"},
         {"freq": "once", "start_date": "2027-10-21"},
         {"freq": "daily", "other": 1},
         "daily",
@@ -305,11 +304,11 @@ def test_one_off_later_today_is_valid() -> None:
     assert "interval" not in schedule.repeat.to_dict()
 
 
-def test_one_off_in_366_days_and_end_date_after_a_year_are_valid() -> None:
+def test_one_off_in_366_days_and_any_later_end_date_are_valid() -> None:
     far = {"freq": "once", "start_date": "2027-10-20"}
     assert new_schedule("u", _fields(repeat=far), MONDAY).repeat.start_date == date(2027, 10, 20)
-    long = {"freq": "yearly", "start_date": "2026-10-19", "end_date": "2027-10-20"}
-    assert new_schedule("u", _fields(repeat=long), MONDAY).repeat.end_date == date(2027, 10, 20)
+    long = {"freq": "yearly", "start_date": "2026-10-19", "end_date": "2031-10-20"}
+    assert new_schedule("u", _fields(repeat=long), MONDAY).repeat.end_date == date(2031, 10, 20)
 
 
 def test_notify_must_be_boolean() -> None:

@@ -59,9 +59,6 @@ MAX_INTERVAL: Final[dict[str, int]] = {
 MAX_START_DATE_AHEAD: Final = timedelta(days=366)
 """How far in the future the date of a one-off schedule may lie (concept 19.10)."""
 
-MAX_REPEAT_SPAN: Final = timedelta(days=366)
-"""Longest period from `start_date` to `end_date` of a repeating schedule (concept 19.10)."""
-
 RUN_NOW_COOLDOWN: Final = 10
 """Seconds after a manual run during which run_now of the same schedule is refused (HAB-SCH-007)."""
 
