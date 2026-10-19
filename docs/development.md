@@ -46,7 +46,8 @@ custom_components/haac_bridge/
   history/     filtered history and statistics, limits
   areas/       areas and floors catalog (import into the app)
   instance/    instance id and addresses for haac_bridge/info
-  schedules/   model, store, triggers, planner, runner, manager, entities (concept 19)
+  disabling/   per-user deactivated entities: store, manager (concept 19)
+  schedules/   model, store, triggers, recurrence, planner, runner, run_log, manager, entities (concept 19)
   api/         the haac_bridge/* WebSocket commands, one module per command group
 scripts/code_index.py             # generates docs/code-index.md and docs/error-codes.md
 tests/                            # same topic structure as the integration
