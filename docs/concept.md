@@ -28,7 +28,7 @@ Product name of the app: **HA Android Client**, short form **HAAC**. The compani
 | Structure | Home → Floor → Room, Home → Room (per instance) | Sharing layouts between devices/users |
 | Storage | Local on the device | Cloud backup of the layout |
 | Entity exposure | Per HA user via YAML | Config flow / UI in HA |
-| Time-controlled actions | Schedules for switches: fixed time with weekdays, sunrise/sunset with offset; run on the server (chapter 19) | Climate actions, one-off dates, conditions, push notifications |
+| Time-controlled actions | Schedules for switches: fixed time with weekdays, sunrise/sunset with offset, one-off and repeating dates; run on the server (chapter 19) | Climate actions, conditions, push notifications |
 | Demo mode | A built-in demo instance with sample data, no server needed (chapter 20) | A hosted demo server, a guided tour |
 
 ### 1.3 Assumptions
@@ -403,6 +403,29 @@ If an entity is deleted in HA or no longer shared with the user, it stays in eve
 - **No automatic removal**: room assignments and alias stay until the user removes them. The home view shows a counter "N unavailable entities" that opens a list for bulk removal. As built, the room grid shows this as the banner of M-08; *Review* lists the room's inactive tiles with *Remove all from this room* and *Remove all from every room*.
 - If the same `entity_id` is shared again later, it becomes active again in its rooms with its alias.
 
+### 7.5 Deactivating entities
+
+A user can deactivate an entity for themselves. It stays in every room it is assigned to and keeps showing its live state, but it cannot be switched, neither from the app nor by a schedule. The deactivation applies per HA user and instance, so it follows the user to every device; other users and HA itself are not affected (decided).
+
+**App** (M-19 to M-22, 15.3)
+
+- *Deactivate* and *Activate* are in the long-press menu of the tile and on the detail screen. Before deactivating, a dialog names the user's own schedules that will be switched off (M-20). Both need an open connection, because the state lives on the bridge.
+- The tile is muted (content at 55 % opacity), carries a lock badge and the label *Deactivated*; its switch is greyed out. A tap does not switch but opens a sheet with *Activate* (M-21). On the detail screen all controls are disabled; history and attributes stay readable.
+- The entity picker of the schedule editor (M-14) shows deactivated entities with a lock; they cannot be selected.
+- An entity that is both withdrawn (7.4) and deactivated is shown as in 7.4. If it is shared again later, it is still deactivated.
+- The state is cached in `exposed_entity.disabled` (12) and is never changed offline.
+
+**Bridge**
+
+- Store `haac_bridge.disabled_entities` (own file, store version 1): `{"users": {"<user id>": {"<entity_id>": "<ISO time>"}}}`, at most 500 entries per user, part of HA backups.
+- Deactivation is not an input of the exposure: deactivated entities stay exposed and appear in `entities/list` (with `disabled: true`) and in the subscription. The `Exposure` caches are not touched, so no new `async_invalidate_*` is needed.
+- `call_service` for an entity the caller deactivated is rejected with `HAB-ENT-002` before `ServiceCallFactory` builds the call.
+- Deactivating switches off every schedule **of that user** that contains the entity, also schedules with several entities (decided): `enabled = false`, `off_reason = "entity_disabled"`. While a schedule contains an entity its owner deactivated, it is *blocked* (`blocked_by`, computed): `schedules/update` with `enabled: true`, `run_now` and turning on its HA switch (19.5) fail with `HAB-SCH-008`; the app shows "Activate <name> first" and cancels (M-22).
+- Activating (`set_disabled` with `disabled: false`) switches the schedules with `off_reason = "entity_disabled"` on again automatically, as long as none of their other entities is still deactivated, and clears `off_reason` (decided). The reply lists them in `schedules_changed`; the app names them in the sheet before (M-21) and confirms with a snackbar afterwards ("2 schedules were switched on again"). A schedule the user switched off themselves (`off_reason = null`) is not touched.
+- The runner (19.3 step 2.2) skips deactivated entities as a safety net.
+- An admin sees the block on foreign schedules but cannot lift it; only the owner deactivates and activates their entities. `user_removed` and the sweeps (19.6) also remove the user's entries of this store.
+- Commands and the event `disabled_changed` are listed in 11.2; the feature flag is `entity_disable`.
+
 ## 8. Entity functionality per domain
 
 The app offers the same user-level functions as HA's own tile and "more info" dialogs: current state, all attributes, history and every service the entity supports that the bridge carries out (11.4). Administrative functions (renaming in the entity registry, changing device settings) stay in HA.
@@ -457,6 +480,19 @@ Sensors are read-only; the app renders them by `device_class` and `state_class`.
 - History shows current vs. target temperature and heating/cooling phases.
 - As built: the tile offers only the target with − / +. Power, HVAC mode, fan, preset and swing modes, the range slider and the humidity slider exist only on the detail screen, which opens with *Details* in the long-press menu of the tile (8.1); a tap on the climate tile does nothing.
 - As built: the detail screen shows the controls in the order of the table: power (turns off when on, on when off, as far as flags 128/256 allow), HVAC modes (segmented control up to four modes, chips for more), − / + target, a two-handle slider for the range, a humidity slider (defaults 30–99 %), and chips for fan, preset and swing modes. Mode names from HA are shown with their first letter capitalised and underscores as spaces (`fan_only` → *Fan only*).
+
+### 8.5 Switch guard
+
+For sensitive switches a user can turn on a switch guard: a tap on the tile does not switch at once but opens a dialog in which a second switch has to be flipped on purpose (M-27). Only then the command goes to the bridge.
+
+- **Dialog:** title "Turn on <name>?", one sentence with the current state and a large switch in the target direction. The command is sent when the user flips it; the dialog then closes. *Cancel*, the back gesture and a tap outside close it without a command. The switch reacts only 500 ms after the dialog opened and does not sit where the tile was, so a double tap cannot do both steps; after 15 s without input the dialog closes without a command.
+- **Direction:** the guard applies when turning on, when turning off or both (default both), set in the sheet *Switch guard* (M-28) from the long-press menu or the detail screen.
+- **Everywhere in the app:** tile, list arrange mode (M-07) and the controls of the detail screen. The optimistic state (8.1) starts only after the confirmation. Guarded tiles carry a small shield icon.
+- **Not for schedules:** a schedule is already a deliberate, stored intent and runs on the server; the editor only shows the shield as a reminder.
+- **Precedence:** deactivated (7.5) and withdrawn (7.4) entities cannot be switched, so no dialog appears.
+- **Only switches** (decided); climate is not guarded.
+- **Local only** (decided): like aliases and tile sizes the guard is a local aid, stored per device and instance in `entity_guard` (12) and never written to HA; setting it needs no connection. It is a hurdle against mistaken taps, not a permission: in HA, in other apps and by schedules the switch stays switchable. To keep a switch away from a user, the admin removes it from the exposure (10.2).
+- **Code:** `SwitchGuard` (direction, `requiresConfirmation(target)`) in `feature.entities.domain`; one function in the switching path checks it before `ServiceCallFactory`, so tile, list and detail share it. No new error codes: cancelling is not an error.
 
 ## 9. Synchronization on app start
 
@@ -606,6 +642,11 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/schedules/delete` | `schedule_id` | Empty result; an unknown `schedule_id` is not an error (19.4) |
 | `haac_bridge/schedules/run_now` | `schedule_id` | Empty result as soon as the run has started; its `last_run` follows with `schedules_changed`; does not change the plan; `HAB-SCH-007` while the schedule runs or within 10 s of the last manual run (19.4) |
 | `haac_bridge/subscribe_schedules` | – | Empty result, then `schedules_changed` events with the new `revision`; one per connection, a new one ends the previous (19.4) |
+| `haac_bridge/entities/set_disabled` | `entity_id`, `disabled` | `disabled` (the caller's full list) and `schedules_changed` (ids of the schedules switched off or on again); `HAB-ENT-001` if the entity is not exposed to the caller (7.5) |
+| `haac_bridge/schedules/preview` | `when`, `repeat` | `next_runs` (up to 3) without saving (19.10) |
+| `haac_bridge/schedules/runs` | optional `log_id`, `after_seq` | `log_id`, `last_seq` and the caller's own run log entries with `seq > after_seq` (19.11) |
+
+Additive changes of existing commands: `entities/list` has `disabled` per entity; `subscribe_entities` sends the event `disabled_changed` with the caller's full list to every connection of that user; `call_service` rejects deactivated entities with `HAB-ENT-002` (7.5). `schedules/create` and `update` accept `repeat` and `notify`; schedules in `list`, `create` and `update` also carry `repeat`, `notify`, `next_runs`, `blocked_by`, `off_reason` and `expired`; new errors `HAB-SCH-008` and `HAB-SCH-009`. `run_now` returns `HAB-SCH-008` for a blocked schedule and deletes a one-off schedule after its run. The hash of `schedules/revision` includes `notify` and the `last_seq` of the caller's runs (19.10, 19.11).
 
 ### 11.3 Message examples
 
@@ -681,7 +722,7 @@ Attributes that name other entities or carry an access link are never sent, neit
 ### 11.4 Versioning and robustness
 
 - `haac_bridge/info` returns an integer `api_version`. The app declares the range it supports and shows an "update the integration" hint on mismatch.
-- New optional fields in replies (such as `configured_name` or `features`) and new commands (the `schedules` group) are additive and keep the `api_version`; the app ignores fields it does not know and treats missing optional fields as `null`. The app uses an optional feature only if `features` lists it.
+- New optional fields in replies (such as `configured_name` or `features`) and new commands (the `schedules` group, `entities/set_disabled`, `schedules/preview`, `schedules/runs`) are additive and keep the `api_version`; the feature flags are `schedules`, `entity_disable`, `schedule_repeat` and `schedule_runs`; the app ignores fields it does not know and treats missing optional fields as `null`. The app uses an optional feature only if `features` lists it.
 - One WebSocket per app session; heartbeat via HA's `ping`/`pong` every 30 s; reconnect with exponential back-off (1 s → 60 s, with jitter). As built: a request without an answer fails with `HAAC-NET-001` after 15 s; a subscription queues at most 4096 events for its collector, and an overflow ends the connection with `HAAC-NET-002`, so the next connect syncs again; the session with its access token is kept per instance and address and dropped on address change, sign-out and app lock (5.5), so returning from the background within the token's lifetime sends no `/auth/token` request.
 - After reconnect: re-auth, revision check, re-subscribe – the same steps as the start sync.
 - Errors that a retry at the same address cannot fix (for example `HAAC-AUTH-003`, `HAAC-BRG-001`, `HAAC-BRG-002`, `HAAC-NET-007`, `HAAC-NET-008`) do not use the back-off; the app waits for a network change or *Try again*.
@@ -707,17 +748,18 @@ The Room database holds layout, assignments, aliases and a cache of exposed enti
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `server` | `id` (UUID), `instanceUuid?`, `internalUrl?`, `externalUrl?`, `internalPinnedKeyHash?`, `externalPinnedKeyHash?`, `alwaysUseInternal`, `haVersion`, `bridgeApiVersion`, `exposureRevision`, `lastSyncAt` | One row per HA instance and HA user, plus `displayName`, `accentColor`, `haUserName`, `lastActiveAt`; at least one address is set (4.5); no credentials |
+| `server` | `id` (UUID), `instanceUuid?`, `internalUrl?`, `externalUrl?`, `internalPinnedKeyHash?`, `externalPinnedKeyHash?`, `alwaysUseInternal`, `haVersion`, `bridgeApiVersion`, `exposureRevision`, `lastSyncAt` | One row per HA instance and HA user, plus `displayName`, `accentColor`, `haUserName`, `lastActiveAt`, `scheduleRunLogId?`, `scheduleRunSeq?` (19.11); at least one address is set (4.5); no credentials |
 | `home` | `id`, `serverId`, `name`, `icon?`, `sortOrder`, `deletedAt?` |  |
 | `floor` | `id`, `homeId` → home, `name`, `level`, `icon?`, `sortOrder`, `deletedAt?` | Cascade on home delete |
 | `room` | `id`, `homeId` → home, `floorId?` → floor, `name`, `icon?`, `sortOrder`, `deletedAt?` | Trigger: floor must belong to same home; `floorId` set null on floor delete |
-| `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `configuredName?`, `deviceClass?`, `unit?`, `stateClass?`, `displayPrecision?`, `area?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `lastState?` (JSON: state, attributes, last changed/updated; written in batches, 9.2) | Cache of bridge data; filled by the sync (9.1), states kept current by the subscription |
+| `exposed_entity` | `serverId` + `entityId` (PK), `domain`, `haName`, `configuredName?`, `deviceClass?`, `unit?`, `stateClass?`, `displayPrecision?`, `area?`, `supportedFeatures`, `status` (active/withdrawn), `withdrawnAt?`, `disabled`, `disabledAt?` (7.5), `lastState?` (JSON: state, attributes, last changed/updated; written in batches, 9.2) | Cache of bridge data; filled by the sync (9.1), states kept current by the subscription |
 | `room_entity` | `roomId` + `entityId` (PK), `sortOrder`, `tileSize` (`SMALL` 1×1, `WIDE` 2×1, `LARGE` 2×2; 7.2), `addedAt` | Assignment; cascade on room delete; the instance follows from the room's home |
 | `entity_alias` | `serverId` + `entityId` (PK), `alias` | Local display name; cascade on server delete |
-| notification | id, serverId? → server, type (added/removed/error/schedule_removed/schedule_paused), errorCode?, bridgeCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt?, detail? | Sync results and errors for M-09 (17.4); serverId is empty for errors without an instance; count = entities, schedules, or occurrences of the same error within 10 minutes (for the schedule types `entityIds` holds the schedule names and `detail` the pause reason); purged after 30 days |
-| `schedule` | `serverId` → server + `scheduleId` (PK), `owner`, `ownerName?`, `own`, `name`, `enabled`, `whenType`, `time?`, `days` (bitmask), `offsetMin?`, `action`, `entityIds` (JSON), `createdAt`, `updatedAt`, `pausedReason?`, `pausedAt?`, `lastRunAt?`, `lastRunResult?`, `lastRunCode?`, `nextRun?`, `syncedAt` | Read-only cache of the bridge's schedules (19.7); filled by the schedule sync, never edited offline; cascade on server delete |
+| `entity_guard` | `serverId` + `entityId` (PK), `onTurnOn`, `onTurnOff` | Switch guard (8.5); local only, never sent to HA; a row exists only while the guard is on; cascade on server delete |
+| notification | id, serverId? → server, type (added/removed/error/schedule_removed/schedule_paused/schedule_run), errorCode?, bridgeCode?, count, entityIds (JSON), createdAt, readAt?, resolvedAt?, detail? | Sync results and errors for M-09 (17.4); serverId is empty for errors without an instance; count = entities, schedules, or occurrences of the same error within 10 minutes (for the schedule types `entityIds` holds the schedule names and `detail` the pause reason); purged after 30 days |
+| `schedule` | `serverId` → server + `scheduleId` (PK), `owner`, `ownerName?`, `own`, `name`, `enabled`, `whenType`, `time?`, `days` (bitmask), `offsetMin?`, `action`, `entityIds` (JSON), `createdAt`, `updatedAt`, `pausedReason?`, `pausedAt?`, `lastRunAt?`, `lastRunResult?`, `lastRunCode?`, `nextRun?`, `syncedAt`, `repeatFreq`, `repeatInterval`, `startDate?`, `endDate?`, `notify`, `offReason?`, `blockedBy` (JSON), `expired`, `nextRuns` (JSON) | Read-only cache of the bridge's schedules (19.7); filled by the schedule sync, never edited offline; cascade on server delete |
 
-- Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync. Migration 3 → 4 creates `notification`. Migration 4 → 5 creates `home`, `floor` and `room` (ids are random UUIDs, `sortOrder` leaves gaps of 1024) and the two triggers that reject a room whose floor belongs to another home; Room cannot declare triggers, so a new database gets them from a database callback. Migration 5 → 6 creates `room_entity` and `entity_alias`. Migration 6 → 7 creates `schedule`, which fills at the next schedule sync.
+- Schema migrations are versioned and tested against the exported Room schemas on the JVM (SQLite via `sqlite-jdbc`, because `MigrationTestHelper` needs a device); destructive migration is never enabled. Migration 1 → 2 moves `baseUrl` and `pinnedKeyHash` into the internal slot for `http://` addresses and into the external slot for `https://` addresses; `instanceUuid` stays empty until the next connection (4.5). Migration 2 → 3 creates `exposed_entity`, which fills at the next sync. Migration 3 → 4 creates `notification`. Migration 4 → 5 creates `home`, `floor` and `room` (ids are random UUIDs, `sortOrder` leaves gaps of 1024) and the two triggers that reject a room whose floor belongs to another home; Room cannot declare triggers, so a new database gets them from a database callback. Migration 5 → 6 creates `room_entity` and `entity_alias`. Migration 6 → 7 creates `schedule`, which fills at the next schedule sync. Migration 7 → 8 adds the columns of 7.5, 19.10 and 19.11 with defaults (`disabled` 0, `repeatFreq` `weekly`, `repeatInterval` 1, `notify` 0, `blockedBy` and `nextRuns` `[]`, `expired` 0), the run log cursor `scheduleRunLogId?` and `scheduleRunSeq?` in `server`, and the empty table `entity_guard`; the next sync fills them.
 - The database file is excluded from backup (chapter 5.3). Encrypting it (SQLCipher) is not needed for v1 because it holds no secrets, but is an option if room names are considered sensitive.
 - Non-sensitive preferences (theme, unlock window, lock timeout) live in a typed DataStore (JSON via kotlinx.serialization). Whether an instance uses fingerprint unlock is not a separate flag: it follows from the key that protects its token file (5.3).
 
@@ -1107,6 +1149,27 @@ The schedule screens exist only as Salbei mockups (the private artifact "Zeitpl�
 | M-17 Detail of a foreign schedule (admin) | M-15 plus an *Owner* card and the hint "Entities can only be changed by the owner." |
 | M-18 Edit a foreign schedule (admin) | M-12 with a banner *Owned by {name}*; name, time, repeat and action can be changed, the entity card is locked and has no *Add entities* tile. |
 
+#### M-19 to M-28 Deactivating, repeating schedules, run notifications, switch guard (7.5, 8.5, 19.10, 19.11)
+
+Designed in October 2026 in the Salbei style, light and dark (`docs/mockups/png/M-19-*.png` to `M-28-*.png`; interactive source: the private artifact "HAAC Erweiterung Mockups"). The texts are German sample data; UI strings follow 15.1.
+
+| Screen | Content |
+| --- | --- |
+| M-19 | Room with a deactivated entity: muted tile, lock badge, greyed-out switch, live state (7.5) |
+| M-20 | Dialog *Deactivate?* naming the schedules that will be switched off (7.5) |
+| M-21 | Sheet of a deactivated entity with *Activate* and the schedules that will be switched on again (7.5) |
+| M-22 | Schedule list with a one-off, a repeating and a blocked schedule; hint when switching on a blocked one (7.5, 19.10) |
+| M-23 | Editor *Repeat*: frequency chips, interval stepper, weekdays only for weekly, start and end date, preview, *Show in notifications* (19.10, 19.11) |
+| M-24 | Editor *Once* with the date picker (19.10) |
+| M-25 | Detail of a one-off schedule with the hint that it is removed after it runs (19.10) |
+| M-26 | Notifications with run entries: done, partial with code, grouped, missed (19.11) |
+| M-27 | Switch guard: confirmation dialog with a second switch (8.5) |
+| M-28 | Switch guard settings sheet with the direction (8.5) |
+
+![M-19 Deactivated entity](mockups/png/M-19-entity-disabled.png) ![M-20 Deactivate](mockups/png/M-20-disable-confirm.png) ![M-21 Activate](mockups/png/M-21-disabled-sheet.png) ![M-22 Blocked schedule](mockups/png/M-22-schedules-blocked.png) ![M-23 Repeat editor](mockups/png/M-23-editor-repeat.png)
+
+![M-24 One-off date](mockups/png/M-24-editor-once-date.png) ![M-25 One-off detail](mockups/png/M-25-detail-once.png) ![M-26 Run notifications](mockups/png/M-26-run-notifications.png) ![M-27 Switch guard dialog](mockups/png/M-27-guard-confirm.png) ![M-28 Switch guard settings](mockups/png/M-28-guard-settings.png)
+
 ### 15.4 Screens not yet designed
 
 Until mockups exist, Claude Code builds these with the tokens from 15.2 and standard Material 3 patterns.
@@ -1463,6 +1526,7 @@ Factories are plain classes created once in `async_setup` and stored in `hass.da
 | `DescriptorFactory` | Entity descriptor per domain (switch, sensor, climate) from an HA state, without the hidden attributes (11.3) | Per-domain attribute selection; new domains in one place |
 | `ServiceCallFactory` | Validated service call (domain, service, data, target) | Enforces exposure, the service list and its `service_data` keys (10.3, 11.4) |
 | `TriggerFactory` | One trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run of a schedule | Time and sun logic in one place (19.3) |
+| `RecurrenceFactory` | One date rule per `repeat.freq` (`once`, `daily`, `weekly`, `monthly`, `yearly`) with `matches(date)` and `next_date(after)` | Calendar rules in one place (19.10) |
 | `ResponseFactory` | WebSocket result and error replies | One reply format incl. error code (11) |
 | `ErrorFactory` | `HaacBridgeError` from any caught exception | Error mapping in one place (18.3) |
 
@@ -1490,6 +1554,7 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 | HAB-SVC-002 | This action is not available for this device | HAAC-BRG-004 |
 | HAB-SVC-003 | Home Assistant could not carry out the action | HAAC-BRG-005 |
 | HAB-ENT-001 | This device no longer exists in Home Assistant | HAAC-ENT-001 |
+| HAB-ENT-002 | This device is deactivated in the app. Activate it to use it | HAAC-ENT-003 |
 | HAB-HIST-001 | History is not available on this server | HAAC-BRG-006 |
 | HAB-HIST-002 | The chosen period is too long | HAAC-BRG-006 |
 | HAB-SCH-001 | The schedule is not valid | HAAC-SCH-003 |
@@ -1499,6 +1564,8 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 | HAB-SCH-005 | You have reached the limit of schedules | HAAC-SCH-005 |
 | HAB-SCH-006 | You are not allowed to change this schedule | HAAC-SCH-006 |
 | HAB-SCH-007 | This schedule ran a moment ago, try again shortly | HAAC-BRG-005 |
+| HAB-SCH-008 | This schedule uses a deactivated device. Activate the device first | HAAC-SCH-008 |
+| HAB-SCH-009 | Pick a date and time in the future | HAAC-SCH-009 |
 | HAB-WS-001 | The request could not be understood | HAAC-BRG-005 |
 | HAB-INT-000 | Something went wrong in HAAC Bridge | HAAC-BRG-005 |
 
@@ -1527,7 +1594,8 @@ Every error of the bridge is a `HaacBridgeError` with a unique code. All codes a
 A user can define actions that HA executes at fixed times, for example "every weekday at 06:45 switch the light on".
 
 - **Scope:** domain `switch`; actions *Turn on*, *Turn off*, *Toggle*; triggers *fixed time with weekdays* and *sunrise/sunset with offset*.
-- **Out of scope:** climate actions (for example set a temperature), sensors, one-off dates, per-day exceptions (idea: *Skip next run*), conditions, push notifications.
+- **Out of scope:** climate actions (for example set a temperature), sensors, per-day exceptions (idea: *Skip next run*), conditions, push notifications.
+- **Extension (October 2026):** one-off schedules on a date, repeating schedules every N days, weeks or months or every year with an optional end date (19.10), run entries in the notification list (19.11), and the coupling to deactivated entities (7.5).
 - **Server-authoritative:** schedules are stored and executed by the bridge. The app is only an editor and a cache, so schedules run with the app closed, the phone off or on another network.
 - **Online-only editing:** creating, changing, enabling and deleting needs an open connection to the bridge. There are no local-only schedules, so a schedule that is missing on the server is always a deletion, never an unsynced draft.
 - **Owner:** every schedule belongs to exactly one HA user (the user of the WebSocket connection that created it). HA admins can see and manage all schedules (19.4).
@@ -1569,6 +1637,8 @@ Storage: `homeassistant.helpers.storage.Store`, key `haac_bridge.schedules` (its
 | `last_run` | `null` or `{ "at": <ISO time>, "result": "ok", "partial" or "failed", "code": <HAB code or null> }` |
 
 Limits: at most 50 schedules per user. `next_run` is never stored; it is computed from `when` and the HA time zone.
+
+Fields of the extension (all optional in the store, so the store version stays 1): `repeat` (19.10; missing means weekly with interval 1, `when.days` is then required as before), `notify` (19.11, default `false`) and `off_reason` (`null` or `entity_disabled`, 7.5; cleared whenever a user changes `enabled` and when the bridge switches the schedule on again). Computed and never stored: `next_runs`, `blocked_by`, `expired`.
 
 `toggle` sends `switch.toggle` (explicit user intent). This is the one place where the bridge deviates from the rule "switches use turn_on/turn_off" (8.2), because a schedule has no stale state to protect against.
 
@@ -1661,7 +1731,7 @@ HA sends the event `user_removed` with the payload `{"user_id": …}` after the 
 4. The app acts only on a successful answer for the matching `instance_id`; on connection errors, in the "stale" state or with a bridge without the feature the cache stays unchanged. The first sync of an instance produces no notifications.
 5. Notifications are created only for the user's own schedules (`own` in the list; a bridge without that field counts every schedule of an `own` scope as the user's). If the scope shrinks (`scope` changes from `all` to `own`, for example because the user lost the admin role), cached foreign schedules are dropped silently.
 
-**Errors.** Bridge errors of the schedule commands are mapped as in 18.3 (`HAB-SCH-001` → `HAAC-SCH-003`, `-003` → `HAAC-SCH-001`, `-004` → `HAAC-SCH-004`, `-005` → `HAAC-SCH-005`, `-006` → `HAAC-SCH-006`). A last run with the result `partial` or `failed` shows `HAAC-SCH-007` in the detail screen; it is not added to the notification list. On `HAAC-SCH-004` the editor offers to reload the schedule and keep the edits where possible.
+**Errors.** Bridge errors of the schedule commands are mapped as in 18.3 (`HAB-SCH-001` → `HAAC-SCH-003`, `-003` → `HAAC-SCH-001`, `-004` → `HAAC-SCH-004`, `-005` → `HAAC-SCH-005`, `-006` → `HAAC-SCH-006`, `-008` → `HAAC-SCH-008`, `-009` → `HAAC-SCH-009`; `HAB-ENT-002` → `HAAC-ENT-003`). A last run with the result `partial` or `failed` shows `HAAC-SCH-007` in the detail screen; it is not added to the notification list. On `HAAC-SCH-004` the editor offers to reload the schedule and keep the edits where possible.
 
 **Screens** (M-10 to M-18, 15.3). Editing a foreign schedule as an admin: name, time, weekdays, action and *Enabled* can be changed and deleting is allowed; the entity picker is disabled with the hint "Entities can only be changed by the owner". The bottom navigation gets a fourth tab *Schedules*, visible only if the bridge reports the feature. When the connection is "stale", cached schedules are shown dimmed and all editing is disabled.
 
@@ -1673,6 +1743,8 @@ Bridge (`pytest`): next-run computation including weekdays, DST gap (runs at the
 
 App: diff of `schedules/list` against the cache (new, changed, removed), grouped notification, no action on errors and on a wrong `instance_id`, cascade delete with the instance, scope shrink drops foreign schedules silently, notifications only for own schedules, tab hidden without the feature, editing disabled when stale, error mapping, migration 6 → 7.
 
+Extension (7.5, 8.5, 19.10, 19.11). Bridge: every frequency with its limits (31st in a 30-day month and in February, 29 February, ISO weeks across the year change, interval limits), end date (the last run deletes, an end date without a possible run is `HAB-SCH-009`), DST gap and overlap with `daily` and `monthly`, sun triggers with `once`; a one-off run deletes the schedule and its HA entities, `missed` deletes, an inactive one stays `expired`; `HAB-SCH-009` for the past; `set_disabled` switches off own schedules but not foreign ones, switching on via `update`, `run_now` and the HA switch fails with `HAB-SCH-008`, activating switches them on again; `call_service` with `HAB-ENT-002`; run log with cursor, `log_id` change, retention, only own entries for admins; `user_removed` clears both new stores. App: migration 7 → 8; tile, dialog and sheet of deactivated entities; the picker blocks them; hint for a blocked schedule; editor validation of *Once*, intervals and end date; `repeatSummary` for every form in both languages; run sync (first sync without entries, grouping, `notify = false`, `removed` suppresses `HAAC-SCH-001`, cursor in the same transaction); switch guard (dialog only in the guarded direction, no command on cancel, back or timeout, the 500 ms lock, same check in tile, list and detail, no dialog for deactivated entities, cascade with the instance); features hidden without their flag.
+
 ### 19.9 Decisions
 
 1. Schedules run on the server; the app only edits and caches; editing is online-only.
@@ -1682,6 +1754,47 @@ App: diff of `schedules/list` against the cache (new, changed, removed), grouped
 5. DST: a nonexistent wall time runs at the first existing minute after the gap, a repeated one runs once (19.3).
 6. Limits: 50 schedules per user, 20 entities per schedule, offset ±180 minutes.
 7. Candidates for a later version: climate actions and *Skip next run*.
+8. Deactivating an entity applies only to the user who did it; it switches off every own schedule that contains the entity, and activating it switches them on again automatically with a hint in the app (7.5, October 2026).
+9. One-off schedules are deleted after their run, also after `run_now`; repeating schedules support an optional end date and are deleted after their last run; monthly means the day of the month only (19.10).
+10. Run entries in the notification list are opt-in per schedule (`notify`, default off, also for existing schedules) (19.11).
+11. The switch guard is local per device, only for switches, and asks for a second switch in a dialog (8.5).
+
+### 19.10 One-off and repeating schedules
+
+A new optional field `repeat` describes on which dates a schedule runs; `when` keeps the type, time and offset, and `when.days` is used only for `weekly`.
+
+```json
+{"name": "Heater Monday", "enabled": true, "notify": true,
+ "when": {"type": "time", "time": "06:30"},
+ "repeat": {"freq": "once", "start_date": "2026-10-26"},
+ "action": "turn_on", "entities": ["switch.bathroom_heater"]}
+```
+
+| `freq` | `interval` | Other fields | Runs | Example |
+| --- | --- | --- | --- | --- |
+| `once` | – | `start_date` | exactly on `start_date` | next Monday |
+| `daily` | 1–365 | `start_date`, optional `end_date` | on every day with (days since `start_date`) mod N = 0 | every second day |
+| `weekly` | 1–52 | `start_date`, `when.days` (not empty), optional `end_date` | on the weekdays of weeks with (ISO weeks since the week of `start_date`) mod N = 0 | every second week on Mon and Thu |
+| `monthly` | 1–12 | `start_date`, optional `end_date` | on the day of month of `start_date` in months with (months since `start_date`) mod N = 0; a missing day (31 April) runs on the last day of the month | every month on the 15th |
+| `yearly` | 1 only | `start_date`, optional `end_date` | every year on the day and month of `start_date`; 29 February runs on 28 February in other years | every year on 1 May |
+
+- Dates are local dates `YYYY-MM-DD` in the HA time zone. Missing `repeat` means `{"freq": "weekly", "interval": 1}`, so existing schedules and older apps keep working.
+- `start_date` is required for `once` (today to today + 366 days, the run in the future) and optional otherwise; the bridge then sets today. A later `start_date` delays the first run; an earlier one only fixes the phase of the interval.
+- `end_date` (optional, not for `once`) is the last date a run may happen. It is on or after `start_date`, in the future and allows at least one run; otherwise `HAB-SCH-009`. A date or time in the past for `once` is also `HAB-SCH-009`; other field errors stay `HAB-SCH-001`. The longest period is one year.
+- Sun triggers combine with every frequency; the local date of the instant after the offset counts (19.3 step 4). DST handling stays as decided in 19.3.
+- **Bridge:** `RecurrenceFactory` (18.2) creates one date rule per `freq`. `TriggerFactory` stays per `when.type` and receives the rule; `next_wall_run` / `previous_wall_run` take the rule and jump from candidate date to candidate date with `next_date`, so a yearly schedule needs few steps. `list`, `create` and `update` return `next_runs` (the next three runs), so the app no longer computes following runs itself (19.7, *As built*). `schedules/preview` returns `next_runs` for a draft without saving; the editor calls it debounced (500 ms).
+- **Removal:** after the run of a one-off schedule, and after the last run of a schedule with `end_date`, the runner records the run in the run log with `removed: true` (19.11), deletes the schedule the same way as `delete` (callback, HA entities of 19.5, store) and sends `schedules_changed`, whatever the result. A run that is more than 5 minutes late (19.3 step 3) is recorded as `missed` and the schedule is deleted. A schedule that was disabled, blocked (7.5) or paused at that time does not run and is not deleted; it is `expired` (`next_run: null`) until the user picks a new date or deletes it; enabling it without a new date fails with `HAB-SCH-009`. `run_now` on a one-off schedule runs it and deletes it afterwards (decided).
+- **App:** the editor has a segment *Once* / *Repeat* above the weekdays (M-23, M-24). *Once* replaces the weekdays by a date card with the date picker. *Repeat* offers the chips *Daily*, *Weekly*, *Monthly*, *Yearly*, an interval stepper ("Every 2 weeks", none for yearly), the weekdays only for weekly, and the rows *From* and *Ends*. The text builder `repeatSummary` replaces and extends `Repeat` ("Every 2 weeks on Mon and Thu at 06:45", "Every month on the 15th at 07:00, until 31 Dec"); every form is its own string in `values/` and `values-de/`. Cards and detail show "Once · Mon, 26 Oct" and for one-off schedules the hint "Removed automatically after it runs" (M-22, M-25). The sync does not report a schedule removed after its run as "no longer exists" (`HAAC-SCH-001`); the run log tells it apart (19.11). Without the feature `schedule_repeat` the editor shows only weekdays.
+
+### 19.11 Run log and run notifications
+
+Every run of an own schedule can appear as an entry in the in-app notification list (M-09, M-26); the user turns this on per schedule with *Show in notifications* (`notify`, opt-in, default off). Push notifications stay out of scope.
+
+- **Why a log:** `last_run` alone loses runs while the app is offline, and a deleted one-off schedule has no `last_run` any more.
+- **Store** `haac_bridge.schedule_runs` (own file, delayed writes with `delay=True`): `log_id` (UUID, new for an empty store), `seq` (increasing integer) and the entries `seq`, `schedule_id`, `owner`, `name` (at the time of the run), `at`, `result` (`ok`, `partial`, `failed`, `missed`), `code` (HAB code or `null`), `trigger` (`plan` or `manual`), `removed` and `notify` (value at the time of the run). Every run is recorded, also with `notify = false`. Retention 30 days and at most 200 entries per owner; `user_removed` and removing the user from the configuration delete the user's entries.
+- `notify` may only be changed by the owner, because only the owner gets the entries (19.7 step 5); otherwise `HAB-SCH-006`.
+- **`schedules/runs`** returns the caller's own entries after a cursor, also for admins. A different `log_id` (new store) returns all own entries.
+- **App:** after `schedules/list` the sync calls `runs` with the stored cursor (`server.scheduleRunLogId`, `scheduleRunSeq`). The first sync of an instance and every change of `log_id` only set the cursor. Entries with `notify = true` become a notification of type `schedule_run`; several runs of one schedule in one sync are grouped with a count. The text names the schedule, result and time ("Morning light ran · 06:45"); `partial` and `failed` show `HAAC-SCH-007`; `missed` says that Home Assistant was not reachable at that time; `removed` adds "The one-off schedule was removed". *Open schedule* while it exists, otherwise only *Dismiss*. The cursor is written in the same transaction as the entries. `HAAC-SCH-007` is not reported a second time through `ErrorReporter`.
 
 ## 20. Demo mode
 
@@ -1726,6 +1839,7 @@ The app talks to the bridge only through two small interfaces: `BridgeChannel` (
 - **Services work.** `call_service` changes the state in `DemoWorld` and sends the changed state on the subscription, as HA does after the real service ran: `turn_on`, `turn_off`, `toggle`, `set_temperature` (within the limits of the climate entity), `set_hvac_mode`. A service the entity does not support returns `HAB-SVC-002` as the real bridge does. The confirmation of the optimistic display (8.1) therefore works.
 - **History is generated.** `history` and `statistics` return deterministic series computed from the entity ID and the requested window (a daily curve for temperature, a rising counter for energy, a few on/off periods for switches, heating and cooling phases for the thermostat). They are not stored.
 - **Schedules** follow the rules of chapter 19: validation, the limits (50 schedules, 20 entities, offset ±180 minutes), `revision`, `schedules_changed`, optimistic concurrency (`HAB-SCH-004`), `run_now` (switches the entities at once and sets `last_run`). `next_run` is computed from the weekdays and the time in the time zone of the phone; sunrise and sunset use the fixed demo times 06:30 and 19:30. **Schedules do not fire by themselves** in the demo (there is no server that waits for the time); only *Run now* switches.
+- **Extension (7.5, 19.10, 19.11).** The demo bridge reports the flags `entity_disable`, `schedule_repeat` and `schedule_runs` and implements `set_disabled`, `disabled_changed`, `repeat` with `next_runs` and `preview`, and `runs` (filled by *Run now*, since demo schedules do not fire by themselves). The switch guard (8.5) needs no bridge and works in the demo as anywhere else.
 - **Always connected.** The demo connection does not drop, so the app is never "stale" and editing is always available.
 - **Revisions** are stable: the same data gives the same revision, so a restart of the app produces no *new entity* notifications.
 
