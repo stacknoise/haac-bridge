@@ -31,6 +31,15 @@ class DisabledEntities(Protocol):
     def entities_of(self, user_id: str) -> dict[str, str]:
         """Return the user's deactivated entities with the ISO time of the deactivation."""
 
+    def user_ids(self) -> list[str]:
+        """Return the users who have at least one deactivated entity."""
+
+    async def async_set(self, user_id: str, entity_id: str, disabled: bool) -> bool:
+        """Deactivate or activate an entity for the user; return whether anything changed."""
+
+    async def async_forget_user(self, user_id: str) -> bool:
+        """Drop all entries of a user; return whether there were any."""
+
 
 class RunLog(Protocol):
     """The log of schedule runs (concept 19.11); the real log replaces the no-op one."""
@@ -49,6 +58,18 @@ class NoDisabledEntities:
     def entities_of(self, user_id: str) -> dict[str, str]:
         """Return no entities."""
         return {}
+
+    def user_ids(self) -> list[str]:
+        """Return no users."""
+        return []
+
+    async def async_set(self, user_id: str, entity_id: str, disabled: bool) -> bool:
+        """Change nothing."""
+        return False
+
+    async def async_forget_user(self, user_id: str) -> bool:
+        """Change nothing."""
+        return False
 
 
 class NoRunLog:

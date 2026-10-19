@@ -34,6 +34,8 @@ from .const import (
 from .core.command import async_register_commands
 from .core.errors import ConfigError, ErrorCode
 from .core.runtime import DATA_KEY, HaacBridgeData, get_data
+from .disabling.manager import async_sweep as async_sweep_disabled
+from .disabling.store import DisabledStore
 from .entities.descriptor_factory import DescriptorFactory
 from .exposure.exposure import Exposure
 from .exposure.filter_factory import FilterFactory
@@ -54,6 +56,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     integration = await async_get_integration(hass, DOMAIN)
     filters = FilterFactory()
     entries = parse_users(config)
+    disabled = DisabledStore(hass)
+    await disabled.async_load()
     data = HaacBridgeData(
         version=str(integration.version),
         filters=filters,
@@ -61,6 +65,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         services=ServiceCallFactory(hass),
         exposure=Exposure(entries, filters, own_entity_checker(hass)),
         schedules=ScheduleManager(hass),
+        disabled=disabled,
         yaml_entries=entries,
     )
     hass.data[DATA_KEY] = data
@@ -155,6 +160,7 @@ async def _async_user_removed(hass: HomeAssistant, user_id: str) -> None:
     A YAML entry of that user cannot be edited; applying the configuration again reports it as HAB-CFG-002.
     """
     await get_data(hass).schedules.async_remove_owner(user_id)
+    await get_data(hass).disabled.async_forget_user(user_id)
     entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
     records = users_of(entry.options) if entry else []
     if entry is None or not any(record[CONF_USER_ID] == user_id for record in records):
@@ -187,6 +193,7 @@ async def _async_apply(hass: HomeAssistant, *, sweep: bool = True) -> None:
     await async_check_users(hass, data.issue_ids, entries, data.yaml_entries)
     if sweep:
         await data.schedules.async_sweep()
+        await async_sweep_disabled(hass)
     async_dispatcher_send(hass, SIGNAL_EXPOSURE_CHANGED)
 
 

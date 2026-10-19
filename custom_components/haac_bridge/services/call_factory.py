@@ -12,6 +12,7 @@ import voluptuous as vol
 
 from ..const import ALLOWED_SERVICES, SERVICE_TIMEOUT
 from ..core.errors import EntityNotFoundError, ErrorCode, InvalidServiceError, RequestError
+from ..core.runtime import get_data
 from ..exposure.exposure import Exposure
 
 
@@ -41,14 +42,18 @@ class ServiceCallFactory:
         service: str,
         data: dict[str, Any],
     ) -> ValidatedServiceCall:
-        """Return the validated call or raise the matching HAB error (SVC-001, ENT-001, SVC-002, WS-001).
+        """Return the validated call or raise the matching HAB error (SVC-001, ENT-001, ENT-002, SVC-002, WS-001).
 
+        An entity the user deactivated (concept 7.5) is refused with ENT-002 before the call is built; a
+        schedule run goes through here too, so it never switches a deactivated entity.
         Only services in ALLOWED_SERVICES are carried out, and only with their listed data keys.
         """
         if not exposure.is_exposed(user, entity_id):
             raise InvalidServiceError(ErrorCode.SVC_NOT_ALLOWED)
         if self._hass.states.get(entity_id) is None:
             raise EntityNotFoundError(ErrorCode.ENT_NOT_FOUND)
+        if get_data(self._hass).disabled.is_disabled(user.id, entity_id):
+            raise EntityNotFoundError(ErrorCode.ENT_DISABLED)
         domain = split_entity_id(entity_id)[0]
         allowed_keys = ALLOWED_SERVICES.get(domain, {}).get(service)
         if allowed_keys is None or not self._hass.services.has_service(domain, service):
