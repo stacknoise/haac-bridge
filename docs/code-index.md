@@ -105,6 +105,16 @@ Lists every module, class and function of the integration with signature, file a
 | `_without_hidden_attributes` | `def _without_hidden_attributes(event: Event[EventStateChangedData]) -> Event[EventStateChangedData]` | `custom_components/haac_bridge/core/response_factory.py` | Return the event itself, or a copy whose states leave out hidden attributes. |
 | `_shareable_copy` | `def _shareable_copy(event: Event[EventStateChangedData]) -> Event[EventStateChangedData]` | `custom_components/haac_bridge/core/response_factory.py` | Return the copy of an event without hidden attributes; one copy per event for all subscribers. |
 | `haac_bridge.core.runtime` | `module` | `custom_components/haac_bridge/core/runtime.py` | Runtime data of HAAC Bridge stored in hass.data (concept 18.2). |
+| `DisabledEntities` | `class DisabledEntities(Protocol)` | `custom_components/haac_bridge/core/runtime.py` | The entities each user deactivated (concept 7.5); the real store replaces the no-op one. |
+| `DisabledEntities.is_disabled` | `def is_disabled(self, user_id: str, entity_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Return whether the user deactivated the entity. |
+| `DisabledEntities.entities_of` | `def entities_of(self, user_id: str) -> dict[str, str]` | `custom_components/haac_bridge/core/runtime.py` | Return the user's deactivated entities with the ISO time of the deactivation. |
+| `RunLog` | `class RunLog(Protocol)` | `custom_components/haac_bridge/core/runtime.py` | The log of schedule runs (concept 19.11); the real log replaces the no-op one. |
+| `RunLog.record` | `def record(self, entry: RunEntry) -> None` | `custom_components/haac_bridge/core/runtime.py` | Append the entry of a finished or missed run. |
+| `NoDisabledEntities` | `class NoDisabledEntities` | `custom_components/haac_bridge/core/runtime.py` | Stand-in until the store exists: nothing is deactivated. |
+| `NoDisabledEntities.is_disabled` | `def is_disabled(self, user_id: str, entity_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Return False for every entity. |
+| `NoDisabledEntities.entities_of` | `def entities_of(self, user_id: str) -> dict[str, str]` | `custom_components/haac_bridge/core/runtime.py` | Return no entities. |
+| `NoRunLog` | `class NoRunLog` | `custom_components/haac_bridge/core/runtime.py` | Stand-in until the log exists: entries are dropped. |
+| `NoRunLog.record` | `def record(self, entry: RunEntry) -> None` | `custom_components/haac_bridge/core/runtime.py` | Drop the entry. |
 | `HaacBridgeData` | `class HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Factories, current exposure and the user entries of YAML and UI; created in async_setup. |
 | `get_data` | `def get_data(hass: HomeAssistant) -> HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Return the runtime data of HAAC Bridge. |
 | `haac_bridge.core.subscriptions` | `module` | `custom_components/haac_bridge/core/subscriptions.py` | Keeps one subscription of each kind per WebSocket connection (review finding S7). |
@@ -354,8 +364,14 @@ Lists every module, class and function of the integration with signature, file a
 | `Action` | `class Action(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | What a schedule does with its entities. |
 | `PauseReason` | `class PauseReason(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | Why the system paused a schedule (concept 19.6). |
 | `RunResult` | `class RunResult(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | Outcome of the last run. |
+| `RepeatFreq` | `class RepeatFreq(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | On which dates a schedule runs (concept 19.10). |
+| `OffReason` | `class OffReason(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | Why the bridge switched a schedule off by itself (concept 7.5). |
+| `RunTrigger` | `class RunTrigger(StrEnum)` | `custom_components/haac_bridge/schedules/model.py` | What started a run: the plan or `run_now` (concept 19.11). |
 | `When` | `class When` | `custom_components/haac_bridge/schedules/model.py` | When a schedule runs: a wall-clock time or a sun event, on some weekdays. |
 | `When.to_dict` | `def to_dict(self) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/model.py` | Return the stored form; `time` only for fixed times, `offset_min` only for sun events. |
+| `Repeat` | `class Repeat` | `custom_components/haac_bridge/schedules/model.py` | The date rule of a schedule: frequency, interval and the first and last date (concept 19.10). |
+| `Repeat.to_dict` | `def to_dict(self) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/model.py` | Return the stored form; `interval` not for `once`, the dates only when set. |
+| `RunEntry` | `class RunEntry` | `custom_components/haac_bridge/schedules/model.py` | One run of a schedule as written to the run log (concept 19.11). |
 | `Paused` | `class Paused` | `custom_components/haac_bridge/schedules/model.py` | A pause set by the system, with its reason and the time it started. |
 | `LastRun` | `class LastRun` | `custom_components/haac_bridge/schedules/model.py` | The outcome of the last run: when, the result and the HAB code if it was not ok. |
 | `Schedule` | `class Schedule` | `custom_components/haac_bridge/schedules/model.py` | One schedule as stored by the bridge. |
@@ -367,11 +383,17 @@ Lists every module, class and function of the integration with signature, file a
 | `_number` | `def _number(raw: object, low: int, high: int) -> int` | `custom_components/haac_bridge/schedules/model.py` | Return a whole number within the range; a bool does not count. |
 | `parse_time` | `def parse_time(raw: object) -> time` | `custom_components/haac_bridge/schedules/model.py` | Return the time of a `HH:MM` text (24 h, no seconds). |
 | `parse_days` | `def parse_days(raw: object) -> frozenset[int]` | `custom_components/haac_bridge/schedules/model.py` | Return the non-empty set of weekdays (0 = Monday). |
-| `parse_when` | `def parse_when(raw: object) -> When` | `custom_components/haac_bridge/schedules/model.py` | Return the validated trigger: a time with weekdays, or a sun event with an offset. |
+| `parse_when` | `def parse_when(raw: object, *, days_required: bool=True) -> When` | `custom_components/haac_bridge/schedules/model.py` | Return the validated trigger: a time with weekdays, or a sun event with an offset. |
 | `parse_name` | `def parse_name(raw: object) -> str` | `custom_components/haac_bridge/schedules/model.py` | Return the trimmed name of 1 to 60 characters. |
 | `parse_action` | `def parse_action(raw: object) -> Action` | `custom_components/haac_bridge/schedules/model.py` | Return the validated action. |
 | `parse_entities` | `def parse_entities(raw: object) -> tuple[str, ...]` | `custom_components/haac_bridge/schedules/model.py` | Return 1 to 20 distinct switch entity ids in the given order. |
 | `parse_enabled` | `def parse_enabled(raw: object) -> bool` | `custom_components/haac_bridge/schedules/model.py` | Return the `enabled` flag; it must be a real boolean. |
+| `parse_notify` | `def parse_notify(raw: object) -> bool` | `custom_components/haac_bridge/schedules/model.py` | Return the `notify` flag; it must be a real boolean. |
+| `_parse_date` | `def _parse_date(raw: object) -> date` | `custom_components/haac_bridge/schedules/model.py` | Return the date of a `YYYY-MM-DD` text. |
+| `_parse_interval` | `def _parse_interval(freq: RepeatFreq, raw: object) -> int` | `custom_components/haac_bridge/schedules/model.py` | Return the interval of a repeating frequency within its limit; `once` has none. |
+| `parse_repeat` | `def parse_repeat(raw: object, today: date \| None=None) -> Repeat` | `custom_components/haac_bridge/schedules/model.py` | Return the validated date rule; the checks that depend on the current date are in `check_repeat`. |
+| `check_repeat` | `def check_repeat(repeat: Repeat, when: When, now: datetime \| None=None) -> None` | `custom_components/haac_bridge/schedules/model.py` | Raise if the dates of a new or changed rule are out of range (concept 19.10). |
+| `parse_off_reason` | `def parse_off_reason(raw: object) -> OffReason \| None` | `custom_components/haac_bridge/schedules/model.py` | Return the stored off reason, or None. |
 | `new_schedule` | `def new_schedule(owner: str, fields: Mapping[str, Any], now: datetime \| None=None) -> Schedule` | `custom_components/haac_bridge/schedules/model.py` | Return a new schedule with a fresh id after validating `name`, `when`, `action`, `entities`. |
 | `_parse_moment` | `def _parse_moment(raw: object) -> datetime` | `custom_components/haac_bridge/schedules/model.py` | Return the datetime of a stored ISO text. |
 | `_parse_paused` | `def _parse_paused(raw: object) -> Paused \| None` | `custom_components/haac_bridge/schedules/model.py` | Return the stored pause, or None. |

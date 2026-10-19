@@ -44,6 +44,9 @@ class ErrorCode(StrEnum):
     ENT_NOT_FOUND = "HAB-ENT-001"
     """The requested entity does not exist in the state machine."""
 
+    ENT_DISABLED = "HAB-ENT-002"
+    """The caller deactivated the entity in the app, so no service call is carried out for it."""
+
     HIST_UNAVAILABLE = "HAB-HIST-001"
     """Recorder or history is not loaded, or the query against it failed."""
 
@@ -70,6 +73,12 @@ class ErrorCode(StrEnum):
 
     SCH_BUSY = "HAB-SCH-007"
     """run_now while the schedule is running or within RUN_NOW_COOLDOWN of the last manual run."""
+
+    SCH_BLOCKED = "HAB-SCH-008"
+    """The schedule contains an entity its owner deactivated; it cannot be switched on or run."""
+
+    SCH_IN_PAST = "HAB-SCH-009"
+    """The date or time of a one-off schedule, or the end date of a repeating one, is in the past."""
 
     WS_INVALID_REQUEST = "HAB-WS-001"
     """The request fields of a haac_bridge/* command failed validation."""
@@ -98,6 +107,7 @@ APP_CODES: Final[dict[ErrorCode, str | None]] = {
     ErrorCode.SVC_NOT_AVAILABLE: "HAAC-BRG-004",
     ErrorCode.SVC_FAILED: "HAAC-BRG-005",
     ErrorCode.ENT_NOT_FOUND: "HAAC-ENT-001",
+    ErrorCode.ENT_DISABLED: "HAAC-ENT-003",
     ErrorCode.HIST_UNAVAILABLE: "HAAC-BRG-006",
     ErrorCode.HIST_TOO_LONG: "HAAC-BRG-006",
     ErrorCode.SCH_INVALID: "HAAC-SCH-003",
@@ -107,6 +117,8 @@ APP_CODES: Final[dict[ErrorCode, str | None]] = {
     ErrorCode.SCH_LIMIT: "HAAC-SCH-005",
     ErrorCode.SCH_NOT_ALLOWED: "HAAC-SCH-006",
     ErrorCode.SCH_BUSY: "HAAC-BRG-005",
+    ErrorCode.SCH_BLOCKED: "HAAC-SCH-008",
+    ErrorCode.SCH_IN_PAST: "HAAC-SCH-009",
     ErrorCode.WS_INVALID_REQUEST: "HAAC-BRG-005",
     ErrorCode.INT_UNEXPECTED: "HAAC-BRG-005",
 }

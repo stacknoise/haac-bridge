@@ -15,6 +15,7 @@ Every error of the integration carries one of these codes (format `HAB-<AREA>-<N
 | HAB-SVC-002 | This action is not available for this device | HAAC-BRG-004 | The requested service does not belong to the domain of the target entity. |
 | HAB-SVC-003 | Home Assistant could not carry out the action | HAAC-BRG-005 | Home Assistant raised an error while executing an allowed service call. |
 | HAB-ENT-001 | This device no longer exists in Home Assistant | HAAC-ENT-001 | The requested entity does not exist in the state machine. |
+| HAB-ENT-002 | This device is deactivated in the app. Activate it to use it | HAAC-ENT-003 | The caller deactivated the entity in the app, so no service call is carried out for it. |
 | HAB-HIST-001 | History is not available on this server | HAAC-BRG-006 | Recorder or history is not loaded, or the query against it failed. |
 | HAB-HIST-002 | The chosen period is too long | HAAC-BRG-006 | The requested history or statistics period is longer than the bridge allows. |
 | HAB-SCH-001 | The schedule is not valid | HAAC-SCH-003 | A schedule failed validation (name, time, days, action or entities). |
@@ -24,5 +25,7 @@ Every error of the integration carries one of these codes (format `HAB-<AREA>-<N
 | HAB-SCH-005 | You have reached the limit of schedules | HAAC-SCH-005 | The user already has the maximum number of schedules. |
 | HAB-SCH-006 | You are not allowed to change this schedule | HAAC-SCH-006 | A regular user touched a foreign schedule, or an admin tried to change a foreign entity list. |
 | HAB-SCH-007 | This schedule ran a moment ago, try again shortly | HAAC-BRG-005 | run_now while the schedule is running or within RUN_NOW_COOLDOWN of the last manual run. |
+| HAB-SCH-008 | This schedule uses a deactivated device. Activate the device first | HAAC-SCH-008 | The schedule contains an entity its owner deactivated; it cannot be switched on or run. |
+| HAB-SCH-009 | Pick a date and time in the future | HAAC-SCH-009 | The date or time of a one-off schedule, or the end date of a repeating one, is in the past. |
 | HAB-WS-001 | The request could not be understood | HAAC-BRG-005 | The request fields of a haac_bridge/* command failed validation. |
 | HAB-INT-000 | Something went wrong in HAAC Bridge | HAAC-BRG-005 | An exception without a HAB code reached the command wrapper. |
