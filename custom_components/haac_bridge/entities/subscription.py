@@ -1,7 +1,8 @@
 """Live state subscription of one app connection (concept 9.2, 11.2).
 
 Events use HA's compressed format (`a` added, `c` changed, `r` removed) and, whenever the
-exposed set changes, an `exposure_changed` event with the new revision.
+exposed set changes, an `exposure_changed` event with the new revision. When the user deactivates or
+activates an entity (concept 7.5), `disabled_changed` carries their full list.
 """
 
 from collections.abc import Callable
@@ -16,6 +17,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from ..const import SIGNAL_EXPOSURE_CHANGED
 from ..core.runtime import get_data
 from ..core.subscriptions import async_end_subscriptions_of
+from ..disabling.manager import SIGNAL_DISABLED_CHANGED, disabled_list
 from ..exposure.exposure import compute_revision
 from .attributes import compressed_state
 
@@ -23,6 +25,7 @@ ADDED = "a"
 CHANGED = "c"
 REMOVED = "r"
 EXPOSURE_CHANGED = "exposure_changed"
+DISABLED_CHANGED = "disabled_changed"
 
 
 class EntitySubscription:
@@ -60,6 +63,9 @@ class EntitySubscription:
             ),
             async_dispatcher_connect(
                 self._hass, SIGNAL_EXPOSURE_CHANGED, self._async_on_exposure_changed
+            ),
+            async_dispatcher_connect(
+                self._hass, SIGNAL_DISABLED_CHANGED, self._async_on_disabled_changed
             ),
         ]
         return {ADDED: self._compressed_states(self._entity_ids)}
@@ -107,6 +113,12 @@ class EntitySubscription:
             self._send({REMOVED: sorted(removed)})
         self._entity_ids = current
         self._send_exposure_changed()
+
+    @callback
+    def _async_on_disabled_changed(self, user_id: str) -> None:
+        """Send the caller's full list of deactivated entities after they changed it (concept 7.5)."""
+        if user_id == self._user.id:
+            self._send({DISABLED_CHANGED: {"disabled": disabled_list(self._hass, user_id)}})
 
     def _send_exposure_changed(self) -> None:
         """Tell the app to run its revision check (concept 9.2)."""

@@ -11,7 +11,7 @@ API_VERSION: Final = 1
 SUPPORTED_DOMAINS: Final = ("climate", "sensor", "switch")
 """Entity domains returned in v1, regardless of the user's filter (10.2)."""
 
-FEATURES: Final = ("schedules", "schedule_repeat", "schedule_runs")
+FEATURES: Final = ("schedules", "entity_disable", "schedule_repeat", "schedule_runs")
 """Optional features this bridge offers; `haac_bridge/info` reports them to the app (11.2, 11.4)."""
 
 CONF_USERS: Final = "users"
