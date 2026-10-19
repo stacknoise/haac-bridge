@@ -14,9 +14,9 @@ from homeassistant.util import dt as dt_util
 
 from ..const import MISSED_RUN_GRACE
 from ..core.errors import ErrorCode, HaacBridgeError
-from ..core.runtime import get_data
+from ..core.runtime import RunLog, get_data
 from ..services.call_factory import async_execute
-from .model import LastRun, Paused, PauseReason, RunResult, Schedule
+from .model import LastRun, Paused, PauseReason, RunEntry, RunResult, RunTrigger, Schedule
 from .store import ScheduleStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,11 +40,14 @@ class RunHooks:
 class ScheduleRunner:
     """Executes schedules one at a time per schedule."""
 
-    def __init__(self, hass: HomeAssistant, store: ScheduleStore, hooks: RunHooks) -> None:
-        """Keep what a run needs."""
+    def __init__(
+        self, hass: HomeAssistant, store: ScheduleStore, hooks: RunHooks, run_log: RunLog
+    ) -> None:
+        """Keep what a run needs; every run is reported to `run_log` (concept 19.11)."""
         self._hass = hass
         self._store = store
         self._hooks = hooks
+        self._run_log = run_log
         self._locks: dict[str, asyncio.Lock] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._deferred: dict[str, datetime] = {}
@@ -67,8 +70,8 @@ class ScheduleRunner:
     def async_run_deferred(self) -> None:
         """Start the runs that came due while the users were not loaded (review finding U2).
 
-        A run that waited longer than MISSED_RUN_GRACE is dropped and logged, like a run missed
-        while Home Assistant was down (concept 19.3).
+        A run that waited longer than MISSED_RUN_GRACE is dropped and written to the run log as
+        `missed`, like a run missed while Home Assistant was down (concept 19.3, 19.11).
         """
         now = dt_util.utcnow()
         deferred, self._deferred = self._deferred, {}
@@ -79,6 +82,7 @@ class ScheduleRunner:
                     schedule_id,
                     due.isoformat(),
                 )
+                self._log_missed(schedule_id, due)
                 continue
             self.async_run_in_background(schedule_id)
 
@@ -122,6 +126,7 @@ class ScheduleRunner:
         targets = [entity for entity in schedule.entities if exposure.is_exposed(user, entity)]
         if not targets:
             failed = LastRun(dt_util.utcnow(), RunResult.FAILED, ErrorCode.SCH_RUN_FAILED.value)
+            self._log_run(schedule, RunResult.FAILED, failed.code, triggered_by, failed.at)
             await self._async_pause(schedule.id, PauseReason.NO_ENTITIES, failed)
             return
         context_user_id = triggered_by or user.id
@@ -130,7 +135,7 @@ class ScheduleRunner:
                 "Schedule %s of user %s is run by user %s", schedule.id, user.id, context_user_id
             )
         done = await self._async_switch_all(user, schedule, targets, context_user_id)
-        await self._async_record(schedule.id, _result(done, len(schedule.entities)))
+        await self._async_record(schedule, _result(done, len(schedule.entities)), triggered_by)
 
     async def _async_switch_all(
         self, user: User, schedule: Schedule, targets: list[str], context_user_id: str
@@ -180,10 +185,46 @@ class ScheduleRunner:
         state = self._hass.states.get(entity_id)
         return state is not None and state.state == UNAVAILABLE
 
-    async def _async_record(self, schedule_id: str, result: RunResult) -> None:
-        """Store the outcome of a run on the schedule as it is now."""
+    async def _async_record(
+        self, schedule: Schedule, result: RunResult, triggered_by: str | None
+    ) -> None:
+        """Write the outcome of a run to the run log and store it on the schedule as it is now."""
         code = None if result is RunResult.OK else ErrorCode.SCH_RUN_FAILED.value
-        await self._async_update(schedule_id, last_run=LastRun(dt_util.utcnow(), result, code))
+        last_run = LastRun(dt_util.utcnow(), result, code)
+        self._log_run(schedule, result, code, triggered_by, last_run.at)
+        await self._async_update(schedule.id, last_run=last_run)
+
+    def _log_run(
+        self,
+        schedule: Schedule,
+        result: RunResult,
+        code: str | None,
+        triggered_by: str | None,
+        at: datetime,
+    ) -> None:
+        """Append a run to the run log with the name and `notify` the schedule has now (concept 19.11)."""
+        trigger = RunTrigger.PLAN if triggered_by is None else RunTrigger.MANUAL
+        self._run_log.record(
+            RunEntry(
+                schedule_id=schedule.id,
+                owner=schedule.owner,
+                name=schedule.name,
+                at=at,
+                result=result,
+                code=code,
+                trigger=trigger,
+                removed=False,
+                notify=schedule.notify,
+            )
+        )
+
+    def _log_missed(self, schedule_id: str, due: datetime) -> None:
+        """Write a run that was skipped as `missed` to the run log and announce it (concept 19.11)."""
+        schedule = self._store.get(schedule_id)
+        if schedule is None:
+            return
+        self._log_run(schedule, RunResult.MISSED, None, None, due)
+        self._hooks.changed(schedule_id)
 
     async def _async_pause(
         self, schedule_id: str, reason: PauseReason, last_run: LastRun | None = None
