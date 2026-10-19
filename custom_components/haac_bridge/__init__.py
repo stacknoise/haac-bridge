@@ -58,14 +58,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     entries = parse_users(config)
     disabled = DisabledStore(hass)
     await disabled.async_load()
+    schedules = ScheduleManager(hass)
     data = HaacBridgeData(
         version=str(integration.version),
         filters=filters,
         descriptors=DescriptorFactory(hass),
         services=ServiceCallFactory(hass),
         exposure=Exposure(entries, filters, own_entity_checker(hass)),
-        schedules=ScheduleManager(hass),
+        schedules=schedules,
         disabled=disabled,
+        run_log=schedules.run_log,
         yaml_entries=entries,
     )
     hass.data[DATA_KEY] = data
