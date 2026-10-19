@@ -62,6 +62,17 @@ async def test_entries_are_numbered_and_filtered_by_owner(hass: HomeAssistant) -
     assert log.owners() == {"anton", "lena"}
 
 
+async def test_a_missed_run_is_logged_once(hass: HomeAssistant) -> None:
+    log = await loaded(hass)
+    at = dt_util.utcnow() - timedelta(hours=1)
+    log.record(entry(at=at, result=RunResult.MISSED))
+    log.record(entry(at=at, result=RunResult.MISSED))
+    log.record(entry(at=at + timedelta(minutes=1), result=RunResult.MISSED))
+    log.record(entry(at=at, result=RunResult.OK))
+
+    assert log.last_seq == 3
+
+
 async def test_an_entry_carries_every_field(hass: HomeAssistant) -> None:
     log = await loaded(hass)
     at = datetime(2026, 10, 19, 6, 45, tzinfo=UTC)

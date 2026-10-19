@@ -16,7 +16,16 @@ from ..const import MISSED_RUN_GRACE
 from ..core.errors import ErrorCode, HaacBridgeError
 from ..core.runtime import RunLog, get_data
 from ..services.call_factory import async_execute
-from .model import LastRun, Paused, PauseReason, RunEntry, RunResult, RunTrigger, Schedule
+from .model import (
+    LastRun,
+    Paused,
+    PauseReason,
+    RepeatFreq,
+    RunEntry,
+    RunResult,
+    RunTrigger,
+    Schedule,
+)
 from .store import ScheduleStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,12 +38,16 @@ UNAVAILABLE = "unavailable"
 
 @dataclass(frozen=True, slots=True)
 class RunHooks:
-    """What the runner asks the manager to do: remove schedules, re-plan one, announce a change."""
+    """What the runner asks the manager to do: remove schedules, re-plan one, announce a change.
+
+    `ends` tells whether the planned run of a schedule is its last one (concept 19.10).
+    """
 
     remove: Callable[[list[str]], Awaitable[None]]
     replan: Callable[[str], Awaitable[None]]
     changed: Callable[[str], None]
     ready: Callable[[], bool]
+    ends: Callable[[str], bool]
 
 
 class ScheduleRunner:
@@ -126,7 +139,7 @@ class ScheduleRunner:
         targets = [entity for entity in schedule.entities if exposure.is_exposed(user, entity)]
         if not targets:
             failed = LastRun(dt_util.utcnow(), RunResult.FAILED, ErrorCode.SCH_RUN_FAILED.value)
-            self._log_run(schedule, RunResult.FAILED, failed.code, triggered_by, failed.at)
+            self._log_run(schedule, failed, triggered_by)
             await self._async_pause(schedule.id, PauseReason.NO_ENTITIES, failed)
             return
         context_user_id = triggered_by or user.id
@@ -134,8 +147,22 @@ class ScheduleRunner:
             _LOGGER.info(
                 "Schedule %s of user %s is run by user %s", schedule.id, user.id, context_user_id
             )
+        removes = self._removes_after_run(schedule, triggered_by)
         done = await self._async_switch_all(user, schedule, targets, context_user_id)
-        await self._async_record(schedule, _result(done, len(schedule.entities)), triggered_by)
+        await self._async_record(
+            schedule, _result(done, len(schedule.entities)), triggered_by, removed=removes
+        )
+        if removes:
+            await self._hooks.remove([schedule.id])
+
+    def _removes_after_run(self, schedule: Schedule, triggered_by: str | None) -> bool:
+        """Return whether this run removes the schedule: the last planned run, or any run of a one-off.
+
+        A manual run (`triggered_by`) removes only a one-off schedule (concept 19.10).
+        """
+        if triggered_by is None:
+            return self._hooks.ends(schedule.id)
+        return schedule.repeat.freq is RepeatFreq.ONCE
 
     async def _async_switch_all(
         self, user: User, schedule: Schedule, targets: list[str], context_user_id: str
@@ -186,21 +213,19 @@ class ScheduleRunner:
         return state is not None and state.state == UNAVAILABLE
 
     async def _async_record(
-        self, schedule: Schedule, result: RunResult, triggered_by: str | None
+        self, schedule: Schedule, result: RunResult, triggered_by: str | None, *, removed: bool
     ) -> None:
-        """Write the outcome of a run to the run log and store it on the schedule as it is now."""
+        """Write the outcome of a run to the run log and store it on the schedule as it is now.
+
+        `removed` says the schedule is deleted after this run (concept 19.10).
+        """
         code = None if result is RunResult.OK else ErrorCode.SCH_RUN_FAILED.value
         last_run = LastRun(dt_util.utcnow(), result, code)
-        self._log_run(schedule, result, code, triggered_by, last_run.at)
+        self._log_run(schedule, last_run, triggered_by, removed=removed)
         await self._async_update(schedule.id, last_run=last_run)
 
     def _log_run(
-        self,
-        schedule: Schedule,
-        result: RunResult,
-        code: str | None,
-        triggered_by: str | None,
-        at: datetime,
+        self, schedule: Schedule, run: LastRun, triggered_by: str | None, *, removed: bool = False
     ) -> None:
         """Append a run to the run log with the name and `notify` the schedule has now (concept 19.11)."""
         trigger = RunTrigger.PLAN if triggered_by is None else RunTrigger.MANUAL
@@ -209,21 +234,25 @@ class ScheduleRunner:
                 schedule_id=schedule.id,
                 owner=schedule.owner,
                 name=schedule.name,
-                at=at,
-                result=result,
-                code=code,
+                at=run.at,
+                result=run.result,
+                code=run.code,
                 trigger=trigger,
-                removed=False,
+                removed=removed,
                 notify=schedule.notify,
             )
         )
+
+    def log_missed(self, schedule: Schedule, due: datetime, *, removed: bool) -> None:
+        """Write a run HA missed to the run log; `removed` says the schedule is deleted after it."""
+        self._log_run(schedule, LastRun(due, RunResult.MISSED), None, removed=removed)
 
     def _log_missed(self, schedule_id: str, due: datetime) -> None:
         """Write a run that was skipped as `missed` to the run log and announce it (concept 19.11)."""
         schedule = self._store.get(schedule_id)
         if schedule is None:
             return
-        self._log_run(schedule, RunResult.MISSED, None, None, due)
+        self._log_run(schedule, LastRun(due, RunResult.MISSED), None)
         self._hooks.changed(schedule_id)
 
     async def _async_pause(

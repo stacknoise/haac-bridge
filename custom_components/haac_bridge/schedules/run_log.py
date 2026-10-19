@@ -117,7 +117,17 @@ class ScheduleRunLog:
         return self._seq
 
     def record(self, entry: RunEntry) -> None:
-        """Append the entry of a finished or missed run and write the log soon."""
+        """Append the entry of a finished or missed run and write the log soon.
+
+        A run that is missed twice (several starts before the next run) is logged once.
+        """
+        if entry.result is RunResult.MISSED and any(
+            run.entry.result is RunResult.MISSED
+            and run.entry.schedule_id == entry.schedule_id
+            and run.entry.at == entry.at
+            for run in self._runs
+        ):
+            return
         self._seq += 1
         self._runs.append(LoggedRun(self._seq, entry))
         self._prune(dt_util.utcnow())
