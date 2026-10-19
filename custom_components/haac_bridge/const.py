@@ -8,7 +8,7 @@ DOMAIN: Final = "haac_bridge"
 API_VERSION: Final = 1
 """Version of the haac_bridge/* WebSocket API; raised on every breaking change (11.4)."""
 
-SUPPORTED_DOMAINS: Final = ("climate", "sensor", "switch")
+SUPPORTED_DOMAINS: Final = ("binary_sensor", "climate", "sensor", "switch")
 """Entity domains returned in v1, regardless of the user's filter (10.2)."""
 
 FEATURES: Final = ("schedules", "entity_disable", "schedule_repeat", "schedule_runs")
@@ -92,6 +92,7 @@ ALLOWED_SERVICES: Final[dict[str, dict[str, frozenset[str]]]] = {
         "set_swing_horizontal_mode": frozenset({"swing_horizontal_mode"}),
     },
     "sensor": {},
+    "binary_sensor": {},
 }
 """Services the bridge carries out per domain, each with the service_data keys it accepts (11.4).
 

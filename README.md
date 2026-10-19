@@ -8,14 +8,14 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 > This project is not affiliated with or endorsed by Home Assistant, the Open Home Foundation or Nabu Casa.
 
 - Requires Home Assistant **2026.9.0** or newer.
-- Supported entity domains in v1: `switch`, `sensor`, `climate`.
+- Supported entity domains in v1: `switch`, `sensor`, `binary_sensor`, `climate`. Binary sensors are read-only, like sensors.
 - App: [stacknoise/haac-android](https://github.com/stacknoise/haac-android)
 
 ## Features
 
 **Sharing entities per user**
 - Choose, per Home Assistant user, which entities the app may show and control: whole domains, single entities and wildcards such as `sensor.*_humidity`, each to include or to exclude. An explicit exclusion always wins, as in the HomeKit Bridge (the filter is built with Home Assistant's own `entityfilter` helper).
-- **Deny by default:** a user who is not configured, or has no include rule, sees nothing. Only `switch`, `sensor` and `climate` are ever shared, whatever the filter says.
+- **Deny by default:** a user who is not configured, or has no include rule, sees nothing. Only `switch`, `sensor`, `binary_sensor` and `climate` are ever shared, whatever the filter says.
 - Configure it in the **Home Assistant UI** (config and options flow, changes apply at once) or in `configuration.yaml`, or both; YAML entries win for a user who is in both. Users are identified by login name or by the stable user ID.
 - Optional display names per entity, global or per user; the app shows them until the user renames the entity locally. A name never shares an entity by itself.
 - New entities that match a filter are shared automatically, and connected apps are told at once (`exposure_changed`), also after a configuration change.
@@ -109,7 +109,7 @@ Rules:
 - An explicit exclude beats an include, as in the HomeKit Bridge.
 - Wildcards must look like `domain.pattern` (for example `sensor.*_humidity`), in YAML, in the UI and in the import.
 - Each user may appear only once in `configuration.yaml`; if two entries refer to the same user (by `username` or `user_id`), the first is used and a *Repairs* issue (`HAB-CFG-003`) names the user. A user in YAML and in the UI is fine: the YAML entry wins.
-- Only `switch`, `sensor` and `climate` entities are ever shared, whatever the filter says.
+- Only `switch`, `sensor`, `binary_sensor` and `climate` entities are ever shared, whatever the filter says. Binary sensors (doors, windows, motion, presence) reveal whether someone is home, so prefer including single entities over the whole domain.
 - New entities that match a filter (for example via a glob) are shared automatically.
 - After editing the configuration, run the action **`haac_bridge.reload`** (admin only) or restart Home Assistant. Configuration problems appear under *Settings → Repairs*.
 

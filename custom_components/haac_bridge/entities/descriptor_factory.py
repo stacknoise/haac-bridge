@@ -40,6 +40,7 @@ def _sensor_fields(state: State, entry: er.RegistryEntry | None) -> dict[str, An
 _DOMAIN_FIELDS: dict[str, DomainFields] = {
     "switch": _no_fields,
     "sensor": _sensor_fields,
+    "binary_sensor": _no_fields,
     "climate": _no_fields,
 }
 

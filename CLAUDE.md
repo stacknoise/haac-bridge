@@ -58,7 +58,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 
 - Resolve the caller only from `connection.user`; never accept a user name or id from the client (10.3).
 - Deny by default: a HA user not configured (YAML or UI) sees no entities. YAML entries win over UI entries for the same user (10.2).
-- Only domains `switch`, `sensor`, `climate` are ever returned in v1, regardless of the filter.
+- Only domains `switch`, `sensor`, `binary_sensor`, `climate` are ever returned in v1, regardless of the filter.
 - `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service and its `service_data` keys are in `const.ALLOWED_SERVICES` (table in concept 11.4); the bridge sets the target itself and calls with `SERVICE_TIMEOUT`. A change of the list also changes that table.
 - History and statistics are filtered with the same exposure before querying the recorder, and stay within the limits of `const.py` (`TimeRange.check_length`, 10.3).
 - Entities of the platform `haac_bridge` are never exposed (`exposure/own_entities.py`).

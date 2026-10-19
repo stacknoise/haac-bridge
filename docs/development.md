@@ -113,7 +113,7 @@ Factories are plain classes created once in `async_setup` and stored in `HaacBri
 | Factory | File | Creates |
 | --- | --- | --- |
 | `FilterFactory` | `exposure/filter_factory.py` | one `EntityFilter` per HA user from the YAML or UI configuration |
-| `DescriptorFactory` | `entities/descriptor_factory.py` | entity descriptor per domain (switch, sensor, climate) from an HA state, without hidden attributes |
+| `DescriptorFactory` | `entities/descriptor_factory.py` | entity descriptor per domain (switch, sensor, binary_sensor, climate) from an HA state, without hidden attributes |
 | `ServiceCallFactory` | `services/call_factory.py` | validated service call (domain, service, data, target); enforces exposure and `ALLOWED_SERVICES` with its `service_data` keys |
 | `TriggerFactory` | `schedules/triggers.py` | one trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run on the dates of a rule |
 | `RecurrenceFactory` | `schedules/recurrence.py` | one date rule per `repeat.freq` (`once`, `daily`, `weekly`, `monthly`, `yearly`) with `matches`, `next_date` and `previous_date` |
@@ -202,7 +202,7 @@ Every error of the bridge is a `HaacBridgeError` (derived from Home Assistant's 
 
 - Resolve the caller only from `connection.user`; never accept a user name or id from the client.
 - Deny by default: a HA user who is not configured (YAML or UI) sees no entities. A YAML entry wins over a UI entry for the same user.
-- Only the domains `switch`, `sensor` and `climate` are ever returned in v1, whatever the filter says. Entities of the platform `haac_bridge` itself are never exposed.
+- Only the domains `switch`, `sensor`, `binary_sensor` and `climate` are ever returned in v1, whatever the filter says. Entities of the platform `haac_bridge` itself are never exposed.
 - `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service and its `service_data` keys are in `ALLOWED_SERVICES` (concept 11.4); the bridge sets the target itself.
 - History and statistics are filtered with the same exposure before the recorder is queried and stay within the limits of concept 10.3.
 - Attributes that name other entities or carry an access link are never sent to the app (concept 11.3).
