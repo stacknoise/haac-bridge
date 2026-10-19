@@ -28,10 +28,12 @@ from .model import (
     parse_enabled,
     parse_entities,
     parse_name,
+    parse_notify,
     parse_when,
 )
 from .planner import SchedulePlanner
 from .repairs import async_sync_unreadable_issue
+from .run_log import ScheduleRunLog
 from .runner import RunHooks, ScheduleRunner
 from .store import ScheduleStore
 from .triggers import TriggerFactory
@@ -67,12 +69,14 @@ class ScheduleManager:
         hooks = RunHooks(
             self.async_remove, self.planner.async_plan, self.notify, lambda: self.users_ready
         )
-        self.runner = ScheduleRunner(hass, self.store, hooks)
+        self.run_log = ScheduleRunLog(hass)
+        self.runner = ScheduleRunner(hass, self.store, hooks, self.run_log)
         self._manual_runs: dict[str, float] = {}
 
     async def async_load(self) -> None:
-        """Read the schedules from storage and report entries that could not be read."""
+        """Read the schedules and the run log from storage and report entries that could not be read."""
         await self.store.async_load()
+        await self.run_log.async_load()
         async_sync_unreadable_issue(self._hass, self.store.unreadable_count)
 
     async def async_start(self) -> None:
@@ -110,8 +114,12 @@ class ScheduleManager:
         return self.store.schedules if user.is_admin else self.store.by_owner(user.id)
 
     def revision_for(self, user: User) -> str:
-        """Return a hash over the visible schedules (id, version, pause, last run, next run) and the scope."""
+        """Return a hash over the visible schedules, the scope and the caller's newest run log entry.
+
+        Per schedule: id, version, `notify`, pause, last run and next run (concept 11.2, 19.11).
+        """
         digest = hashlib.sha256(self.scope_of(user).encode())
+        digest.update(f"runs\t{self.run_log.last_seq_of(user.id)}\n".encode())
         for schedule in sorted(self.visible_to(user), key=lambda item: item.id):
             paused = schedule.paused
             last_run = schedule.last_run
@@ -119,12 +127,26 @@ class ScheduleManager:
             parts = (
                 schedule.id,
                 schedule.updated_at.isoformat(),
+                str(schedule.notify),
                 f"{paused.reason.value}@{paused.at.isoformat()}" if paused else "",
                 last_run.at.isoformat() if last_run else "",
                 planned.isoformat() if planned else "",
             )
             digest.update(("\t".join(parts) + "\n").encode())
         return digest.hexdigest()
+
+    def runs_for(self, user: User, log_id: str | None, after_seq: int) -> dict[str, Any]:
+        """Return `log_id`, `last_seq` and the user's own entries after the cursor (concept 19.11).
+
+        Admins get only their own entries as well. A `log_id` other than the log's own means the
+        app holds a cursor of an older log, so every entry is returned.
+        """
+        after = after_seq if log_id == self.run_log.log_id else 0
+        return {
+            "log_id": self.run_log.log_id,
+            "last_seq": self.run_log.last_seq,
+            "runs": self.run_log.runs_of(user.id, after),
+        }
 
     async def async_describe(self, schedule: Schedule, user: User) -> dict[str, Any]:
         """Return the stored form plus the owner's name, the computed next run and whether `user` owns it."""
@@ -189,6 +211,7 @@ class ScheduleManager:
         """Delete every schedule and the storage file; called when the config entry is removed."""
         schedule_ids = [schedule.id for schedule in self.store.schedules]
         await self.store.async_remove_file()
+        await self.run_log.async_remove_file()
         async_sync_unreadable_issue(self._hass, 0)
         for schedule_id in schedule_ids:
             await self.planner.async_plan(schedule_id)
@@ -229,6 +252,14 @@ class ScheduleManager:
             return
         users = {user.id: user for user in await self._hass.auth.async_get_users()}
         exposure = get_data(self._hass).exposure
+        gone = {
+            owner
+            for owner in self.run_log.owners()
+            if (user := users.get(owner)) is None or not exposure.is_configured(user)
+        }
+        if owner_id is not None:
+            gone &= {owner_id}
+        self._remove_runs_of(gone)
         replace: list[Schedule] = []
         remove: list[str] = []
         for schedule in self.store.schedules:
@@ -250,8 +281,9 @@ class ScheduleManager:
         self.notify(*changed)
 
     async def async_remove_owner(self, owner_id: str) -> None:
-        """Delete every schedule of a user, as when the HA user was deleted (concept 19.6.1)."""
+        """Delete every schedule and run log entry of a user, as when the HA user was deleted (concept 19.6.1)."""
         await self.async_remove([item.id for item in self.store.by_owner(owner_id)])
+        self._remove_runs_of({owner_id})
 
     async def async_remove(self, schedule_ids: list[str]) -> None:
         """Remove schedules, stop their timers and tell subscribers."""
@@ -261,6 +293,11 @@ class ScheduleManager:
             await self.planner.async_plan(schedule.id)
         if removed:
             self.notify(*(schedule.id for schedule in removed))
+
+    def _remove_runs_of(self, owner_ids: set[str]) -> None:
+        """Delete the run log entries of users who are gone or no longer configured (concept 19.11)."""
+        if self.run_log.remove_owners(owner_ids):
+            self.notify()
 
     def _require(self, schedule_id: str) -> Schedule:
         """Return the schedule or raise HAB-SCH-003."""
@@ -292,6 +329,12 @@ class ScheduleManager:
             "action": parse_action,
         }
         changes = {name: parse(fields[name]) for name, parse in parsers.items() if name in fields}
+        if "notify" in fields:
+            notify = parse_notify(fields["notify"])
+            if notify != schedule.notify:
+                if user.id != schedule.owner:
+                    raise ScheduleError(ErrorCode.SCH_NOT_ALLOWED)
+                changes["notify"] = notify
         if "entities" in fields:
             entities = parse_entities(fields["entities"])
             if entities != schedule.entities:

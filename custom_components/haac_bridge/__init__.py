@@ -54,13 +54,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     integration = await async_get_integration(hass, DOMAIN)
     filters = FilterFactory()
     entries = parse_users(config)
+    schedules = ScheduleManager(hass)
     data = HaacBridgeData(
         version=str(integration.version),
         filters=filters,
         descriptors=DescriptorFactory(hass),
         services=ServiceCallFactory(hass),
         exposure=Exposure(entries, filters, own_entity_checker(hass)),
-        schedules=ScheduleManager(hass),
+        schedules=schedules,
+        run_log=schedules.run_log,
         yaml_entries=entries,
     )
     hass.data[DATA_KEY] = data
