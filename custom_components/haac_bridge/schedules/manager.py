@@ -19,6 +19,7 @@ from ..const import (
 )
 from ..core.errors import ErrorCode, RequestError, ScheduleError
 from ..core.runtime import get_data
+from ..disabling.schedules import blocked_by, require_unblocked
 from .model import (
     Paused,
     PauseReason,
@@ -156,6 +157,7 @@ class ScheduleManager:
             **schedule.to_dict(),
             "owner_name": owner.name if owner else None,
             "own": schedule.owner == user.id,
+            "blocked_by": blocked_by(get_data(self._hass).disabled, schedule),
             "next_run": planned.isoformat() if planned else None,
         }
 
@@ -173,6 +175,7 @@ class ScheduleManager:
             raise ScheduleError(ErrorCode.SCH_LIMIT)
         schedule = new_schedule(user.id, fields)
         self._check_exposed(user, schedule.entities)
+        self._require_unblocked_if_enabled(schedule)
         await self.store.async_add(schedule)
         await self.planner.async_plan(schedule.id)
         self.notify(schedule.id)
@@ -191,19 +194,27 @@ class ScheduleManager:
         updated = self._without_ended_pause(
             current.with_changes(updated_at=dt_util.utcnow(), **changes), owner
         )
+        if updated.enabled != current.enabled:
+            updated = updated.with_changes(off_reason=None)
+        self._require_unblocked_if_enabled(updated)
         await self.store.async_replace(updated)
         await self.planner.async_plan(updated.id)
         self.notify(updated.id)
         return updated
 
     async def async_set_enabled(self, schedule_id: str, *, enabled: bool) -> None:
-        """Enable or disable a schedule, as its `enabled` switch in HA does (concept 19.5)."""
+        """Enable or disable a schedule, as its `enabled` switch in HA does (concept 19.5).
+
+        Enabling a schedule that contains a deactivated entity is HAB-SCH-008 (concept 7.5).
+        """
         schedule = self._require(schedule_id)
         if schedule.enabled == enabled:
             return
-        await self.store.async_replace(
-            schedule.with_changes(enabled=enabled, updated_at=dt_util.utcnow())
+        updated = schedule.with_changes(
+            enabled=enabled, off_reason=None, updated_at=dt_util.utcnow()
         )
+        self._require_unblocked_if_enabled(updated)
+        await self.store.async_replace(updated)
         await self.planner.async_plan(schedule_id)
         self.notify(schedule_id)
 
@@ -231,7 +242,9 @@ class ScheduleManager:
         Returns at once; the result arrives with `schedules_changed` like any other run (concept 19.4).
         While the schedule runs, and for RUN_NOW_COOLDOWN seconds after a manual run, HAB-SCH-007.
         """
-        self._require_access(user, self._require(schedule_id))
+        schedule = self._require(schedule_id)
+        self._require_access(user, schedule)
+        require_unblocked(get_data(self._hass).disabled, schedule)
         now = self._hass.loop.time()
         last = self._manual_runs.get(schedule_id)
         if self.runner.is_running(schedule_id) or (
@@ -311,6 +324,11 @@ class ScheduleManager:
         """Allow the owner and admins; anybody else gets HAB-SCH-006."""
         if schedule.owner != user.id and not user.is_admin:
             raise ScheduleError(ErrorCode.SCH_NOT_ALLOWED)
+
+    def _require_unblocked_if_enabled(self, schedule: Schedule) -> None:
+        """Raise HAB-SCH-008 if the schedule would be enabled although its owner deactivated one of its entities."""
+        if schedule.enabled:
+            require_unblocked(get_data(self._hass).disabled, schedule)
 
     def _check_exposed(self, user: User, entities: tuple[str, ...]) -> None:
         """Require every entity to be exposed to the user; the bridge's own entities never are."""

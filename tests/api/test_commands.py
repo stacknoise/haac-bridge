@@ -55,7 +55,7 @@ async def test_info(hass: HomeAssistant, anton_client: Any) -> None:
         "bridge_version": "0.3.2",
         "api_version": 1,
         "domains": ["climate", "sensor", "switch"],
-        "features": ["schedules", "schedule_runs"],
+        "features": ["schedules", "entity_disable", "schedule_runs"],
         "ha_version": HA_VERSION,
         "instance_id": await instance_id.async_get(hass),
         "urls": {

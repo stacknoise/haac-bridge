@@ -108,11 +108,17 @@ Lists every module, class and function of the integration with signature, file a
 | `DisabledEntities` | `class DisabledEntities(Protocol)` | `custom_components/haac_bridge/core/runtime.py` | The entities each user deactivated (concept 7.5); the real store replaces the no-op one. |
 | `DisabledEntities.is_disabled` | `def is_disabled(self, user_id: str, entity_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Return whether the user deactivated the entity. |
 | `DisabledEntities.entities_of` | `def entities_of(self, user_id: str) -> dict[str, str]` | `custom_components/haac_bridge/core/runtime.py` | Return the user's deactivated entities with the ISO time of the deactivation. |
+| `DisabledEntities.user_ids` | `def user_ids(self) -> list[str]` | `custom_components/haac_bridge/core/runtime.py` | Return the users who have at least one deactivated entity. |
+| `DisabledEntities.async_set` | `async def async_set(self, user_id: str, entity_id: str, disabled: bool) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Deactivate or activate an entity for the user; return whether anything changed. |
+| `DisabledEntities.async_forget_user` | `async def async_forget_user(self, user_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Drop all entries of a user; return whether there were any. |
 | `RunLog` | `class RunLog(Protocol)` | `custom_components/haac_bridge/core/runtime.py` | The log of schedule runs (concept 19.11); the real log replaces the no-op one. |
 | `RunLog.record` | `def record(self, entry: RunEntry) -> None` | `custom_components/haac_bridge/core/runtime.py` | Append the entry of a finished or missed run. |
 | `NoDisabledEntities` | `class NoDisabledEntities` | `custom_components/haac_bridge/core/runtime.py` | Stand-in until the store exists: nothing is deactivated. |
 | `NoDisabledEntities.is_disabled` | `def is_disabled(self, user_id: str, entity_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Return False for every entity. |
 | `NoDisabledEntities.entities_of` | `def entities_of(self, user_id: str) -> dict[str, str]` | `custom_components/haac_bridge/core/runtime.py` | Return no entities. |
+| `NoDisabledEntities.user_ids` | `def user_ids(self) -> list[str]` | `custom_components/haac_bridge/core/runtime.py` | Return no users. |
+| `NoDisabledEntities.async_set` | `async def async_set(self, user_id: str, entity_id: str, disabled: bool) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Change nothing. |
+| `NoDisabledEntities.async_forget_user` | `async def async_forget_user(self, user_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Change nothing. |
 | `NoRunLog` | `class NoRunLog` | `custom_components/haac_bridge/core/runtime.py` | Stand-in until the log exists: entries are dropped. |
 | `NoRunLog.record` | `def record(self, entry: RunEntry) -> None` | `custom_components/haac_bridge/core/runtime.py` | Drop the entry. |
 | `HaacBridgeData` | `class HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Factories, current exposure and the user entries of YAML and UI; created in async_setup. |
@@ -213,6 +219,7 @@ Lists every module, class and function of the integration with signature, file a
 | `EntitySubscription._async_is_relevant` | `def _async_is_relevant(self, event_data: EventStateChangedData) -> bool` | `custom_components/haac_bridge/entities/subscription.py` | Return True for entities already sent to the app or exposed to its user. |
 | `EntitySubscription._async_on_state_changed` | `def _async_on_state_changed(self, event: Event[EventStateChangedData]) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Forward a change, or report an entity that appeared in or left the exposed set. |
 | `EntitySubscription._async_on_exposure_changed` | `def _async_on_exposure_changed(self) -> None` | `custom_components/haac_bridge/entities/subscription.py` | After a reload: send entities added to or removed from the set, then the new revision. |
+| `EntitySubscription._async_on_disabled_changed` | `def _async_on_disabled_changed(self, user_id: str) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Send the caller's full list of deactivated entities after they changed it (concept 7.5). |
 | `EntitySubscription._send_exposure_changed` | `def _send_exposure_changed(self) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Tell the app to run its revision check (concept 9.2). |
 | `EntitySubscription._send` | `def _send(self, payload: dict[str, Any]) -> None` | `custom_components/haac_bridge/entities/subscription.py` | Send one event of this subscription. |
 | `EntitySubscription._compressed_states` | `def _compressed_states(self, entity_ids: set[str]) -> dict[str, Any]` | `custom_components/haac_bridge/entities/subscription.py` | Return HA's compressed state for each entity that still has a state. |
@@ -226,7 +233,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ValidatedServiceCall` | `class ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | A service call that passed all checks; the target is always exactly one entity. |
 | `ServiceCallFactory` | `class ServiceCallFactory` | `custom_components/haac_bridge/services/call_factory.py` | Creates service calls only for exposed entities and services of the entity's own domain. |
 | `ServiceCallFactory.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/services/call_factory.py` | Keep hass for state and service lookups. |
-| `ServiceCallFactory.create` | `def create(self, exposure: Exposure, user: User, entity_id: str, service: str, data: dict[str, Any]) -> ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | Return the validated call or raise the matching HAB error (SVC-001, ENT-001, SVC-002, WS-001). |
+| `ServiceCallFactory.create` | `def create(self, exposure: Exposure, user: User, entity_id: str, service: str, data: dict[str, Any]) -> ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | Return the validated call or raise the matching HAB error (SVC-001, ENT-001, ENT-002, SVC-002, WS-001). |
 | `async_execute` | `async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall, *, context_user_id: str \| None=None) -> None` | `custom_components/haac_bridge/services/call_factory.py` | Run the call as the calling user, targeting only its entity; map HA errors to HAB codes. |
 
 ## history
@@ -253,8 +260,9 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.api.__init__` | `module` | `custom_components/haac_bridge/api/__init__.py` | The haac_bridge/* WebSocket commands, one module per command group (concept 11.2). |
 | `haac_bridge.api.areas` | `module` | `custom_components/haac_bridge/api/areas.py` | Command haac_bridge/areas (concept 6.3, 11.2). |
 | `ws_areas` | `async def ws_areas(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/areas.py` | Return the HA floors and areas that hold entities exposed to the caller. |
-| `haac_bridge.api.entities` | `module` | `custom_components/haac_bridge/api/entities.py` | Commands haac_bridge/entities/list and haac_bridge/subscribe_entities (concept 11.2, 11.3). |
-| `ws_entities_list` | `async def ws_entities_list(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/entities.py` | Return the revision and the descriptors of all entities exposed to the caller. |
+| `haac_bridge.api.entities` | `module` | `custom_components/haac_bridge/api/entities.py` | Commands haac_bridge/entities/list, entities/set_disabled and subscribe_entities (concept 7.5, 11.2, 11.3). |
+| `ws_entities_list` | `async def ws_entities_list(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/entities.py` | Return the revision and the descriptors of all entities exposed to the caller, with `disabled`. |
+| `ws_entities_set_disabled` | `async def ws_entities_set_disabled(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/entities.py` | Deactivate or activate an exposed entity for the caller; reply with their list and the schedules changed. |
 | `ws_subscribe_entities` | `async def ws_subscribe_entities(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> SubscriptionStarted` | `custom_components/haac_bridge/api/entities.py` | Subscribe to the live states of the caller's exposed entities. |
 | `haac_bridge.api.exposure` | `module` | `custom_components/haac_bridge/api/exposure.py` | Command haac_bridge/exposure/revision (concept 11.2). |
 | `ws_exposure_revision` | `async def ws_exposure_revision(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/api/exposure.py` | Return the revision hash and entity count of the caller's exposed set. |
@@ -286,6 +294,33 @@ Lists every module, class and function of the integration with signature, file a
 | `_area_of` | `def _area_of(entity: er.RegistryEntry, devices: dr.DeviceRegistry) -> str \| None` | `custom_components/haac_bridge/areas/catalog.py` | Return the area of an entity: its own, else the area of its device. |
 | `_entity_counts` | `def _entity_counts(hass: HomeAssistant, entity_ids: Iterable[str]) -> Counter[str]` | `custom_components/haac_bridge/areas/catalog.py` | Count the given entities per area ID; entities without an area are left out. |
 | `area_catalog` | `def area_catalog(hass: HomeAssistant, entity_ids: Iterable[str]) -> dict[str, Any]` | `custom_components/haac_bridge/areas/catalog.py` | Return the areas that hold at least one of the entities, and the floors those areas are on. |
+
+## disabling
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.disabling.__init__` | `module` | `custom_components/haac_bridge/disabling/__init__.py` | Deactivated entities per user and their effect on schedules (concept 7.5). |
+| `haac_bridge.disabling.manager` | `module` | `custom_components/haac_bridge/disabling/manager.py` | Deactivating and activating entities for a user, with the effect on their schedules (concept 7.5). |
+| `disabled_list` | `def disabled_list(hass: HomeAssistant, user_id: str) -> list[str]` | `custom_components/haac_bridge/disabling/manager.py` | Return the entity ids the user deactivated, sorted; the payload of `disabled` replies and events. |
+| `async_set_disabled` | `async def async_set_disabled(hass: HomeAssistant, user: User, entity_id: str, *, disabled: bool) -> dict[str, Any]` | `custom_components/haac_bridge/disabling/manager.py` | Deactivate or activate an entity for the caller; return their full list and the schedules switched. |
+| `_async_follow_in_schedules` | `async def _async_follow_in_schedules(hass: HomeAssistant, user_id: str, entity_id: str) -> list[str]` | `custom_components/haac_bridge/disabling/manager.py` | Store, re-plan and announce the changes to the user's schedules; return the ids switched. |
+| `async_sweep` | `async def async_sweep(hass: HomeAssistant) -> None` | `custom_components/haac_bridge/disabling/manager.py` | Drop the entries of users who are gone or no longer configured (concept 19.6.3). |
+| `haac_bridge.disabling.schedules` | `module` | `custom_components/haac_bridge/disabling/schedules.py` | How a deactivated entity affects the schedules of its user: blocking, switching off and on (concept 7.5). |
+| `blocked_by` | `def blocked_by(disabled: DisabledEntities, schedule: Schedule) -> list[str]` | `custom_components/haac_bridge/disabling/schedules.py` | Return the entities of the schedule that its owner deactivated, in the order of the schedule. |
+| `require_unblocked` | `def require_unblocked(disabled: DisabledEntities, schedule: Schedule) -> None` | `custom_components/haac_bridge/disabling/schedules.py` | Raise HAB-SCH-008 if the schedule contains an entity its owner deactivated. |
+| `changes_for` | `def changes_for(disabled: DisabledEntities, schedules: list[Schedule], entity_id: str, now: datetime) -> tuple[list[Schedule], list[str]]` | `custom_components/haac_bridge/disabling/schedules.py` | Return the schedules to store after `entity_id` was deactivated or activated, and the ids switched. |
+| `haac_bridge.disabling.store` | `module` | `custom_components/haac_bridge/disabling/store.py` | Persistent store of the entities each user deactivated, `.storage/haac_bridge.disabled_entities` (concept 7.5). |
+| `_readable` | `def _readable(raw: object) -> dict[str, dict[str, str]]` | `custom_components/haac_bridge/disabling/store.py` | Return the `users` part of stored data, leaving out everything that is not user -> entity -> time. |
+| `DisabledStore` | `class DisabledStore` | `custom_components/haac_bridge/disabling/store.py` | Holds the deactivated entities of all users in memory and writes them after every change. |
+| `DisabledStore.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/disabling/store.py` | Create an empty store; call `async_load` before use. |
+| `DisabledStore.async_load` | `async def async_load(self) -> None` | `custom_components/haac_bridge/disabling/store.py` | Read the deactivated entities from storage. |
+| `DisabledStore.is_disabled` | `def is_disabled(self, user_id: str, entity_id: str) -> bool` | `custom_components/haac_bridge/disabling/store.py` | Return whether the user deactivated the entity. |
+| `DisabledStore.entities_of` | `def entities_of(self, user_id: str) -> dict[str, str]` | `custom_components/haac_bridge/disabling/store.py` | Return the user's deactivated entities with the ISO time of the deactivation. |
+| `DisabledStore.user_ids` | `def user_ids(self) -> list[str]` | `custom_components/haac_bridge/disabling/store.py` | Return the users who have at least one deactivated entity. |
+| `DisabledStore.async_set` | `async def async_set(self, user_id: str, entity_id: str, disabled: bool) -> bool` | `custom_components/haac_bridge/disabling/store.py` | Deactivate or activate an entity for the user and save; return whether anything changed. |
+| `DisabledStore.async_forget_user` | `async def async_forget_user(self, user_id: str) -> bool` | `custom_components/haac_bridge/disabling/store.py` | Drop all entries of a user (deleted or no longer configured) and save; return whether there were any. |
+| `DisabledStore._forget_entity` | `def _forget_entity(self, user_id: str, entity_id: str) -> None` | `custom_components/haac_bridge/disabling/store.py` | Remove one entry; a user without entries is removed too. |
+| `DisabledStore._async_save` | `async def _async_save(self) -> None` | `custom_components/haac_bridge/disabling/store.py` | Write all entries to storage now. |
 
 ## instance
 
@@ -358,6 +393,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleManager._remove_runs_of` | `def _remove_runs_of(self, owner_ids: set[str]) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Delete the run log entries of users who are gone or no longer configured (concept 19.11). |
 | `ScheduleManager._require` | `def _require(self, schedule_id: str) -> Schedule` | `custom_components/haac_bridge/schedules/manager.py` | Return the schedule or raise HAB-SCH-003. |
 | `ScheduleManager._require_access` | `def _require_access(user: User, schedule: Schedule) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Allow the owner and admins; anybody else gets HAB-SCH-006. |
+| `ScheduleManager._require_unblocked_if_enabled` | `def _require_unblocked_if_enabled(self, schedule: Schedule) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Raise HAB-SCH-008 if the schedule would be enabled although its owner deactivated one of its entities. |
 | `ScheduleManager._check_exposed` | `def _check_exposed(self, user: User, entities: tuple[str, ...]) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Require every entity to be exposed to the user; the bridge's own entities never are. |
 | `ScheduleManager._parse_changes` | `def _parse_changes(self, user: User, schedule: Schedule, fields: dict[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/manager.py` | Return the validated changes of an update; only the owner may change the entities. |
 | `ScheduleManager._with_owner_state` | `def _with_owner_state(self, schedule: Schedule, owner: User) -> Schedule` | `custom_components/haac_bridge/schedules/manager.py` | Return the schedule paused if its owner is inactive, or resumed if its pause has ended. |
