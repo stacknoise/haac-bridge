@@ -605,6 +605,9 @@ haac_bridge:
   entity_config:                     # optional, for all users
     sensor.outdoor_temperature:
       name: Outside
+  logging:                           # optional, chapter 21
+    level: info                      # debug, info, warning (default) or error
+    activity: true                   # show actions in the HA Activity page (default true)
   users:
     - username: anton                # HA login name, or user_id: <uuid>
       filter:
@@ -632,6 +635,7 @@ haac_bridge:
 | `filter.include_domains` / `exclude_domains` | Whole domains |
 | `filter.include_entities` / `exclude_entities` | Single entity IDs |
 | `filter.include_entity_globs` / `exclude_entity_globs` | Wildcards such as `sensor.*_temperature` |
+| `logging.level` / `logging.activity` | Log level of the bridge and the switch for the Activity page (chapter 21); a value here wins over the option of the integration |
 | `entity_config.<entity_id>.name` | Default display name in the app (`configured_name`, 7.3), global or under `users[]`; the per-user entry wins. It never exposes an entity by itself |
 
 - Filters are built with HA's own `entityfilter` helper, so evaluation order is identical to the HomeKit Bridge (explicit exclude beats include).
@@ -641,6 +645,7 @@ haac_bridge:
 - A listed user whose filter has no `include_*` rule (empty filter or excludes only) also gets an empty list and a warning in the log. This deliberately deviates from the HomeKit Bridge, where such a filter would expose everything not excluded.
 - **As built (UI configuration).** The integration also has a config flow with a single entry (*Settings → Devices & services → Add integration → HAAC Bridge*) whose options flow manages the users: *Add a user* / *Change a user* / *Remove a user*. A user is chosen from the active, non-system HA users and stored by `user_id` in the entry options; the filter form offers the same six rules as YAML (`include_*` and `exclude_*` for domains, entities and globs, with the v1 domains only), requires at least one `include_*` rule and a wildcard of the form `domain.pattern`, and a second step names the explicitly included entities (per user, like `entity_config` under `users[]`). Saving applies at once and emits `exposure_changed`, without a reload. UI entries are appended after the YAML entries, and the first entry that matches a user wins, so a user in both places gets the YAML entry; unknown users are reported as HAB-CFG-002 like YAML ones. The global `entity_config` and users identified by `username` remain YAML-only. *Export as YAML* shows the UI users as a `haac_bridge:` section (`user_id`, `filter`, and `entity_config` for the names), and *Import from YAML* takes such a section or just its content: each user is named by `user_id`, must exist in HA and needs at least one `include_*` rule, and replaces the UI entry of the same user while other UI users stay; errors are shown in the form (`invalid_yaml`, `invalid_config`, `no_users`, `needs_user_id`, `no_include`, `unknown_user`). A bare `haac_bridge:` line in the YAML (read as None) counts as no users instead of an invalid configuration.
 - Changing the YAML takes effect after the service `haac_bridge.reload` (or a HA restart); reload recomputes all revisions and emits `exposure_changed` to connected apps. The revision also covers the configured names, so a changed name makes the app reload the entity list.
+- **Logging (chapter 21).** The optional `logging:` block sets the log level (`debug`, `info`, `warning` default, `error`) and whether switching actions appear in the HA Activity page. The same two values are in the options of the integration (*Logging*); the YAML wins.
 
 ### 10.3 Runtime behaviour
 
@@ -672,7 +677,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/exposure/revision` | – | `revision` (hash over the exposed entity IDs and their configured names), entity count |
 | `haac_bridge/entities/list` | – | `revision`, list of entity descriptors incl. current state |
 | `haac_bridge/subscribe_entities` | – | Empty result, then events: `a` initial and added states, `c` changes, `r` removals (HA's compressed state format) and `exposure_changed` (11.3); one per connection, a new one ends the previous |
-| `haac_bridge/call_service` | `entity_id`, `service`, `service_data` (without target keys) | Empty result, or an error reply with a HAB code (18.3) |
+| `haac_bridge/call_service` | `entity_id`, `service`, `service_data` (without target keys), optional `client` (device name, 21.5) | Empty result, or an error reply with a HAB code (18.3) |
 | `haac_bridge/history` | `entity_ids[]`, `start`, `end`, `minimal_response` | State history per entity |
 | `haac_bridge/statistics` | `entity_ids[]`, `start`, `end`, `period` (hour/day/week/month), `types` | Long-term statistics (mean/min/max/sum) |
 | `haac_bridge/areas` | – | `floors` (`floor_id`, `name`, `level`, `null` if HA has none) and `areas` (`area_id`, `name`, `floor_id` or `null`, `entity_count`), limited to areas that hold at least one entity exposed to the caller and to the floors of those areas; no entity IDs (6.3) |
@@ -681,7 +686,7 @@ All entity traffic runs over HA's standard WebSocket endpoint `wss://<server>/ap
 | `haac_bridge/schedules/create` | `name`, `when`, `action`, `entities[]`, `enabled` | The created schedule; always owned by the caller (19.4) |
 | `haac_bridge/schedules/update` | `schedule_id`, `updated_at` of the edited version and the changed fields | The updated schedule; `HAB-SCH-004` if it changed in the meantime (19.4) |
 | `haac_bridge/schedules/delete` | `schedule_id` | Empty result; an unknown `schedule_id` is not an error (19.4) |
-| `haac_bridge/schedules/run_now` | `schedule_id` | Empty result as soon as the run has started; its `last_run` follows with `schedules_changed`; does not change the plan; `HAB-SCH-007` while the schedule runs or within 10 s of the last manual run (19.4) |
+| `haac_bridge/schedules/run_now` | `schedule_id`, optional `client` (21.5) | Empty result as soon as the run has started; its `last_run` follows with `schedules_changed`; does not change the plan; `HAB-SCH-007` while the schedule runs or within 10 s of the last manual run (19.4) |
 | `haac_bridge/subscribe_schedules` | – | Empty result, then `schedules_changed` events with the new `revision`; one per connection, a new one ends the previous (19.4) |
 | `haac_bridge/entities/set_disabled` | `entity_id`, `disabled` | `disabled` (the caller's full list) and `schedules_changed` (ids of the schedules switched off or on again); `HAB-ENT-001` if the entity is not exposed to the caller (7.5) |
 | `haac_bridge/schedules/preview` | `when`, `repeat` | `next_runs` (up to 3) without saving (19.10) |
@@ -763,7 +768,7 @@ Attributes that name other entities or carry an access link are never sent, neit
 ### 11.4 Versioning and robustness
 
 - `haac_bridge/info` returns an integer `api_version`. The app declares the range it supports and shows an "update the integration" hint on mismatch.
-- New optional fields in replies (such as `configured_name` or `features`) and new commands (the `schedules` group, `entities/set_disabled`, `schedules/preview`, `schedules/runs`) are additive and keep the `api_version`; the feature flags are `schedules`, `entity_disable`, `schedule_repeat` and `schedule_runs`; the app ignores fields it does not know and treats missing optional fields as `null`. The app uses an optional feature only if `features` lists it.
+- New optional fields in replies (such as `configured_name` or `features`) and new commands (the `schedules` group, `entities/set_disabled`, `schedules/preview`, `schedules/runs`) are additive and keep the `api_version`; the feature flags are `schedules`, `entity_disable`, `schedule_repeat`, `schedule_runs` and `client_info`; the app ignores fields it does not know and treats missing optional fields as `null`. The app uses an optional feature only if `features` lists it.
 - One WebSocket per app session; heartbeat via HA's `ping`/`pong` every 30 s; reconnect with exponential back-off (1 s → 60 s, with jitter). As built: a request without an answer fails with `HAAC-NET-001` after 15 s; a subscription queues at most 4096 events for its collector, and an overflow ends the connection with `HAAC-NET-002`, so the next connect syncs again; the session with its access token is kept per instance and address and dropped on address change, sign-out and app lock (5.5), so returning from the background within the token's lifetime sends no `/auth/token` request.
 - After reconnect: re-auth, revision check, re-subscribe – the same steps as the start sync.
 - Errors that a retry at the same address cannot fix (for example `HAAC-AUTH-003`, `HAAC-BRG-001`, `HAAC-BRG-002`, `HAAC-NET-007`, `HAAC-NET-008`) do not use the back-off; the app waits for a network change or *Try again*.
@@ -1236,7 +1241,7 @@ Until mockups exist, Claude Code builds these with the tokens from 15.2 and stan
 | Addresses of an instance and the *Add as address* dialog | 4.5 |
 | Demo entry on M-01 (*Try the demo*) and the demo banner | 20.4 |
 | Fingerprint prompt, unlock and lock screen | 5.4, 5.5 |
-| Settings (instances, appearance, fingerprint toggle, unlock window, lock timeout, logout, diagnostics) | 4.4, 5.4, 5.5, 9.3, 15.2 |
+| Settings (instances, appearance, device name, fingerprint toggle, unlock window, lock timeout, logout, diagnostics) | 4.4, 5.4, 5.5, 9.3, 15.2, 21.5 |
 | Entity detail: switch, sensor, binary sensor, climate incl. history | 8 |
 | New home and new room forms | 6 |
 | Offline and error states | 14.1 |
@@ -1554,6 +1559,7 @@ custom_components/haac_bridge/
 ├── __init__.py              # async_setup: schema, factories, command registration, reload service
 ├── manifest.json  const.py  services.yaml
 ├── translations/en.json     # user texts of all exceptions (18.3)
+├── logbook.py               # HA logbook platform: Activity texts of haac_bridge_action (21.4)
 ├── core/                    # errors.py (ErrorCode, exceptions), error_factory.py,
 │                            # response_factory.py, command.py (command wrapper), subscriptions.py
 ├── config/                  # YAML schema, UI users, resolving users, Repairs issues
@@ -1562,6 +1568,7 @@ custom_components/haac_bridge/
 ├── areas/                   # floors and areas catalog for haac_bridge/areas
 ├── instance/                # instance ID and addresses for haac_bridge/info
 ├── services/                # call_factory.py: validated service calls
+├── audit/                   # log level, audit entries and log, Activity texts (21)
 ├── history/                 # filtered history and statistics
 ├── schedules/               # store, trigger planning, runner, user lifecycle, HA entities (19)
 └── api/                     # haac_bridge/* WebSocket commands, one module per command group
@@ -1583,6 +1590,7 @@ Factories are plain classes created once in `async_setup` and stored in `hass.da
 | `ServiceCallFactory` | Validated service call (domain, service, data, target) | Enforces exposure, the service list and its `service_data` keys (10.3, 11.4) |
 | `TriggerFactory` | One trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run of a schedule | Time and sun logic in one place (19.3) |
 | `RecurrenceFactory` | One date rule per `repeat.freq` (`once`, `daily`, `weekly`, `monthly`, `yearly`) with `matches(date)` and `next_date(after)` | Calendar rules in one place (19.10) |
+| `AuditEntryFactory` | One audit entry per kind of action (`call_service`, `schedule_run`, `schedule_change`, `entity_disabled`, `config_change`, `startup`) with its level and Activity flag | Log lines and Activity entries in one place (21.6) |
 | `ResponseFactory` | WebSocket result and error replies | One reply format incl. error code (11) |
 | `ErrorFactory` | `HaacBridgeError` from any caught exception | Error mapping in one place (18.3) |
 
@@ -1948,3 +1956,106 @@ Instance: *Try the demo* creates the row, the placeholder token and the active i
 5. Both flavors contain the demo. The entry is only on the server screen.
 6. The demo replies must keep the format of the real bridge; they are checked by feeding them through the real consumers.
 7. Candidates for a later version: a guided tour, a second demo user (administrator) to show *All / Mine* of 19.7.
+
+## 21. Logging and activity (bridge)
+
+Extension of October 2026 (bridge 0.6.0, app 0.7.0). The bridge writes every action it carries out for a user, or on its own, to the Home Assistant log with user, entity, service and result, lets the administrator choose the log level, and shows the switching actions in the Home Assistant *Activity* page. The app only adds a device name (21.5). `api_version` stays 1 (additive, 11.4).
+
+### 21.1 Requirements
+
+1. Log what the bridge triggers in HA (a schedule run) and what a user controls from a device (`call_service`).
+2. Log as much as is useful; the log level is configurable.
+3. Show actions that are switched through the bridge, or by the bridge, in the HA Activity page.
+
+Not in scope: an own log store or log viewer in the bridge or the app. The log is `home-assistant.log` and the HA log viewer; the Activity entries are stored by the recorder and purged with its `purge_keep_days`. Push notifications and notifications in the app stay as in 19.11.
+
+### 21.2 Log level
+
+- **Values:** `debug`, `info`, `warning` (default) and `error`. At `warning` only problems are written; for the action log the administrator sets `info`.
+- **Where:** the options of the integration (menu item *Logging*: level and a switch *Show actions in the Activity page*, stored in the entry options next to `users`) or the `logging:` block of the YAML (10.2). A value in the YAML wins over the option; the menu then shows it as set in `configuration.yaml`. Invalid YAML values are `HAB-CFG-001`.
+- **Effect:** the bridge sets the level of the package logger `custom_components.haac_bridge`; all module loggers inherit it. It is applied in `async_setup`, when the options change (without reload, like the users, 10.2) and after `haac_bridge.reload` (YAML). A later call of HA's `logger.set_level` for the package wins until the next change here; HA's own *Enable debug logging* on the integration page works as for any integration. The README says so.
+- No new error code: the options form offers a fixed list, and a damaged stored value falls back to the default.
+
+### 21.3 What is logged
+
+One line per event, `key=value`, written by the audit log only (21.6). Values that a user can type (schedule names, `service_data` values, the device name) are written as JSON text (`format_value`: quotes and line breaks are escaped), so a line break cannot forge a log line.
+
+| Event | Level | Content |
+| --- | --- | --- |
+| App controls an entity (`call_service` succeeded) | info | user, source, device name, entity, service, `service_data`, duration in ms |
+| `call_service` refused or failed | warning | as before (HAB code, command, user) plus entity, service and device name; written once, by the command wrapper |
+| Schedule run, per entity succeeded | info | schedule id and name, owner, trigger (`plan`, or `manual` with the starting user), device name of a manual run, entity, service |
+| Schedule run, result | info | `ok`, `partial`, `failed` or `missed`, n of m entities, whether the schedule was removed afterwards |
+| Schedule run did not take place | info, `warning` for `missed` | schedule id and name, owner, reason (`missed`, `paused_no_entities`, `paused_owner_inactive`) |
+| Schedule created, changed, deleted, switched on or off | info | user, schedule id and name, trigger, repeat, number of entities |
+| Entity deactivated or activated (7.5) | info | user, entity, number of schedules switched off or on again |
+| Configuration changed (options saved, `haac_bridge.reload`, log level or Activity switch) | info | what changed, number of users, the new level and switch for a logging change; filter rules are never written |
+| Integration started | info | version, `api_version`, features, number of users and schedules |
+| Every `haac_bridge/*` command, read-only ones included | debug | type, user id, duration in ms |
+| Unexpected error (`HAB-INT-000`) | error | as before, with traceback |
+
+Read-only requests never appear above `debug`. States and attributes are never logged, so the hidden attributes (11.3) cannot reach the log. Tokens, token ids and IP addresses are never logged.
+
+Example lines:
+
+```text
+INFO  audit action=call_service user=anton(1a2b3c4d) source=app client="Pixel 8" entity=switch.garage service=turn_on data={} result=ok ms=42
+INFO  audit action=schedule_run schedule="Morning light" id=9f8e7d6c owner=anton(1a2b3c4d) trigger=plan entity=switch.hall service=turn_on result=ok
+WARN  command HAB-SVC-001 in haac_bridge/call_service (user anton) entity=switch.heating service=turn_on client="Pixel 8"
+```
+
+**Source.** The bridge knows the HA user, not the phone. It reads the `client_id` of the connection's refresh token (`hass.auth.async_get_refresh_token(connection.refresh_token_id)`); the app's `client_id` (5.1) gives `source=app`, anything else `source=other`. The device name comes from the app (21.5).
+
+### 21.4 Activity page
+
+The bridge fires the event `haac_bridge_action` once per carried-out switching action and describes it through the logbook platform `logbook.py` in the integration folder (the module offers `async_describe_events(hass, async_describe_event)` and returns name, message and `entity_id`, like the platforms of `automation` and `script`). The Activity page then shows the entry on the entity's history as well.
+
+| Occasion | Text | Entity |
+| --- | --- | --- |
+| App controls an entity | "turned on via HAAC app (Pixel 8)", with a value for climate: "set temperature to 21.5 via HAAC app" | yes |
+| The service fails (`HAB-SVC-003`) | "turn on failed via HAAC app" | yes |
+| Another client of the bridge (not the app's login) | "turned on via HAAC Bridge" | yes |
+| Schedule run, per entity | "turned off by a schedule", "turn off failed by a schedule" | yes |
+| Schedule run missed or paused | "HAAC schedule did not run" | no |
+
+- **Not shown:** refused calls (`HAB-SVC-001`, `HAB-SVC-002`, `HAB-ENT-002`) and everything that only changes the bridge data (schedules, deactivation, configuration). These go to the log only. A refused call names an entity that the user typed and may not see; schedule names are private to their owner and the administrators (19.2).
+- **Context.** `ServiceCallFactory.create` creates the `Context` of the call (the user, or the user who started a manual run, 19.3); the same context goes into the service call and the event. HA then shows the state change and the bridge entry as one action by that user.
+- The event carries `action`, `result`, `entity_id`, `service`, `source`, `client` (if sent) and, for a successful call only, `data`; it is checked by HA and limited to the keys of 11.4.
+- The text of the device name is part of the event, so every HA user who can see the entity's activity sees it (21.5).
+- One event per action. The worst case is a schedule with 20 entities per user, up to 50 schedules, at the same minute; the recorder stores them like any other event.
+- The switch *Show actions in the Activity page* (default on) turns the events off; the log is not affected.
+
+### 21.5 Device name (app)
+
+- **Field.** `haac_bridge/call_service` and `haac_bridge/schedules/run_now` accept the optional field `client`: text of 1 to 40 characters after trimming, printable characters only. An invalid value is `HAB-WS-001`. The commands reject unknown fields, so the bridge lists the feature `client_info` in `haac_bridge/info`, and the app sends `client` only if `features` contains it.
+- **App.** *Settings → Device name* holds the name. It is stored in the app settings (`deviceName`, one value for all instances, not a secret, not in the Keystore) and defaults to the device model (`Build.MODEL`). An empty value sends no field. The row says that the name is visible in Home Assistant, in the log and in the Activity page. `ClientField` (`core.network.bridge`) adds the cleaned name (trimmed, printable, at most 40 characters) to the fields of `call_service`; the app has no button for `schedules/run_now` yet, so that command does not send it. No other command carries it. No new screen; the row joins the existing Settings list (15.4).
+- **Demo (chapter 20).** The demo bridge lists `client_info`, accepts the field and ignores it.
+- **Error codes.** None are new in the app or in the bridge.
+
+### 21.6 Code layout (bridge)
+
+New topic `audit/` (18.1): `levels.py` (`LogLevel`, reading the option and YAML, applying the level), `entry.py` (`AuditEntry`), `factory.py` (`AuditEntryFactory`, 18.2), `log.py` (`AuditLog.record(entry)`: writes the line to the logger `custom_components.haac_bridge.audit` and fires the event if the Activity switch is on), `describe.py` (Activity text from the event data), `client.py` (the `client` request field and the source of a call), `actions.py` (the audited service call of `haac_bridge/call_service`, so `api/` holds no logic) and, in the integration folder, the thin platform `logbook.py`. `HaacBridgeData` gets `audit` and `audit_entries` (with a no-op stand-in until they exist). Call sites call `AuditLog.record`; none writes an `info` line of its own. `HaacBridgeError` gets an optional `details` (entity, service, device name) that the command wrapper adds to its single error line (18.3: every error is logged once).
+
+### 21.7 Security and privacy
+
+- The log is for the administrator; the Activity page is visible to every HA user. Hence the "not shown" list in 21.4 and the rule that schedule names stay out of the Activity page.
+- Nothing leaves the HA installation; the privacy texts of the app and the home page are checked before the release and changed together if they mention the bridge (`docs/privacy-policy.md`, `haac.ts`).
+- At `debug`, every command writes a line, also on every reconnect of the app; the options text recommends going back to `warning` or `info` afterwards.
+
+### 21.8 Tests
+
+Bridge (`tests/audit/`): level from option, YAML and default, damaged option, YAML wins, change applies without reload; `call_service` success writes one `info` line and one event with the context of the state change, refusal writes one `warning` line (with entity, service, device name) and no event, failure writes one line and an event without `service_data`; schedule runs `ok`, `partial`, `failed`, `missed`, manual run with the starting user and device name, schedule name only in the log; the Activity descriptions for every action and result; switch off sends no event; a schedule name `x\nINFO fake` and a `service_data` value with a line break make no second line; tokens, attributes and IP addresses never appear; `debug` writes a line per command, `info` none; options form saves both values and the YAML export leaves them out; `client` valid, too long, with control characters, missing, and `client_info` in `features`. App: `deviceName` default and edit, field sent only with `client_info`, never on other commands, demo accepts it.
+
+### 21.9 Release
+
+Bridge 0.6.0 and app 0.7.0 (new optional feature, `api_version` 1). The bridge works with every app version; the app sends the device name only to a bridge that lists `client_info`.
+
+### 21.10 Decisions
+
+1. Default level `warning`; the action log needs `info`.
+2. Level and Activity switch in the options and in the YAML; the YAML wins.
+3. All switching actions of the app and of schedules appear in the Activity page, with a switch to turn it off.
+4. No schedule names, refused calls or bridge-only changes in the Activity page.
+5. The app sends a device name (`client`, feature `client_info`); the bridge reads the app's `client_id` for the source and never logs IP addresses.
+6. No own log store; HA log and recorder are the storage.
+7. Read-only requests only at `debug`.
