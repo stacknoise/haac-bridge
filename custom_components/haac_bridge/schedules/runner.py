@@ -22,6 +22,7 @@ from .model import (
     PauseReason,
     RepeatFreq,
     RunEntry,
+    RunOrigin,
     RunResult,
     RunTrigger,
     Schedule,
@@ -66,10 +67,13 @@ class ScheduleRunner:
         self._deferred: dict[str, datetime] = {}
 
     @callback
-    def async_run_in_background(self, schedule_id: str, triggered_by: str | None = None) -> None:
+    def async_run_in_background(
+        self, schedule_id: str, triggered_by: str | None = None, client: str | None = None
+    ) -> None:
         """Start a run without waiting for it; the result arrives as a schedule change (concept 19.4)."""
         task = self._hass.async_create_background_task(
-            self.async_run(schedule_id, triggered_by), name=f"haac_bridge run {schedule_id}"
+            self.async_run(schedule_id, triggered_by, client),
+            name=f"haac_bridge run {schedule_id}",
         )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -105,7 +109,9 @@ class ScheduleRunner:
         for task in list(self._tasks):
             task.cancel()
 
-    async def async_run(self, schedule_id: str, triggered_by: str | None = None) -> None:
+    async def async_run(
+        self, schedule_id: str, triggered_by: str | None = None, client: str | None = None
+    ) -> None:
         """Run a schedule now; a run of the same schedule that is still going on finishes first.
 
         `triggered_by` is the HA user who started a manual run; the services run in that user's
@@ -113,11 +119,11 @@ class ScheduleRunner:
         """
         lock = self._locks.setdefault(schedule_id, asyncio.Lock())
         async with lock:
-            await self._async_run_locked(schedule_id, triggered_by)
+            await self._async_run_locked(schedule_id, RunOrigin(triggered_by, client))
         if self._store.get(schedule_id) is None:
             self._locks.pop(schedule_id, None)
 
-    async def _async_run_locked(self, schedule_id: str, triggered_by: str | None) -> None:
+    async def _async_run_locked(self, schedule_id: str, origin: RunOrigin) -> None:
         """Validate the owner and the exposure, then switch and record the result."""
         schedule = self._store.get(schedule_id)
         if schedule is None:
@@ -139,19 +145,14 @@ class ScheduleRunner:
         targets = [entity for entity in schedule.entities if exposure.is_exposed(user, entity)]
         if not targets:
             failed = LastRun(dt_util.utcnow(), RunResult.FAILED, ErrorCode.SCH_RUN_FAILED.value)
-            self._log_run(schedule, failed, triggered_by)
+            self._log_run(schedule, failed, origin.triggered_by)
             await self._async_pause(schedule.id, PauseReason.NO_ENTITIES, failed)
             return
-        context_user_id = triggered_by or user.id
-        if context_user_id != user.id:
-            _LOGGER.info(
-                "Schedule %s of user %s is run by user %s", schedule.id, user.id, context_user_id
-            )
-        removes = self._removes_after_run(schedule, triggered_by)
-        done = await self._async_switch_all(user, schedule, targets, context_user_id)
-        await self._async_record(
-            schedule, _result(done, len(schedule.entities)), triggered_by, removed=removes
-        )
+        removes = self._removes_after_run(schedule, origin.triggered_by)
+        done = await self._async_switch_all(user, schedule, targets, origin)
+        result = _result(done, len(schedule.entities))
+        self._audit_result(schedule, result, done, len(schedule.entities), removed=removes)
+        await self._async_record(schedule, result, origin.triggered_by, removed=removes)
         if removes:
             await self._hooks.remove([schedule.id])
 
@@ -165,28 +166,24 @@ class ScheduleRunner:
         return schedule.repeat.freq is RepeatFreq.ONCE
 
     async def _async_switch_all(
-        self, user: User, schedule: Schedule, targets: list[str], context_user_id: str
+        self, user: User, schedule: Schedule, targets: list[str], origin: RunOrigin
     ) -> int:
         """Switch the entities in parallel, the unavailable ones after a short wait; return how many worked."""
-        service = schedule.action.value
         ready = [entity for entity in targets if not self._is_unavailable(entity)]
         later = [entity for entity in targets if entity not in ready]
-        done = await self._async_switch_many(user, ready, service, context_user_id)
+        done = await self._async_switch_many(user, schedule, ready, origin)
         if later:
             await self._async_wait_before_retry()
             available = [entity for entity in later if not self._is_unavailable(entity)]
-            done += await self._async_switch_many(user, available, service, context_user_id)
+            done += await self._async_switch_many(user, schedule, available, origin)
         return done
 
     async def _async_switch_many(
-        self, user: User, entity_ids: list[str], service: str, context_user_id: str
+        self, user: User, schedule: Schedule, entity_ids: list[str], origin: RunOrigin
     ) -> int:
         """Switch the entities at the same time; return how many worked."""
         results = await asyncio.gather(
-            *(
-                self._async_switch_one(user, entity_id, service, context_user_id)
-                for entity_id in entity_ids
-            )
+            *(self._async_switch_one(user, schedule, entity_id, origin) for entity_id in entity_ids)
         )
         return sum(results)
 
@@ -195,17 +192,45 @@ class ScheduleRunner:
         await asyncio.sleep(RETRY_DELAY_SECONDS)
 
     async def _async_switch_one(
-        self, user: User, entity_id: str, service: str, context_user_id: str
+        self, user: User, schedule: Schedule, entity_id: str, origin: RunOrigin
     ) -> int:
-        """Call the service for one entity, checked against the owner; return 1 if it worked, else 0."""
+        """Call the service for one entity, checked against the owner; return 1 if it worked, else 0.
+
+        The service runs in the context of the user who started a manual run, else of the owner
+        (review finding S10); the Activity page shows it either way (concept 21.4).
+        """
         data = get_data(self._hass)
         try:
-            call = data.services.create(data.exposure, user, entity_id, service, {})
-            await async_execute(self._hass, call, context_user_id=context_user_id)
+            call = data.services.create(data.exposure, user, entity_id, schedule.action.value, {})
+            if origin.triggered_by is not None:
+                call = call.as_user(origin.triggered_by)
         except HaacBridgeError as err:
             _LOGGER.warning("%s while a schedule switched %s", err.code, entity_id)
             return 0
-        return 1
+        ok = True
+        try:
+            await async_execute(self._hass, call)
+        except HaacBridgeError as err:
+            _LOGGER.warning("%s while a schedule switched %s", err.code, entity_id)
+            ok = False
+        data.audit.record(
+            data.audit_entries.schedule_switched(schedule, user, call, ok=ok, origin=origin)
+        )
+        return int(ok)
+
+    def _audit_result(
+        self, schedule: Schedule, result: RunResult, done: int, total: int, *, removed: bool
+    ) -> None:
+        """Write the result of a run to the audit log (concept 21.3)."""
+        data = get_data(self._hass)
+        data.audit.record(
+            data.audit_entries.schedule_result(schedule, result.value, done, total, removed=removed)
+        )
+
+    def _audit_not_run(self, schedule: Schedule, reason: str) -> None:
+        """Write a run that did not take place (missed, or the schedule was paused) to the audit log."""
+        data = get_data(self._hass)
+        data.audit.record(data.audit_entries.schedule_not_run(schedule, reason))
 
     def _is_unavailable(self, entity_id: str) -> bool:
         """Return True if the entity's state is `unavailable`."""
@@ -246,6 +271,7 @@ class ScheduleRunner:
     def log_missed(self, schedule: Schedule, due: datetime, *, removed: bool) -> None:
         """Write a run HA missed to the run log; `removed` says the schedule is deleted after it."""
         self._log_run(schedule, LastRun(due, RunResult.MISSED), None, removed=removed)
+        self._audit_not_run(schedule, "missed")
 
     def _log_missed(self, schedule_id: str, due: datetime) -> None:
         """Write a run that was skipped as `missed` to the run log and announce it (concept 19.11)."""
@@ -253,6 +279,7 @@ class ScheduleRunner:
         if schedule is None:
             return
         self._log_run(schedule, LastRun(due, RunResult.MISSED), None)
+        self._audit_not_run(schedule, "missed")
         self._hooks.changed(schedule_id)
 
     async def _async_pause(
@@ -260,6 +287,9 @@ class ScheduleRunner:
     ) -> None:
         """Pause a schedule for a reason, optionally with a failed last run, and stop its timer."""
         paused = Paused(reason, dt_util.utcnow())
+        schedule = self._store.get(schedule_id)
+        if schedule is not None:
+            self._audit_not_run(schedule, f"paused_{reason.value}")
         await self._async_update(schedule_id, paused=paused, last_run=last_run)
         await self._hooks.replan(schedule_id)
 

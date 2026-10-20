@@ -17,7 +17,16 @@
           "edit_user": "Change a user",
           "remove_user": "Remove a user",
           "export_yaml": "Export as YAML",
-          "import_yaml": "Import from YAML"
+          "import_yaml": "Import from YAML",
+          "logging": "Logging"
+        }
+      },
+      "logging": {
+        "title": "Logging",
+        "description": "The log level decides what the bridge writes to the Home Assistant log: `warning` shows problems only, `info` also records every switching action of the app and of schedules, `debug` adds every request. Values set in the `logging` block of configuration.yaml win; set there: {yaml}.",
+        "data": {
+          "level": "Log level",
+          "activity": "Show switching actions on the Activity page"
         }
       },
       "add_user": {
@@ -178,6 +187,16 @@
     "reload": {
       "name": "Reload",
       "description": "Reloads the haac_bridge configuration from configuration.yaml."
+    }
+  },
+  "selector": {
+    "level": {
+      "options": {
+        "debug": "Debug (every request)",
+        "info": "Info (every switching action)",
+        "warning": "Warning (problems only)",
+        "error": "Error (errors only)"
+      }
     }
   }
 }

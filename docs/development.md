@@ -47,6 +47,8 @@ custom_components/haac_bridge/
   areas/       areas and floors catalog (import into the app)
   instance/    instance id and addresses for haac_bridge/info
   disabling/   per-user deactivated entities: store, manager (concept 19)
+  audit/       AuditLog (log lines and Activity events), AuditEntryFactory, log level settings, device name (concept 21)
+  logbook.py   describes the haac_bridge_action events for the Activity page
   schedules/   model, store, triggers, recurrence, planner, runner, run_log, manager, entities (concept 19)
   api/         the haac_bridge/* WebSocket commands, one module per command group
 scripts/code_index.py             # generates docs/code-index.md and docs/error-codes.md
@@ -117,6 +119,7 @@ Factories are plain classes created once in `async_setup` and stored in `HaacBri
 | `ServiceCallFactory` | `services/call_factory.py` | validated service call (domain, service, data, target); enforces exposure and `ALLOWED_SERVICES` with its `service_data` keys |
 | `TriggerFactory` | `schedules/triggers.py` | one trigger planner per `when.type` (`time`, `sunrise`, `sunset`) that computes the next run on the dates of a rule |
 | `RecurrenceFactory` | `schedules/recurrence.py` | one date rule per `repeat.freq` (`once`, `daily`, `weekly`, `monthly`, `yearly`) with `matches`, `next_date` and `previous_date` |
+| `AuditEntryFactory` | `audit/factory.py` | one `AuditEntry` per kind of action (call, schedule run, change, startup, …) with its log level, log fields and Activity event |
 | `ResponseFactory` | `core/response_factory.py` | WebSocket result, error and event replies |
 | `ErrorFactory` | `core/error_factory.py` | `HaacBridgeError` from any caught exception |
 
@@ -206,5 +209,6 @@ Every error of the bridge is a `HaacBridgeError` (derived from Home Assistant's 
 - `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service and its `service_data` keys are in `ALLOWED_SERVICES` (concept 11.4); the bridge sets the target itself.
 - History and statistics are filtered with the same exposure before the recorder is queried and stay within the limits of concept 10.3.
 - Attributes that name other entities or carry an access link are never sent to the app (concept 11.3).
+- Every action the bridge takes or a user triggers is written only through `AuditLog.record(AuditEntryFactory…)` (concept 21): never `_LOGGER.info` for an action, never a raw user-typed value in a log line (`format_value` escapes it), no IP addresses or tokens. An error is logged once, by the command wrapper.
 - Schedules check owner and exposure on every run, with the rights of the owner (concept 19.3).
 - No tokens or passwords in logs. No license headers in source files; dependencies only under Apache-2.0-compatible licenses.

@@ -11,6 +11,8 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.__init__` | `module` | `custom_components/haac_bridge/__init__.py` | HAAC Bridge: per-user entity exposure for the HA Android Client (concept 10). |
 | `async_setup` | `async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool` | `custom_components/haac_bridge/__init__.py` | Create the factories and exposure, register the commands and the reload action. |
 | `async_setup._async_reload` | `async def _async_reload(call: ServiceCall) -> None` | `custom_components/haac_bridge/__init__.py` | Handle the haac_bridge.reload action. |
+| `_logging_of` | `def _logging_of(config: ConfigType) -> dict[str, Any]` | `custom_components/haac_bridge/__init__.py` | Return the `logging` block of a validated configuration; empty if the section is missing. |
+| `_async_apply_logging` | `def _async_apply_logging(hass: HomeAssistant, options: Mapping[str, Any] \| None) -> None` | `custom_components/haac_bridge/__init__.py` | Apply the log level and the Activity switch from the YAML block and the entry options (concept 21.2). |
 | `_async_start_schedules` | `async def _async_start_schedules(hass: HomeAssistant, schedules: ScheduleManager) -> None` | `custom_components/haac_bridge/__init__.py` | Load the schedules, plan them once HA has started and cancel the timers when it stops. |
 | `_async_start_schedules._start` | `async def _start(_hass: HomeAssistant) -> None` | `custom_components/haac_bridge/__init__.py` | Plan every schedule once Home Assistant is running. |
 | `_async_start_schedules._stop` | `def _stop(_event: Event) -> None` | `custom_components/haac_bridge/__init__.py` | Cancel all schedule timers when Home Assistant stops. |
@@ -37,6 +39,7 @@ Lists every module, class and function of the integration with signature, file a
 | `HaacBridgeOptionsFlow` | `class HaacBridgeOptionsFlow(OptionsFlow)` | `custom_components/haac_bridge/config_flow.py` | Menu to add, change, remove, export and import the users the app may show entities to (concept 10.2). |
 | `HaacBridgeOptionsFlow.__init__` | `def __init__(self) -> None` | `custom_components/haac_bridge/config_flow.py` | Start without a user selected. |
 | `HaacBridgeOptionsFlow.async_step_init` | `async def async_step_init(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Show the menu; changing, removing and exporting need an already configured user. |
+| `HaacBridgeOptionsFlow.async_step_logging` | `async def async_step_logging(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Choose the log level and whether switching actions appear in Activity (concept 21.2). |
 | `HaacBridgeOptionsFlow.async_step_export_yaml` | `async def async_step_export_yaml(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Show the UI users as YAML to copy; confirming returns to the menu without a change. |
 | `HaacBridgeOptionsFlow.async_step_import_yaml` | `async def async_step_import_yaml(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Take over users from pasted YAML; a user in the YAML replaces that user's entry here. |
 | `HaacBridgeOptionsFlow._async_all_importable` | `async def _async_all_importable(self, records: list[dict[str, Any]]) -> bool` | `custom_components/haac_bridge/config_flow.py` | Return True if every record names a user the form offers or one that already has an entry. |
@@ -50,6 +53,7 @@ Lists every module, class and function of the integration with signature, file a
 | `HaacBridgeOptionsFlow.async_step_names` | `async def async_step_names(self, user_input: dict[str, Any] \| None=None) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Give the explicitly included entities display names for the app; empty keeps the Home Assistant name. |
 | `HaacBridgeOptionsFlow._names_label` | `def _names_label(self, entity_id: str) -> str` | `custom_components/haac_bridge/config_flow.py` | Return the form label of an entity: its Home Assistant friendly name with the entity_id in brackets. |
 | `HaacBridgeOptionsFlow._async_save` | `async def _async_save(self, names: dict[str, str]) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Store the selected user's rules and names, replacing an earlier entry of this user. |
+| `HaacBridgeOptionsFlow._save_users` | `def _save_users(self, records: list[dict[str, Any]]) -> ConfigFlowResult` | `custom_components/haac_bridge/config_flow.py` | Save the user records and keep the other options, such as the logging settings. |
 | `HaacBridgeOptionsFlow._record` | `def _record(self, user_id: str \| None) -> dict[str, Any]` | `custom_components/haac_bridge/config_flow.py` | Return the stored record of a user, or an empty one. |
 | `HaacBridgeOptionsFlow._async_users` | `async def _async_users(self, *, include_inactive: bool=False) -> list[SelectOptionDict]` | `custom_components/haac_bridge/config_flow.py` | Return every non-system Home Assistant user as a select option; deactivated ones only on request. |
 | `HaacBridgeOptionsFlow._configured_ids` | `def _configured_ids(self) -> set[str]` | `custom_components/haac_bridge/config_flow.py` | Return the ids of the users that already have an entry. |
@@ -58,6 +62,9 @@ Lists every module, class and function of the integration with signature, file a
 | `_user_schema` | `def _user_schema(users: list[SelectOptionDict]) -> vol.Schema` | `custom_components/haac_bridge/config_flow.py` | Return the form with one required choice of a user. |
 | `_globs_valid` | `def _globs_valid(rules: dict[str, list[str]]) -> bool` | `custom_components/haac_bridge/config_flow.py` | Return True if every wildcard has the form `domain.pattern`, with the YAML schema's check. |
 | `haac_bridge.const` | `module` | `custom_components/haac_bridge/const.py` | Constants shared by all topics of HAAC Bridge. |
+| `haac_bridge.logbook` | `module` | `custom_components/haac_bridge/logbook.py` | Describes the `haac_bridge_action` events for the Home Assistant Activity page (concept 21.4). |
+| `async_describe_events` | `def async_describe_events(hass: HomeAssistant, async_describe_event: Callable[[str, str, Callable[[Event], dict[str, str]]], None]) -> None` | `custom_components/haac_bridge/logbook.py` | Register how the Activity page shows the events of the bridge. |
+| `async_describe_events._describe` | `def _describe(event: Event) -> dict[str, str]` | `custom_components/haac_bridge/logbook.py` | Return the name, the message and, if known, the entity of one event. |
 | `haac_bridge.sensor` | `module` | `custom_components/haac_bridge/sensor.py` | Sensor platform: the `next run` sensor of every schedule (concept 19.5). |
 | `async_setup_entry` | `async def async_setup_entry(hass: HomeAssistant, entry: HaacBridgeConfigEntry, async_add_entities: AddEntitiesCallback) -> None` | `custom_components/haac_bridge/sensor.py` | Create the sensors of the existing schedules and of those added later. |
 | `haac_bridge.switch` | `module` | `custom_components/haac_bridge/switch.py` | Switch platform: the `enabled` switch of every schedule (concept 19.5). |
@@ -78,7 +85,8 @@ Lists every module, class and function of the integration with signature, file a
 | `async_register_commands` | `def async_register_commands(hass: HomeAssistant, commands: Iterable[BridgeCommand]) -> None` | `custom_components/haac_bridge/core/command.py` | Register all commands with HA's WebSocket API, each inside the wrapper. |
 | `_wrap` | `def _wrap(command: BridgeCommand) -> websocket_api.WebSocketCommandHandler` | `custom_components/haac_bridge/core/command.py` | Build the HA handler that validates, runs and answers one command. |
 | `_wrap._handle` | `async def _handle(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/core/command.py` | Run the command and send exactly one reply (plus the first event of a subscription). |
-| `_log_error` | `def _log_error(command_type: str, connection: ActiveConnection, code: ErrorCode, err: Exception) -> None` | `custom_components/haac_bridge/core/command.py` | Log a failed command once with its HAB code; tracebacks only for unexpected errors. |
+| `_record_command` | `def _record_command(hass: HomeAssistant, command_type: str, connection: ActiveConnection, started: float) -> None` | `custom_components/haac_bridge/core/command.py` | Write the debug line of a command, if the level asks for it (concept 21.3). |
+| `_log_error` | `def _log_error(command_type: str, connection: ActiveConnection, error: HaacBridgeError, err: Exception) -> None` | `custom_components/haac_bridge/core/command.py` | Log a failed command once with its HAB code; tracebacks only for unexpected errors. |
 | `haac_bridge.core.error_factory` | `module` | `custom_components/haac_bridge/core/error_factory.py` | ErrorFactory: turns any caught exception into a HaacBridgeError (concept 18.2, 18.3). |
 | `ErrorFactory` | `class ErrorFactory` | `custom_components/haac_bridge/core/error_factory.py` | Maps exceptions to HaacBridgeError; the only place that decides an error's code. |
 | `ErrorFactory.from_exception` | `def from_exception(self, err: Exception) -> HaacBridgeError` | `custom_components/haac_bridge/core/error_factory.py` | Return a HaacBridgeError for `err`; unknown exceptions become HAB-INT-000. |
@@ -88,6 +96,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ErrorCode.area` | `def area(self) -> str` | `custom_components/haac_bridge/core/errors.py` | Return the area part of the code, e.g. `SVC` for `HAB-SVC-001`. |
 | `HaacBridgeError` | `class HaacBridgeError(HomeAssistantError)` | `custom_components/haac_bridge/core/errors.py` | Base of every exception raised by HAAC Bridge; carries an ErrorCode. |
 | `HaacBridgeError.__init__` | `def __init__(self, code: ErrorCode \| None=None, placeholders: dict[str, str] \| None=None) -> None` | `custom_components/haac_bridge/core/errors.py` | Create the error with its code and optional translation placeholders. |
+| `HaacBridgeError.with_details` | `def with_details(self, **details: str \| None) -> Self` | `custom_components/haac_bridge/core/errors.py` | Add facts (entity, service, device name) for the single log line of this error (concept 21.3). |
 | `ConfigError` | `class ConfigError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | Error in the haac_bridge YAML configuration (area CFG). |
 | `NotAllowedError` | `class NotAllowedError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | The caller could not be identified or is deactivated (area AUTH). |
 | `InvalidServiceError` | `class InvalidServiceError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A service call was rejected or failed (area SVC). |
@@ -113,12 +122,20 @@ Lists every module, class and function of the integration with signature, file a
 | `DisabledEntities.async_forget_user` | `async def async_forget_user(self, user_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Drop all entries of a user; return whether there were any. |
 | `RunLog` | `class RunLog(Protocol)` | `custom_components/haac_bridge/core/runtime.py` | The log of schedule runs (concept 19.11); the real log replaces the no-op one. |
 | `RunLog.record` | `def record(self, entry: RunEntry) -> None` | `custom_components/haac_bridge/core/runtime.py` | Append the entry of a finished or missed run. |
+| `AuditLog` | `class AuditLog(Protocol)` | `custom_components/haac_bridge/core/runtime.py` | The audit log (concept 21); the real log replaces the no-op one. |
+| `AuditLog.record` | `def record(self, entry: AuditEntry) -> None` | `custom_components/haac_bridge/core/runtime.py` | Write the entry to the log and, if it has one, fire its Activity event. |
+| `AuditLog.is_enabled` | `def is_enabled(self, level: int) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Return whether a line of this level would be written. |
+| `AuditLog.configure` | `def configure(self, settings: LoggingSettings) -> None` | `custom_components/haac_bridge/core/runtime.py` | Take over new settings and set the log level. |
 | `NoDisabledEntities` | `class NoDisabledEntities` | `custom_components/haac_bridge/core/runtime.py` | Stand-in until the store exists: nothing is deactivated. |
 | `NoDisabledEntities.is_disabled` | `def is_disabled(self, user_id: str, entity_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Return False for every entity. |
 | `NoDisabledEntities.entities_of` | `def entities_of(self, user_id: str) -> dict[str, str]` | `custom_components/haac_bridge/core/runtime.py` | Return no entities. |
 | `NoDisabledEntities.user_ids` | `def user_ids(self) -> list[str]` | `custom_components/haac_bridge/core/runtime.py` | Return no users. |
 | `NoDisabledEntities.async_set` | `async def async_set(self, user_id: str, entity_id: str, disabled: bool) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Change nothing. |
 | `NoDisabledEntities.async_forget_user` | `async def async_forget_user(self, user_id: str) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Change nothing. |
+| `NoAuditLog` | `class NoAuditLog` | `custom_components/haac_bridge/core/runtime.py` | Stand-in until the audit log exists: entries are dropped. |
+| `NoAuditLog.record` | `def record(self, entry: AuditEntry) -> None` | `custom_components/haac_bridge/core/runtime.py` | Drop the entry. |
+| `NoAuditLog.is_enabled` | `def is_enabled(self, level: int) -> bool` | `custom_components/haac_bridge/core/runtime.py` | Return False for every level. |
+| `NoAuditLog.configure` | `def configure(self, settings: LoggingSettings) -> None` | `custom_components/haac_bridge/core/runtime.py` | Change nothing. |
 | `NoRunLog` | `class NoRunLog` | `custom_components/haac_bridge/core/runtime.py` | Stand-in until the log exists: entries are dropped. |
 | `NoRunLog.record` | `def record(self, entry: RunEntry) -> None` | `custom_components/haac_bridge/core/runtime.py` | Drop the entry. |
 | `HaacBridgeData` | `class HaacBridgeData` | `custom_components/haac_bridge/core/runtime.py` | Factories, current exposure and the user entries of YAML and UI; created in async_setup. |
@@ -231,10 +248,11 @@ Lists every module, class and function of the integration with signature, file a
 | `haac_bridge.services.__init__` | `module` | `custom_components/haac_bridge/services/__init__.py` | Service calls: validated against the caller's exposure and executed with the caller's context. |
 | `haac_bridge.services.call_factory` | `module` | `custom_components/haac_bridge/services/call_factory.py` | ServiceCallFactory: validated service calls for haac_bridge/call_service (concept 10.3, 11.4, 18.2). |
 | `ValidatedServiceCall` | `class ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | A service call that passed all checks; the target is always exactly one entity. |
+| `ValidatedServiceCall.as_user` | `def as_user(self, user_id: str) -> ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | Return the same call in a new context of another user, as for a manual run of a schedule. |
 | `ServiceCallFactory` | `class ServiceCallFactory` | `custom_components/haac_bridge/services/call_factory.py` | Creates service calls only for exposed entities and services of the entity's own domain. |
 | `ServiceCallFactory.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/services/call_factory.py` | Keep hass for state and service lookups. |
 | `ServiceCallFactory.create` | `def create(self, exposure: Exposure, user: User, entity_id: str, service: str, data: dict[str, Any]) -> ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | Return the validated call or raise the matching HAB error (SVC-001, ENT-001, ENT-002, SVC-002, WS-001). |
-| `async_execute` | `async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall, *, context_user_id: str \| None=None) -> None` | `custom_components/haac_bridge/services/call_factory.py` | Run the call as the calling user, targeting only its entity; map HA errors to HAB codes. |
+| `async_execute` | `async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall) -> None` | `custom_components/haac_bridge/services/call_factory.py` | Run the call in its own context, targeting only its entity; map HA errors to HAB codes. |
 
 ## history
 
@@ -284,7 +302,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ws_schedules_run_now` | `async def ws_schedules_run_now(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/schedules.py` | Start one run of a schedule now without changing its plan; the result follows as an event. |
 | `ws_subscribe_schedules` | `async def ws_subscribe_schedules(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> SubscriptionStarted` | `custom_components/haac_bridge/api/schedules.py` | Subscribe to `schedules_changed` events for the schedules the caller can see. |
 | `haac_bridge.api.services` | `module` | `custom_components/haac_bridge/api/services.py` | Command haac_bridge/call_service (concept 10.3, 11.2, 11.4). |
-| `ws_call_service` | `async def ws_call_service(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/services.py` | Call a service of an exposed entity's domain on that entity only. |
+| `ws_call_service` | `async def ws_call_service(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None` | `custom_components/haac_bridge/api/services.py` | Call a service of an exposed entity's domain on that entity only, and record it (concept 21). |
 
 ## areas
 
@@ -295,6 +313,56 @@ Lists every module, class and function of the integration with signature, file a
 | `_area_of` | `def _area_of(entity: er.RegistryEntry, devices: dr.DeviceRegistry) -> str \| None` | `custom_components/haac_bridge/areas/catalog.py` | Return the area of an entity: its own, else the area of its device. |
 | `_entity_counts` | `def _entity_counts(hass: HomeAssistant, entity_ids: Iterable[str]) -> Counter[str]` | `custom_components/haac_bridge/areas/catalog.py` | Count the given entities per area ID; entities without an area are left out. |
 | `area_catalog` | `def area_catalog(hass: HomeAssistant, entity_ids: Iterable[str]) -> dict[str, Any]` | `custom_components/haac_bridge/areas/catalog.py` | Return the areas that hold at least one of the entities, and the floors those areas are on. |
+
+## audit
+
+| Symbol | Signature | File | Description |
+| --- | --- | --- | --- |
+| `haac_bridge.audit.__init__` | `module` | `custom_components/haac_bridge/audit/__init__.py` | Audit log and Activity entries: what the bridge did, for whom and with what result (concept 21). |
+| `haac_bridge.audit.actions` | `module` | `custom_components/haac_bridge/audit/actions.py` | The audited service call of `haac_bridge/call_service` (concept 21.3, 21.4). |
+| `ServiceRequest` | `class ServiceRequest` | `custom_components/haac_bridge/audit/actions.py` | What a client asked for: the target, the service and its data, the device name and the source. |
+| `async_audited_call` | `async def async_audited_call(hass: HomeAssistant, user: User, request: ServiceRequest) -> None` | `custom_components/haac_bridge/audit/actions.py` | Check and carry out a service call for the user, then record what happened. |
+| `haac_bridge.audit.client` | `module` | `custom_components/haac_bridge/audit/client.py` | The device name the app sends and the source of a call (concept 21.3, 21.5). |
+| `_printable` | `def _printable(value: str) -> str` | `custom_components/haac_bridge/audit/client.py` | Voluptuous validator: reject a device name with control characters. |
+| `source_of` | `def source_of(hass: HomeAssistant, connection: ActiveConnection) -> str` | `custom_components/haac_bridge/audit/client.py` | Return `app` if the connection's refresh token belongs to the HAAC app, else `other`. |
+| `haac_bridge.audit.describe` | `module` | `custom_components/haac_bridge/audit/describe.py` | Activity text of a `haac_bridge_action` event (concept 21.4). |
+| `_phrases` | `def _phrases(service: str) -> tuple[str, str]` | `custom_components/haac_bridge/audit/describe.py` | Return the past tense ("turned on") and the plain form ("turn on") of a service. |
+| `_value_of` | `def _value_of(data: Mapping[str, Any]) -> str \| None` | `custom_components/haac_bridge/audit/describe.py` | Return the value a climate call set, e.g. `21.5` or `heat`, or None. |
+| `_origin` | `def _origin(event: Mapping[str, Any]) -> str` | `custom_components/haac_bridge/audit/describe.py` | Return who acted: "via HAAC app (Pixel 8)" or "by a schedule". |
+| `describe` | `def describe(event: Mapping[str, Any]) -> str` | `custom_components/haac_bridge/audit/describe.py` | Return the message the Activity page shows for an event. |
+| `haac_bridge.audit.entry` | `module` | `custom_components/haac_bridge/audit/entry.py` | AuditEntry: one thing the bridge did, as a log line and optionally an Activity event (concept 21.3). |
+| `AuditEntry` | `class AuditEntry` | `custom_components/haac_bridge/audit/entry.py` | What `AuditLog.record` writes: the log line (fields in order), and the Activity event if there is one. |
+| `haac_bridge.audit.factory` | `module` | `custom_components/haac_bridge/audit/factory.py` | AuditEntryFactory: one audit entry per kind of action (concept 18.2, 21.3). |
+| `user_label` | `def user_label(user: User) -> str` | `custom_components/haac_bridge/audit/factory.py` | Return `name(first 8 characters of the id)`, which tells users with the same name apart. |
+| `_activity` | `def _activity(action: str, result: str, call: ValidatedServiceCall, *, client: str \| None, source: str \| None) -> dict[str, Any]` | `custom_components/haac_bridge/audit/factory.py` | Return the data of a `haac_bridge_action` event; `service_data` only for a success (concept 21.4). |
+| `AuditEntryFactory` | `class AuditEntryFactory` | `custom_components/haac_bridge/audit/factory.py` | Creates the audit entry for each kind of action, with its level and its Activity event. |
+| `AuditEntryFactory.call_service` | `def call_service(self, user: User, call: ValidatedServiceCall, *, source: str, client: str \| None, duration_ms: int) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry of a successful `haac_bridge/call_service`. |
+| `AuditEntryFactory.call_failed` | `def call_failed(self, call: ValidatedServiceCall, client: str \| None, source: str) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the Activity-only entry of a service call that failed; the wrapper logs the error. |
+| `AuditEntryFactory.schedule_switched` | `def schedule_switched(self, schedule: Schedule, owner: User, call: ValidatedServiceCall, *, ok: bool, origin: RunOrigin) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry of one entity switched by a schedule run; a failure is Activity-only. |
+| `AuditEntryFactory.schedule_result` | `def schedule_result(self, schedule: Schedule, result: str, done: int, total: int, *, removed: bool) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry of the result of a schedule run. |
+| `AuditEntryFactory.schedule_not_run` | `def schedule_not_run(self, schedule: Schedule, reason: str) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry of a run that did not take place: missed, or the schedule was paused. |
+| `AuditEntryFactory.schedule_changed` | `def schedule_changed(self, *, change: str, by: str, schedule: Schedule, details: dict[str, Any]) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry of a schedule that was created, changed, deleted, switched on or off. |
+| `AuditEntryFactory.entity_disabled` | `def entity_disabled(self, *, user: User, entity_id: str, disabled: bool, schedules: int) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry of an entity a user deactivated or activated. |
+| `AuditEntryFactory.config_changed` | `def config_changed(self, *, what: str, **details: Any) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry of a change of the configuration by an administrator or a reload. |
+| `AuditEntryFactory.startup` | `def startup(self, **details: Any) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry written when the integration has started. |
+| `AuditEntryFactory.command` | `def command(self, *, command_type: str, user_id: str \| None, duration_ms: int) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the debug entry of one `haac_bridge/*` command. |
+| `haac_bridge.audit.levels` | `module` | `custom_components/haac_bridge/audit/levels.py` | Log level and Activity switch of the bridge: reading, merging and applying them (concept 21.2). |
+| `LogLevel` | `class LogLevel(StrEnum)` | `custom_components/haac_bridge/audit/levels.py` | The log levels an administrator can choose. |
+| `LogLevel.number` | `def number(self) -> int` | `custom_components/haac_bridge/audit/levels.py` | Return the number of the level in the `logging` module. |
+| `LoggingSettings` | `class LoggingSettings` | `custom_components/haac_bridge/audit/levels.py` | The log level and whether switching actions appear in the Activity page. |
+| `_level_of` | `def _level_of(section: Mapping[str, Any] \| None) -> LogLevel \| None` | `custom_components/haac_bridge/audit/levels.py` | Return the level named in a `logging` block, or None if it is missing or damaged. |
+| `_activity_of` | `def _activity_of(section: Mapping[str, Any] \| None) -> bool \| None` | `custom_components/haac_bridge/audit/levels.py` | Return the Activity switch of a `logging` block, or None if it is missing or damaged. |
+| `merge_settings` | `def merge_settings(yaml_section: Mapping[str, Any] \| None, options_section: Mapping[str, Any] \| None) -> LoggingSettings` | `custom_components/haac_bridge/audit/levels.py` | Return the settings: a value in the YAML wins over the option, damaged values fall back (concept 21.2). |
+| `yaml_keys` | `def yaml_keys(yaml_section: Mapping[str, Any] \| None) -> set[str]` | `custom_components/haac_bridge/audit/levels.py` | Return which of `level` and `activity` the YAML sets, so the options form can say so. |
+| `apply_level` | `def apply_level(level: LogLevel) -> None` | `custom_components/haac_bridge/audit/levels.py` | Set the level of the package logger; every module logger of the bridge inherits it. |
+| `haac_bridge.audit.log` | `module` | `custom_components/haac_bridge/audit/log.py` | AuditLog: writes audit entries to the HA log and fires the Activity event (concept 21.3, 21.4). |
+| `format_value` | `def format_value(value: Any) -> str` | `custom_components/haac_bridge/audit/log.py` | Return a value for a log line: plain words as they are, everything else as JSON. |
+| `format_line` | `def format_line(entry: AuditEntry) -> str` | `custom_components/haac_bridge/audit/log.py` | Return the log line of an entry: `action=… key=value …`. |
+| `AuditLog` | `class AuditLog` | `custom_components/haac_bridge/audit/log.py` | Records audit entries; the level and the Activity switch come from `configure`. |
+| `AuditLog.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/audit/log.py` | Start with the default settings. |
+| `AuditLog.configure` | `def configure(self, settings: LoggingSettings) -> None` | `custom_components/haac_bridge/audit/log.py` | Take over new settings and set the level of the package logger. |
+| `AuditLog.is_enabled` | `def is_enabled(self, level: int) -> bool` | `custom_components/haac_bridge/audit/log.py` | Return whether a line of this level would be written, so callers can skip building it. |
+| `AuditLog.record` | `def record(self, entry: AuditEntry) -> None` | `custom_components/haac_bridge/audit/log.py` | Write the log line and, if the Activity switch is on, fire the event of the entry. |
 
 ## disabling
 
@@ -369,6 +437,7 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleEntityManager._async_remove` | `def _async_remove(self, schedule_ids: set[str]) -> None` | `custom_components/haac_bridge/schedules/entities.py` | Remove the entities of removed schedules from the registry, which also removes their states. |
 | `haac_bridge.schedules.manager` | `module` | `custom_components/haac_bridge/schedules/manager.py` | ScheduleManager: store, planner and runner together, and the operations of the commands (concept 19.4). |
 | `_parse_version` | `def _parse_version(updated_at: str) -> datetime` | `custom_components/haac_bridge/schedules/manager.py` | Return the version a client sends back, or raise HAB-WS-001 if it is no date and time. |
+| `_summary` | `def _summary(schedule: Schedule) -> dict[str, Any]` | `custom_components/haac_bridge/schedules/manager.py` | Return what the audit log says about a new schedule: action, number of entities, repeat, enabled. |
 | `ScheduleManager` | `class ScheduleManager` | `custom_components/haac_bridge/schedules/manager.py` | Creates, changes, deletes, lists and runs schedules for the commands, as a given user. |
 | `ScheduleManager.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Wire the store, the planner and the runner; call `async_load` and `async_start` next. |
 | `ScheduleManager.async_load` | `async def async_load(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Read the schedules and the run log from storage and report entries that could not be read. |
@@ -388,10 +457,11 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleManager.async_set_enabled` | `async def async_set_enabled(self, schedule_id: str, *, enabled: bool) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Enable or disable a schedule, as its `enabled` switch in HA does (concept 19.5). |
 | `ScheduleManager.async_wipe` | `async def async_wipe(self) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Delete every schedule and the storage file; called when the config entry is removed. |
 | `ScheduleManager.async_delete` | `async def async_delete(self, user: User, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Delete a schedule the user may edit; an unknown id is not an error. |
-| `ScheduleManager.async_run_now` | `async def async_run_now(self, user: User, schedule_id: str) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Start one run of a schedule now, as its owner, without changing the plan. |
+| `ScheduleManager.async_run_now` | `async def async_run_now(self, user: User, schedule_id: str, client: str \| None=None) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Start one run of a schedule now, as its owner, without changing the plan. |
 | `ScheduleManager.async_sweep` | `async def async_sweep(self, owner_id: str \| None=None) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Delete the schedules of users who are gone or not configured, pause those of inactive ones. |
 | `ScheduleManager.async_remove_owner` | `async def async_remove_owner(self, owner_id: str) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Delete every schedule and run log entry of a user, as when the HA user was deleted (concept 19.6.1). |
 | `ScheduleManager.async_remove` | `async def async_remove(self, schedule_ids: list[str]) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Remove schedules, stop their timers and tell subscribers. |
+| `ScheduleManager._audit_change` | `def _audit_change(self, change: str, by: str, schedule: Schedule, **details: Any) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Write a change of a schedule to the audit log (concept 21.3). |
 | `ScheduleManager._remove_runs_of` | `def _remove_runs_of(self, owner_ids: set[str]) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Delete the run log entries of users who are gone or no longer configured (concept 19.11). |
 | `ScheduleManager._require` | `def _require(self, schedule_id: str) -> Schedule` | `custom_components/haac_bridge/schedules/manager.py` | Return the schedule or raise HAB-SCH-003. |
 | `ScheduleManager._require_access` | `def _require_access(user: User, schedule: Schedule) -> None` | `custom_components/haac_bridge/schedules/manager.py` | Allow the owner and admins; anybody else gets HAB-SCH-006. |
@@ -442,6 +512,7 @@ Lists every module, class and function of the integration with signature, file a
 | `_parse_paused` | `def _parse_paused(raw: object) -> Paused \| None` | `custom_components/haac_bridge/schedules/model.py` | Return the stored pause, or None. |
 | `_parse_last_run` | `def _parse_last_run(raw: object) -> LastRun \| None` | `custom_components/haac_bridge/schedules/model.py` | Return the stored last run, or None. |
 | `schedule_from_dict` | `def schedule_from_dict(raw: object) -> Schedule` | `custom_components/haac_bridge/schedules/model.py` | Return the schedule of a stored dict, or raise HAB-SCH-001 if it is damaged. |
+| `RunOrigin` | `class RunOrigin` | `custom_components/haac_bridge/schedules/model.py` | Who started a run: `triggered_by` is the HA user of a manual run, `client` the device name they sent. |
 | `haac_bridge.schedules.planner` | `module` | `custom_components/haac_bridge/schedules/planner.py` | Plans the next run of every schedule and calls the runner when one is due (concept 19.3). |
 | `SchedulePlanner` | `class SchedulePlanner` | `custom_components/haac_bridge/schedules/planner.py` | Keeps one timer per active schedule and re-plans after every run and every time change. |
 | `SchedulePlanner.__init__` | `def __init__(self, hass: HomeAssistant, store: ScheduleStore, triggers: TriggerFactory, on_due: Callable[[str], Awaitable[None]], on_changed: Callable[[str], None]) -> None` | `custom_components/haac_bridge/schedules/planner.py` | Create the planner. |
@@ -527,17 +598,19 @@ Lists every module, class and function of the integration with signature, file a
 | `RunHooks` | `class RunHooks` | `custom_components/haac_bridge/schedules/runner.py` | What the runner asks the manager to do: remove schedules, re-plan one, announce a change. |
 | `ScheduleRunner` | `class ScheduleRunner` | `custom_components/haac_bridge/schedules/runner.py` | Executes schedules one at a time per schedule. |
 | `ScheduleRunner.__init__` | `def __init__(self, hass: HomeAssistant, store: ScheduleStore, hooks: RunHooks, run_log: RunLog) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Keep what a run needs; every run is reported to `run_log` (concept 19.11). |
-| `ScheduleRunner.async_run_in_background` | `def async_run_in_background(self, schedule_id: str, triggered_by: str \| None=None) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Start a run without waiting for it; the result arrives as a schedule change (concept 19.4). |
+| `ScheduleRunner.async_run_in_background` | `def async_run_in_background(self, schedule_id: str, triggered_by: str \| None=None, client: str \| None=None) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Start a run without waiting for it; the result arrives as a schedule change (concept 19.4). |
 | `ScheduleRunner.is_running` | `def is_running(self, schedule_id: str) -> bool` | `custom_components/haac_bridge/schedules/runner.py` | Return True while a run of the schedule is going on (including its wait to retry). |
 | `ScheduleRunner.async_run_deferred` | `def async_run_deferred(self) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Start the runs that came due while the users were not loaded (review finding U2). |
 | `ScheduleRunner.async_cancel_all` | `def async_cancel_all(self) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Cancel the runs started in the background, e.g. one waiting to retry, when HA stops. |
-| `ScheduleRunner.async_run` | `async def async_run(self, schedule_id: str, triggered_by: str \| None=None) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Run a schedule now; a run of the same schedule that is still going on finishes first. |
-| `ScheduleRunner._async_run_locked` | `async def _async_run_locked(self, schedule_id: str, triggered_by: str \| None) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Validate the owner and the exposure, then switch and record the result. |
+| `ScheduleRunner.async_run` | `async def async_run(self, schedule_id: str, triggered_by: str \| None=None, client: str \| None=None) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Run a schedule now; a run of the same schedule that is still going on finishes first. |
+| `ScheduleRunner._async_run_locked` | `async def _async_run_locked(self, schedule_id: str, origin: RunOrigin) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Validate the owner and the exposure, then switch and record the result. |
 | `ScheduleRunner._removes_after_run` | `def _removes_after_run(self, schedule: Schedule, triggered_by: str \| None) -> bool` | `custom_components/haac_bridge/schedules/runner.py` | Return whether this run removes the schedule: the last planned run, or any run of a one-off. |
-| `ScheduleRunner._async_switch_all` | `async def _async_switch_all(self, user: User, schedule: Schedule, targets: list[str], context_user_id: str) -> int` | `custom_components/haac_bridge/schedules/runner.py` | Switch the entities in parallel, the unavailable ones after a short wait; return how many worked. |
-| `ScheduleRunner._async_switch_many` | `async def _async_switch_many(self, user: User, entity_ids: list[str], service: str, context_user_id: str) -> int` | `custom_components/haac_bridge/schedules/runner.py` | Switch the entities at the same time; return how many worked. |
+| `ScheduleRunner._async_switch_all` | `async def _async_switch_all(self, user: User, schedule: Schedule, targets: list[str], origin: RunOrigin) -> int` | `custom_components/haac_bridge/schedules/runner.py` | Switch the entities in parallel, the unavailable ones after a short wait; return how many worked. |
+| `ScheduleRunner._async_switch_many` | `async def _async_switch_many(self, user: User, schedule: Schedule, entity_ids: list[str], origin: RunOrigin) -> int` | `custom_components/haac_bridge/schedules/runner.py` | Switch the entities at the same time; return how many worked. |
 | `ScheduleRunner._async_wait_before_retry` | `async def _async_wait_before_retry(self) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Wait before unavailable entities are tried once more. |
-| `ScheduleRunner._async_switch_one` | `async def _async_switch_one(self, user: User, entity_id: str, service: str, context_user_id: str) -> int` | `custom_components/haac_bridge/schedules/runner.py` | Call the service for one entity, checked against the owner; return 1 if it worked, else 0. |
+| `ScheduleRunner._async_switch_one` | `async def _async_switch_one(self, user: User, schedule: Schedule, entity_id: str, origin: RunOrigin) -> int` | `custom_components/haac_bridge/schedules/runner.py` | Call the service for one entity, checked against the owner; return 1 if it worked, else 0. |
+| `ScheduleRunner._audit_result` | `def _audit_result(self, schedule: Schedule, result: RunResult, done: int, total: int, *, removed: bool) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Write the result of a run to the audit log (concept 21.3). |
+| `ScheduleRunner._audit_not_run` | `def _audit_not_run(self, schedule: Schedule, reason: str) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Write a run that did not take place (missed, or the schedule was paused) to the audit log. |
 | `ScheduleRunner._is_unavailable` | `def _is_unavailable(self, entity_id: str) -> bool` | `custom_components/haac_bridge/schedules/runner.py` | Return True if the entity's state is `unavailable`. |
 | `ScheduleRunner._async_record` | `async def _async_record(self, schedule: Schedule, result: RunResult, triggered_by: str \| None, *, removed: bool) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Write the outcome of a run to the run log and store it on the schedule as it is now. |
 | `ScheduleRunner._log_run` | `def _log_run(self, schedule: Schedule, run: LastRun, triggered_by: str \| None, *, removed: bool=False) -> None` | `custom_components/haac_bridge/schedules/runner.py` | Append a run to the run log with the name and `notify` the schedule has now (concept 19.11). |

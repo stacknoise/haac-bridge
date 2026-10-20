@@ -6,6 +6,7 @@ from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 import voluptuous as vol
 
+from ..audit.client import CLIENT_FIELD
 from ..core.caller import require_user
 from ..core.command import SubscriptionStarted, bridge_command
 from ..core.runtime import get_data
@@ -122,12 +123,17 @@ async def ws_schedules_delete(
     await get_data(hass).schedules.async_delete(require_user(connection), msg["schedule_id"])
 
 
-@bridge_command("haac_bridge/schedules/run_now", {vol.Required("schedule_id"): str})
+@bridge_command(
+    "haac_bridge/schedules/run_now",
+    {vol.Required("schedule_id"): str, vol.Optional("client"): CLIENT_FIELD},
+)
 async def ws_schedules_run_now(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Start one run of a schedule now without changing its plan; the result follows as an event."""
-    await get_data(hass).schedules.async_run_now(require_user(connection), msg["schedule_id"])
+    await get_data(hass).schedules.async_run_now(
+        require_user(connection), msg["schedule_id"], msg.get("client")
+    )
 
 
 @bridge_command("haac_bridge/subscribe_schedules")

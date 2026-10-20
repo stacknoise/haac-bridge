@@ -40,6 +40,12 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 - Schedules need the integration to have a configuration entry. If you configure the bridge in `configuration.yaml` only, it adds the entry by itself. Schedules are saved in `.storage/haac_bridge.schedules`, which a full Home Assistant backup includes.
 - Times are Home Assistant's local time. A time that does not exist on the day the clocks go forward runs at the first minute after the gap; a time that occurs twice runs once.
 
+**Logging and the Activity page**
+- The bridge writes what it does to the Home Assistant log (logger `custom_components.haac_bridge`): every switching action of a user (who, from which device, entity, service, data, result, duration), every schedule run (each switched entity and the result), changes of schedules, deactivated entities, configuration changes and the start of the integration. One line per action in the form `action=call_service user=Anton(1a2b3c4d) source=app client="Pixel 8" entity=switch.garage_socket service=turn_on result=ok ms=42`. Texts typed by users are escaped, so they cannot forge log lines. IP addresses and tokens are never logged.
+- Every switching action through the bridge, successful or failed, also appears on the Home Assistant **Activity** page (logbook), for example *turned on via HAAC app (Pixel 8)* or *turned off by a schedule*, linked to the entity and to the user. Refused calls (not shared, not allowed) are only logged. The Activity page does not show schedule names.
+- The **log level** is `warning` by default, which shows problems only. Set it to `info` to record every action, or to `debug` to log every request as well (noisy). Set it under *Configure → Logging* or in `configuration.yaml`; a value in the YAML wins. The Activity entries can be switched off there too.
+- The bridge keeps no log of its own: the Home Assistant log and the recorder store everything, so the usual retention applies.
+
 **Safety and operations**
 - The caller is always the Home Assistant user behind the access token; the app cannot ask for another user's entities.
 - Stable error codes (`HAB-…`) with plain-language messages, configuration problems and unknown users as *Repairs* issues, and the action `haac_bridge.reload` to re-read the YAML.
@@ -66,6 +72,19 @@ You can configure the users in the Home Assistant UI, in `configuration.yaml`, o
 Changes take effect at once, no restart or reload needed. Advanced or shared setups can still use YAML. If a user is configured in both places, the YAML entry is used and the UI entry for that user is ignored. The UI identifies users by their stable user ID, so renaming a Home Assistant user does not break the entry.
 
 *Export as YAML* in the same menu shows the users configured in the UI as a `haac_bridge:` section, ready to copy into `configuration.yaml` or to keep as a backup (the UI data lives in `.storage/core.config_entries`, which a backup of `configuration.yaml` alone does not contain). *Import from YAML* takes such a section, or just its content, and adds the users; a user who is already configured in the UI is replaced, the others stay. Imported users are named by `user_id`, need at least one `include_*` rule, and must exist in Home Assistant. A bare `haac_bridge:` line in `configuration.yaml` counts as no users, so you can use the UI alone.
+
+### Logging
+
+Under *Configure → Logging* you choose the log level (`debug`, `info`, `warning`, `error`; default `warning`) and whether switching actions appear on the Activity page (default: yes). The same settings can be made in `configuration.yaml`, where they win over the UI:
+
+```yaml
+haac_bridge:
+  logging:
+    level: info        # debug | info | warning | error
+    activity: true     # show switching actions on the Activity page
+```
+
+The level takes effect at once, without a restart. The action log needs `info`; at the default `warning` only problems are logged.
 
 ### In `configuration.yaml`
 

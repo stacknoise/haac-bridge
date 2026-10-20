@@ -12,9 +12,13 @@ from homeassistant.helpers.entityfilter import (
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
+from ..audit.levels import LogLevel
 from ..const import (
+    CONF_ACTIVITY,
     CONF_ENTITY_CONFIG,
     CONF_FILTER,
+    CONF_LEVEL,
+    CONF_LOGGING,
     CONF_NAME,
     CONF_USER_ID,
     CONF_USERNAME,
@@ -63,6 +67,15 @@ USER_SCHEMA = vol.All(
 )
 
 
+LOGGING_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_LEVEL): vol.In([level.value for level in LogLevel]),
+        vol.Optional(CONF_ACTIVITY): cv.boolean,
+    }
+)
+"""The `logging` block: the log level and whether switching actions appear in Activity (concept 21.2)."""
+
+
 def _none_as_empty(section: Any) -> Any:
     """Return an empty section for a bare `haac_bridge:` line, which YAML reads as None."""
     return {} if section is None else section
@@ -74,6 +87,7 @@ SECTION_SCHEMA = vol.All(
         {
             vol.Optional(CONF_ENTITY_CONFIG, default={}): ENTITY_CONFIG_SCHEMA,
             vol.Optional(CONF_USERS, default=[]): vol.All(cv.ensure_list, [USER_SCHEMA]),
+            vol.Optional(CONF_LOGGING, default={}): LOGGING_SCHEMA,
         }
     ),
 )

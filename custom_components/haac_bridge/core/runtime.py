@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util.hass_dict import HassKey
 
+from ..audit.factory import AuditEntryFactory
+from ..audit.levels import LoggingSettings
 from ..const import DOMAIN
 from .error_factory import ErrorFactory
 from .response_factory import ResponseFactory
 
 if TYPE_CHECKING:
+    from ..audit.entry import AuditEntry
     from ..config.schema import UserEntry
     from ..entities.descriptor_factory import DescriptorFactory
     from ..exposure.exposure import Exposure
@@ -48,6 +51,21 @@ class RunLog(Protocol):
         """Append the entry of a finished or missed run."""
 
 
+class AuditLog(Protocol):
+    """The audit log (concept 21); the real log replaces the no-op one."""
+
+    settings: LoggingSettings
+
+    def record(self, entry: AuditEntry) -> None:
+        """Write the entry to the log and, if it has one, fire its Activity event."""
+
+    def is_enabled(self, level: int) -> bool:
+        """Return whether a line of this level would be written."""
+
+    def configure(self, settings: LoggingSettings) -> None:
+        """Take over new settings and set the log level."""
+
+
 class NoDisabledEntities:
     """Stand-in until the store exists: nothing is deactivated."""
 
@@ -72,6 +90,22 @@ class NoDisabledEntities:
         return False
 
 
+class NoAuditLog:
+    """Stand-in until the audit log exists: entries are dropped."""
+
+    settings = LoggingSettings()
+
+    def record(self, entry: AuditEntry) -> None:
+        """Drop the entry."""
+
+    def is_enabled(self, level: int) -> bool:
+        """Return False for every level."""
+        return False
+
+    def configure(self, settings: LoggingSettings) -> None:
+        """Change nothing."""
+
+
 class NoRunLog:
     """Stand-in until the log exists: entries are dropped."""
 
@@ -93,6 +127,9 @@ class HaacBridgeData:
     responses: ResponseFactory = field(default_factory=ResponseFactory)
     disabled: DisabledEntities = field(default_factory=NoDisabledEntities)
     run_log: RunLog = field(default_factory=NoRunLog)
+    audit: AuditLog = field(default_factory=NoAuditLog)
+    audit_entries: AuditEntryFactory = field(default_factory=AuditEntryFactory)
+    yaml_logging: dict[str, Any] = field(default_factory=dict)
     issue_ids: set[str] = field(default_factory=set)
     yaml_entries: list[UserEntry] = field(default_factory=list)
     ui_entries: list[UserEntry] = field(default_factory=list)

@@ -214,9 +214,9 @@ async def test_menu_offers_only_possible_entries(
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
     expected = (
-        ["edit_user", "remove_user", "export_yaml", "import_yaml"]
+        ["edit_user", "remove_user", "export_yaml", "import_yaml", "logging"]
         if configured
-        else ["add_user", "import_yaml"]
+        else ["add_user", "import_yaml", "logging"]
     )
     assert result["menu_options"] == expected
 

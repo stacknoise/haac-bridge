@@ -1,6 +1,7 @@
 {
   "domain": "haac_bridge",
   "name": "HAAC Bridge",
+  "after_dependencies": ["logbook"],
   "codeowners": ["@stacknoise"],
   "config_flow": true,
   "dependencies": ["history", "recorder", "websocket_api"],
