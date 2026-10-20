@@ -475,3 +475,11 @@ def schedule_from_dict(raw: object) -> Schedule:
         notify=parse_notify(raw.get("notify", False)),
         off_reason=parse_off_reason(raw.get("off_reason")),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class RunOrigin:
+    """Who started a run: `triggered_by` is the HA user of a manual run, `client` the device name they sent."""
+
+    triggered_by: str | None = None
+    client: str | None = None

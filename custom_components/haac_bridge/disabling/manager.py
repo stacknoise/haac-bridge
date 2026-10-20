@@ -48,6 +48,11 @@ async def async_set_disabled(
     if await store.async_set(user.id, entity_id, disabled):
         switched = await _async_follow_in_schedules(hass, user.id, entity_id)
         async_dispatcher_send(hass, SIGNAL_DISABLED_CHANGED, user.id)
+        data.audit.record(
+            data.audit_entries.entity_disabled(
+                user=user, entity_id=entity_id, disabled=disabled, schedules=len(switched)
+            )
+        )
     return {"disabled": disabled_list(hass, user.id), "schedules_changed": switched}
 
 

@@ -11,6 +11,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
+from ..audit.factory import user_label
 from ..const import (
     MAX_SCHEDULES_PER_USER,
     RUN_NOW_COOLDOWN,
@@ -55,6 +56,16 @@ def _parse_version(updated_at: str) -> datetime:
     if version is None:
         raise RequestError(ErrorCode.WS_INVALID_REQUEST)
     return version
+
+
+def _summary(schedule: Schedule) -> dict[str, Any]:
+    """Return what the audit log says about a new schedule: action, number of entities, repeat, enabled."""
+    return {
+        "action": schedule.action.value,
+        "entities": len(schedule.entities),
+        "repeat": schedule.repeat.freq.value,
+        "enabled": schedule.enabled,
+    }
 
 
 class ScheduleManager:
@@ -201,6 +212,7 @@ class ScheduleManager:
         await self.store.async_add(schedule)
         await self.planner.async_plan(schedule.id)
         self.notify(schedule.id)
+        self._audit_change("created", user_label(user), schedule, **_summary(schedule))
         return schedule
 
     async def async_update(
@@ -224,6 +236,7 @@ class ScheduleManager:
         await self.store.async_replace(updated)
         await self.planner.async_plan(updated.id)
         self.notify(updated.id)
+        self._audit_change("updated", user_label(user), updated, fields=",".join(sorted(changes)))
         return updated
 
     async def async_set_enabled(self, schedule_id: str, *, enabled: bool) -> None:
@@ -243,6 +256,7 @@ class ScheduleManager:
         await self.store.async_replace(updated)
         await self.planner.async_plan(schedule_id)
         self.notify(schedule_id)
+        self._audit_change("enabled" if enabled else "disabled", "ha", updated)
 
     async def async_wipe(self) -> None:
         """Delete every schedule and the storage file; called when the config entry is removed."""
@@ -261,8 +275,9 @@ class ScheduleManager:
             return
         self._require_access(user, schedule)
         await self.async_remove([schedule_id])
+        self._audit_change("deleted", user_label(user), schedule)
 
-    async def async_run_now(self, user: User, schedule_id: str) -> None:
+    async def async_run_now(self, user: User, schedule_id: str, client: str | None = None) -> None:
         """Start one run of a schedule now, as its owner, without changing the plan.
 
         Returns at once; the result arrives with `schedules_changed` like any other run (concept 19.4).
@@ -278,7 +293,7 @@ class ScheduleManager:
         ):
             raise ScheduleError(ErrorCode.SCH_BUSY)
         self._manual_runs[schedule_id] = now
-        self.runner.async_run_in_background(schedule_id, user.id)
+        self.runner.async_run_in_background(schedule_id, user.id, client)
 
     async def async_sweep(self, owner_id: str | None = None) -> None:
         """Delete the schedules of users who are gone or not configured, pause those of inactive ones.
@@ -332,6 +347,15 @@ class ScheduleManager:
             await self.planner.async_plan(schedule.id)
         if removed:
             self.notify(*(schedule.id for schedule in removed))
+
+    def _audit_change(self, change: str, by: str, schedule: Schedule, **details: Any) -> None:
+        """Write a change of a schedule to the audit log (concept 21.3)."""
+        data = get_data(self._hass)
+        data.audit.record(
+            data.audit_entries.schedule_changed(
+                change=change, by=by, schedule=schedule, details=details
+            )
+        )
 
     def _remove_runs_of(self, owner_ids: set[str]) -> None:
         """Delete the run log entries of users who are gone or no longer configured (concept 19.11)."""

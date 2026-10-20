@@ -11,7 +11,7 @@ API_VERSION: Final = 1
 SUPPORTED_DOMAINS: Final = ("binary_sensor", "climate", "sensor", "switch")
 """Entity domains returned in v1, regardless of the user's filter (10.2)."""
 
-FEATURES: Final = ("schedules", "entity_disable", "schedule_repeat", "schedule_runs")
+FEATURES: Final = ("schedules", "entity_disable", "schedule_repeat", "schedule_runs", "client_info")
 """Optional features this bridge offers; `haac_bridge/info` reports them to the app (11.2, 11.4)."""
 
 CONF_USERS: Final = "users"
@@ -134,3 +134,23 @@ RUN_LOG_RETENTION: Final = timedelta(days=30)
 
 MAX_RUN_LOG_PER_OWNER: Final = 200
 """Most run log entries kept per owner; the oldest go first (concept 19.11)."""
+
+LOGGER_NAME: Final = f"custom_components.{DOMAIN}"
+"""Name of the package logger whose level the bridge sets; every module logger inherits it (concept 21.2)."""
+
+CONF_LOGGING: Final = "logging"
+CONF_LEVEL: Final = "level"
+CONF_ACTIVITY: Final = "activity"
+"""Keys of the `logging:` block in the YAML and of the same block in the entry options (concept 21.2)."""
+
+DEFAULT_LOG_LEVEL: Final = "warning"
+"""Log level while nothing is configured (concept 21.2)."""
+
+EVENT_ACTION: Final = f"{DOMAIN}_action"
+"""Event fired once per carried-out switching action; the logbook platform describes it (concept 21.4)."""
+
+APP_CLIENT_ID: Final = "https://stacknoise.com/haac/"
+"""`client_id` of the HAAC app's refresh tokens (concept 5.1); it marks a call as coming from the app."""
+
+MAX_CLIENT_LENGTH: Final = 40
+"""Longest device name the app may send in `client` (concept 21.5)."""

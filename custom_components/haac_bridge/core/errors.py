@@ -7,7 +7,7 @@ reads it to generate `docs/error-codes.md`.
 """
 
 from enum import StrEnum
-from typing import Final
+from typing import Final, Self
 
 from homeassistant.exceptions import HomeAssistantError
 
@@ -137,11 +137,17 @@ class HaacBridgeError(HomeAssistantError):
     ) -> None:
         """Create the error with its code and optional translation placeholders."""
         self.code = code or self.default_code
+        self.details: dict[str, str] = {}
         super().__init__(
             translation_domain=DOMAIN,
             translation_key=self.code.translation_key,
             translation_placeholders=placeholders,
         )
+
+    def with_details(self, **details: str | None) -> Self:
+        """Add facts (entity, service, device name) for the single log line of this error (concept 21.3)."""
+        self.details.update({key: value for key, value in details.items() if value is not None})
+        return self
 
 
 class ConfigError(HaacBridgeError):

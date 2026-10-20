@@ -3,6 +3,7 @@
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 import logging
+import time
 from typing import Any
 
 from homeassistant.components import websocket_api
@@ -11,7 +12,8 @@ from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
-from .errors import ErrorCode
+from ..audit.log import format_value
+from .errors import ErrorCode, HaacBridgeError
 from .runtime import get_data
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,33 +78,57 @@ def _wrap(command: BridgeCommand) -> websocket_api.WebSocketCommandHandler:
     ) -> None:
         """Run the command and send exactly one reply (plus the first event of a subscription)."""
         data = get_data(hass)
+        started = time.monotonic()
         try:
             payload = await command.handler(hass, connection, request_schema(msg))
         except Exception as err:  # noqa: BLE001 - the only broad catch allowed (18.3)
             error = data.errors.from_exception(err)
-            _log_error(command.type, connection, error.code, err)
+            _log_error(command.type, connection, error, err)
             connection.send_message(data.responses.error(msg["id"], error))
-            return
-        if isinstance(payload, SubscriptionStarted):
-            connection.send_message(data.responses.result(msg["id"], None))
-            if payload.initial is not None:
-                connection.send_message(data.responses.event(msg["id"], payload.initial))
-            return
-        connection.send_message(data.responses.result(msg["id"], payload))
+        else:
+            if isinstance(payload, SubscriptionStarted):
+                connection.send_message(data.responses.result(msg["id"], None))
+                if payload.initial is not None:
+                    connection.send_message(data.responses.event(msg["id"], payload.initial))
+            else:
+                connection.send_message(data.responses.result(msg["id"], payload))
+        finally:
+            _record_command(hass, command.type, connection, started)
 
     return _handle
+
+
+def _record_command(
+    hass: HomeAssistant, command_type: str, connection: ActiveConnection, started: float
+) -> None:
+    """Write the debug line of a command, if the level asks for it (concept 21.3)."""
+    data = get_data(hass)
+    if not data.audit.is_enabled(logging.DEBUG):
+        return
+    user_id = connection.user.id if connection.user else None
+    duration_ms = round((time.monotonic() - started) * 1000)
+    data.audit.record(
+        data.audit_entries.command(
+            command_type=command_type, user_id=user_id, duration_ms=duration_ms
+        )
+    )
 
 
 def _log_error(
     command_type: str,
     connection: ActiveConnection,
-    code: ErrorCode,
+    error: HaacBridgeError,
     err: Exception,
 ) -> None:
-    """Log a failed command once with its HAB code; tracebacks only for unexpected errors."""
+    """Log a failed command once with its HAB code; tracebacks only for unexpected errors.
+
+    Facts the raiser added to the error (entity, service, device name) follow the user (concept 21.3).
+    """
+    code = error.code
     user_id = connection.user.id if connection.user else None
     if code is ErrorCode.INT_UNEXPECTED:
         _LOGGER.error("%s in %s (user %s)", code, command_type, user_id, exc_info=err)
-    else:
-        cause = f" (cause: {err.__cause__!r})" if err.__cause__ else ""
-        _LOGGER.warning("%s in %s (user %s): %s%s", code, command_type, user_id, err, cause)
+        return
+    cause = f" (cause: {err.__cause__!r})" if err.__cause__ else ""
+    details = "".join(f" {key}={format_value(value)}" for key, value in error.details.items())
+    _LOGGER.warning("%s in %s (user %s): %s%s%s", code, command_type, user_id, err, cause, details)

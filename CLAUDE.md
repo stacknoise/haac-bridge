@@ -23,7 +23,7 @@ scripts/code_index.py     # generator for the two files above
 custom_components/haac_bridge/
   __init__.py  config_flow.py  manifest.json  const.py  services.yaml
   translations/en.json    # user texts of exceptions, issues and the config/options flow
-  core/  config/  exposure/  entities/  services/  history/  areas/  instance/  schedules/  api/   # modules by topic (concept 18.1)
+  core/  config/  exposure/  entities/  services/  history/  areas/  instance/  schedules/  audit/  api/   # modules by topic (concept 18.1)
 tests/                    # same topic structure
 .github/workflows/        # validate.yml, tests.yml, release.yml (concept 16.5)
 LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
@@ -64,6 +64,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 - Entities of the platform `haac_bridge` are never exposed (`exposure/own_entities.py`).
 - Every state that reaches the app (list, events, history) goes through `entities/attributes.py` (`shareable_state`, `compressed_state`), so hidden attributes are never sent (11.3).
 - `Exposure` caches its answers. A new input to an exposure decision needs an `async_invalidate_*` call where that input changes (`_async_follow_exposure_inputs` in `__init__.py`).
+- Actions (service calls, schedule runs, changes) are logged and shown in Activity only through `AuditLog.record(...)` with an entry from `AuditEntryFactory` (concept 21); user-typed values go through `format_value`; no IP addresses or tokens in logs. Default log level `warning`; the action log needs `info`.
 - A breaking change of any `haac_bridge/*` command raises `api_version` and the major version (16.4).
 
 ## Conventions

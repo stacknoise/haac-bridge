@@ -1,7 +1,7 @@
 """ServiceCallFactory: validated service calls for haac_bridge/call_service (concept 10.3, 11.4, 18.2)."""
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from homeassistant.auth.models import User
@@ -25,6 +25,11 @@ class ValidatedServiceCall:
     data: dict[str, Any]
     entity_id: str
     user_id: str
+    context: Context
+
+    def as_user(self, user_id: str) -> ValidatedServiceCall:
+        """Return the same call in a new context of another user, as for a manual run of a schedule."""
+        return replace(self, context=Context(user_id=user_id))
 
 
 class ServiceCallFactory:
@@ -47,6 +52,8 @@ class ServiceCallFactory:
         An entity the user deactivated (concept 7.5) is refused with ENT-002 before the call is built; a
         schedule run goes through here too, so it never switches a deactivated entity.
         Only services in ALLOWED_SERVICES are carried out, and only with their listed data keys.
+        The call gets its own `Context` of the user; the same context goes into the Activity event
+        (concept 21.4).
         """
         if not exposure.is_exposed(user, entity_id):
             raise InvalidServiceError(ErrorCode.SVC_NOT_ALLOWED)
@@ -60,18 +67,15 @@ class ServiceCallFactory:
             raise InvalidServiceError(ErrorCode.SVC_NOT_AVAILABLE)
         if not data.keys() <= allowed_keys:
             raise RequestError(ErrorCode.WS_INVALID_REQUEST)
-        return ValidatedServiceCall(domain, service, dict(data), entity_id, user.id)
+        context = Context(user_id=user.id)
+        return ValidatedServiceCall(domain, service, dict(data), entity_id, user.id, context)
 
 
-async def async_execute(
-    hass: HomeAssistant, call: ValidatedServiceCall, *, context_user_id: str | None = None
-) -> None:
-    """Run the call as the calling user, targeting only its entity; map HA errors to HAB codes.
+async def async_execute(hass: HomeAssistant, call: ValidatedServiceCall) -> None:
+    """Run the call in its own context, targeting only its entity; map HA errors to HAB codes.
 
     A call that takes longer than SERVICE_TIMEOUT seconds is given up and counts as failed, so a
     hanging integration never blocks the command or a schedule run (review finding U3).
-
-    `context_user_id` replaces the calling user in the context, for a manual run of a schedule.
     """
     try:
         async with asyncio.timeout(SERVICE_TIMEOUT):
@@ -80,7 +84,7 @@ async def async_execute(
                 call.service,
                 call.data,
                 blocking=True,
-                context=Context(user_id=context_user_id or call.user_id),
+                context=call.context,
                 target={ATTR_ENTITY_ID: call.entity_id},
             )
     except TimeoutError as err:

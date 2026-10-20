@@ -1,5 +1,8 @@
 """HAAC Bridge: per-user entity exposure for the HA Android Client (concept 10)."""
 
+from collections.abc import Mapping
+from typing import Any
+
 from homeassistant.auth import EVENT_USER_ADDED, EVENT_USER_REMOVED, EVENT_USER_UPDATED
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, EVENT_STATE_CHANGED, Platform
@@ -20,13 +23,19 @@ from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
 from .api import COMMANDS
+from .audit.factory import AuditEntryFactory
+from .audit.levels import merge_settings
+from .audit.log import AuditLog
 from .config.repairs import async_check_users, async_report_invalid_config
 from .config.schema import CONFIG_SCHEMA, parse_users
 from .config.ui_users import parse_ui_users, users_of
 from .const import (
+    API_VERSION,
+    CONF_LOGGING,
     CONF_USER_ID,
     CONF_USERS,
     DOMAIN,
+    FEATURES,
     SERVICE_RELOAD,
     SIGNAL_EXPOSURE_CHANGED,
     SUPPORTED_DOMAINS,
@@ -56,6 +65,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     integration = await async_get_integration(hass, DOMAIN)
     filters = FilterFactory()
     entries = parse_users(config)
+    yaml_logging = _logging_of(config)
     disabled = DisabledStore(hass)
     await disabled.async_load()
     schedules = ScheduleManager(hass)
@@ -69,7 +79,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         disabled=disabled,
         run_log=schedules.run_log,
         yaml_entries=entries,
+        yaml_logging=yaml_logging,
+        audit=AuditLog(hass),
+        audit_entries=AuditEntryFactory(),
     )
+    data.audit.configure(merge_settings(yaml_logging, None))
     hass.data[DATA_KEY] = data
     await async_check_users(hass, data.issue_ids, entries, entries)
     async_register_commands(hass, COMMANDS)
@@ -87,6 +101,25 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async_register_admin_service(hass, DOMAIN, SERVICE_RELOAD, _async_reload)
     return True
+
+
+def _logging_of(config: ConfigType) -> dict[str, Any]:
+    """Return the `logging` block of a validated configuration; empty if the section is missing."""
+    section: dict[str, Any] = config.get(DOMAIN) or {}
+    return dict(section.get(CONF_LOGGING) or {})
+
+
+def _async_apply_logging(hass: HomeAssistant, options: Mapping[str, Any] | None) -> None:
+    """Apply the log level and the Activity switch from the YAML block and the entry options (concept 21.2)."""
+    data = get_data(hass)
+    settings = merge_settings(data.yaml_logging, (options or {}).get(CONF_LOGGING))
+    if settings != data.audit.settings:
+        data.audit.record(
+            data.audit_entries.config_changed(
+                what="logging", level=settings.level.value, activity=settings.activity
+            )
+        )
+    data.audit.configure(settings)
 
 
 async def _async_start_schedules(hass: HomeAssistant, schedules: ScheduleManager) -> None:
@@ -180,7 +213,15 @@ async def async_reload(hass: HomeAssistant) -> None:
         async_report_invalid_config(hass, data.issue_ids)
         raise ConfigError(ErrorCode.CFG_INVALID)
     data.yaml_entries = parse_users(config)
+    data.yaml_logging = _logging_of(config)
+    entry = next(iter(hass.config_entries.async_entries(DOMAIN)), None)
+    _async_apply_logging(hass, entry.options if entry else None)
     await _async_apply(hass)
+    data.audit.record(
+        data.audit_entries.config_changed(
+            what="reload", users=len(data.yaml_entries) + len(data.ui_entries)
+        )
+    )
 
 
 async def _async_apply(hass: HomeAssistant, *, sweep: bool = True) -> None:
@@ -203,6 +244,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaacBridgeConfigEntry) -
     """Take over the UI users, follow option changes and create the entities of the schedules."""
     data = get_data(hass)
     data.ui_entries = parse_ui_users(entry.options)
+    _async_apply_logging(hass, entry.options)
     data.schedules.users_ready = True
     await _async_apply(hass)
     entry.runtime_data = ScheduleEntityManager(hass, data.schedules, entry)
@@ -210,13 +252,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaacBridgeConfigEntry) -
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     data.schedules.runner.async_run_deferred()
+    data.audit.record(
+        data.audit_entries.startup(
+            version=data.version,
+            api_version=API_VERSION,
+            features=",".join(FEATURES),
+            users=len(data.yaml_entries) + len(data.ui_entries),
+            schedules=len(data.schedules.store.schedules),
+        )
+    )
     return True
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Apply changed options of the entry without reloading the integration."""
-    get_data(hass).ui_entries = parse_ui_users(entry.options)
+    data = get_data(hass)
+    data.ui_entries = parse_ui_users(entry.options)
+    _async_apply_logging(hass, entry.options)
     await _async_apply(hass)
+    data.audit.record(data.audit_entries.config_changed(what="options", users=len(data.ui_entries)))
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: HaacBridgeConfigEntry) -> bool:

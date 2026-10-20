@@ -24,10 +24,20 @@ from homeassistant.helpers.selector import (
 )
 import voluptuous as vol
 
+from .audit.levels import LogLevel, merge_settings, yaml_keys
 from .config.schema import valid_glob
 from .config.ui_users import FILTER_KEYS, INCLUDE_KEYS, user_options, users_of
 from .config.ui_yaml import export_users, import_users
-from .const import CONF_NAMES, CONF_USER_ID, CONF_USERS, DOMAIN, SUPPORTED_DOMAINS
+from .const import (
+    CONF_ACTIVITY,
+    CONF_LEVEL,
+    CONF_LOGGING,
+    CONF_NAMES,
+    CONF_USER_ID,
+    CONF_USERS,
+    DOMAIN,
+    SUPPORTED_DOMAINS,
+)
 from .core.runtime import get_data
 
 _DOMAIN_SELECTOR = SelectSelector(
@@ -57,6 +67,7 @@ MENU_EDIT = "edit_user"
 MENU_REMOVE = "remove_user"
 MENU_EXPORT = "export_yaml"
 MENU_IMPORT = "import_yaml"
+MENU_LOGGING = "logging"
 CONF_YAML = "yaml"
 INACTIVE_LABEL_SUFFIX = " (deactivated)"
 
@@ -99,7 +110,41 @@ class HaacBridgeOptionsFlow(OptionsFlow):
         options = [MENU_ADD] if await self._async_free_users() else []
         if users_of(self.config_entry.options):
             options += [MENU_EDIT, MENU_REMOVE, MENU_EXPORT]
-        return self.async_show_menu(step_id="init", menu_options=[*options, MENU_IMPORT])
+        return self.async_show_menu(
+            step_id="init", menu_options=[*options, MENU_IMPORT, MENU_LOGGING]
+        )
+
+    async def async_step_logging(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the log level and whether switching actions appear in Activity (concept 21.2).
+
+        A value the YAML `logging` block sets wins; the form names those values.
+        """
+        data = get_data(self.hass)
+        if user_input is not None:
+            return self.async_create_entry(
+                data={**self.config_entry.options, CONF_LOGGING: user_input}
+            )
+        current = merge_settings({}, self.config_entry.options.get(CONF_LOGGING))
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_LEVEL, default=current.level.value): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[level.value for level in LogLevel],
+                        translation_key=CONF_LEVEL,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Required(CONF_ACTIVITY, default=current.activity): bool,
+            }
+        )
+        fixed = sorted(yaml_keys(data.yaml_logging))
+        return self.async_show_form(
+            step_id=MENU_LOGGING,
+            data_schema=schema,
+            description_placeholders={"yaml": ", ".join(fixed) if fixed else "-"},
+        )
 
     async def async_step_export_yaml(
         self, user_input: dict[str, Any] | None = None
@@ -130,7 +175,7 @@ class HaacBridgeOptionsFlow(OptionsFlow):
                     for r in users_of(self.config_entry.options)
                     if r[CONF_USER_ID] not in imported
                 ]
-                return self.async_create_entry(data={CONF_USERS: [*others, *imported.values()]})
+                return self._save_users([*others, *imported.values()])
             errors["base"] = error
         schema = vol.Schema(
             {
@@ -214,7 +259,7 @@ class HaacBridgeOptionsFlow(OptionsFlow):
             for record in users_of(self.config_entry.options)
             if record[CONF_USER_ID] != user_id
         ]
-        return self.async_create_entry(data={CONF_USERS: remaining})
+        return self._save_users(remaining)
 
     async def async_step_filter(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Choose which entities the user may see: domains, entities and wildcards to include or exclude."""
@@ -275,7 +320,11 @@ class HaacBridgeOptionsFlow(OptionsFlow):
         others = [
             r for r in users_of(self.config_entry.options) if r[CONF_USER_ID] != self._user_id
         ]
-        return self.async_create_entry(data={CONF_USERS: [*others, record]})
+        return self._save_users([*others, record])
+
+    def _save_users(self, records: list[dict[str, Any]]) -> ConfigFlowResult:
+        """Save the user records and keep the other options, such as the logging settings."""
+        return self.async_create_entry(data={**self.config_entry.options, CONF_USERS: records})
 
     def _record(self, user_id: str | None) -> dict[str, Any]:
         """Return the stored record of a user, or an empty one."""
