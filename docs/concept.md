@@ -1275,6 +1275,72 @@ The launcher icon shows a white house outline with a 2×2 tile grid, one tile li
 - The themed layer is the same motif as an opaque single-colour shape: the house outline, the lit tile filled and the other three as outlines.
 - The icon is used unchanged for both the Play and the sideload flavor.
 
+### 15.7 Tablets (portrait and landscape)
+
+Designed in October 2026 in the Salbei style, light and dark (`docs/mockups/png/T-01-*.png` to `T-09-*.png`; interactive source: `docs/mockups/haac-tablet-mockups.html`). Drawn at 1280 × 800 dp (landscape) and 800 × 1280 dp (portrait). The texts are German sample data; UI strings follow 15.1. This is a layout concept only: behaviour, data and the bridge API do not change.
+
+**Decisions.** Smartphones (window width below 600 dp) get no landscape mode and stay in portrait; only tablets rotate. The navigation is a narrow rail in both tablet classes, not a drawer. The place tree exists only in landscape. Tile sizes stay as in 7.2. A layout with two instances side by side is not planned. Real screenshots replace the mockups once the room screen is built.
+
+**Window size classes.** The layout follows the window width (`currentWindowAdaptiveInfo()`, Material 3 Adaptive), not the device type, so split screen and free-form windows work the same way. The class is read once in `MainScaffold` and passed down (`HaacWindowClass` in `:core:common`).
+
+| Class | Width | Typical device | Navigation | Layout |
+| --- | --- | --- | --- | --- |
+| Compact | below 600 dp | Phone, portrait | Bottom bar (unchanged) | One pane, grid with 2 columns |
+| Medium | 600 to 839 dp | Tablet in portrait, 8" tablet in landscape | Rail | One pane plus modal side sheet, grid with 3 to 4 columns |
+| Expanded | 840 dp and wider | Tablet in landscape | Rail | Two to three panes, grid with 4 to 6 columns |
+
+**Rules for all screens**
+
+1. Lists and details sit side by side from Expanded. In Medium the detail opens as a modal side sheet from the right (400 dp; 480 dp for editors). In Compact it stays a screen of its own.
+2. Form bottom sheets (time, date, switch guard, tile size) become centred dialogs, 560 dp wide, in Medium and Expanded. Menus stay popups at their trigger. The speed dial of M-02 becomes a popup at the add button.
+3. Content without a second pane is at most 640 dp wide and centred. The tile grid fills the width.
+4. Tiles keep their size (about 168 dp wide, 120 dp high). Extra width adds columns: `columns = max(2, floor((width + 14) / (168 + 14)))`. The sizes 1×1, 2×1 and 1×2 keep their cell counts (7.2). The layout stores only `sortOrder` and `tileSize`, so the column count may differ per device without a migration.
+5. Tokens, shapes and type stay as in 15.2. New are only the paddings: 24 dp screen margin from Medium, 28 dp between panes.
+6. Touch targets are at least 48 dp. With a keyboard or mouse, tab order, arrow keys in the grid and right click as long press also work.
+7. Rotating changes only the window class. Selection, scroll position and an open detail survive it (ViewModels and `SavedStateHandle`; no `configChanges`).
+
+**Navigation.** The rail is 80 dp wide, `navBackground` with a 1 dp border `navBorder` on its right edge. The active item has an accent label and a 3 × 24 dp accent bar on its left edge (the bottom bar uses the top edge). The head of the rail holds the instance switcher (a circle in the instance accent colour with its initial, 4.4); Rooms, Places and Schedules follow (Schedules only with the bridge feature `schedules`); Settings sits at the bottom. The notification bell and the screen actions stay in the screen header. Back closes a detail first and then changes the destination.
+
+**Landscape (Expanded)**
+
+| Screen | Layout | Mockup |
+| --- | --- | --- |
+| Rooms (M-05) | Rail · place tree 264 dp (home, levels, rooms with tile count; replaces the breadcrumb menu and the room chips) · grid with 5 columns at 1280 dp. | T-01 |
+| Tile details (8.1) | *Details* opens a fixed pane of 380 dp on the right; the grid shrinks to 3 columns. Controls, target value and history stay in the pane. | T-02 |
+| Places (M-02, M-03) | List with filter chips (420 dp) and the form on the right. Without a selection the right side shows an empty state. | T-05 |
+| Schedules (M-10 to M-18, M-22 to M-25) | List with *Next up* on the left, detail or editor on the right; time and date open as dialogs. | T-06 |
+| Edit layout (M-06, M-07) | The grid has the same column count as the room view, so drag geometry stays shared; the list (M-07) is permanently on the right and the Grid/List switch is dropped. | T-08 |
+| Settings | Categories on the left, content (at most 640 dp) on the right. | T-09 |
+| Notifications (M-09, M-26) | List on the left, error detail or run entry on the right instead of a sheet. | |
+| Sign in (M-01), lock screen | Two columns: the large greeting on the left, a card of 480 dp on the right. | |
+| Add entities (M-04, M-30) | Centred dialog of 720 × 640 dp with tabs and filter; the selection summary is the footer. | |
+
+Below 480 dp window height (small split-screen or free-form windows only; phones do not rotate) the place tree is dropped, the room chips return and the rail shows icons only.
+
+**Portrait (Medium)**
+
+| Screen | Layout | Mockup |
+| --- | --- | --- |
+| Rooms | Rail · content of 720 dp. Breadcrumb menu and room chips as on the phone; grid with 4 columns (3 at 600 dp). | T-03 |
+| Tile details | Modal side sheet of 400 dp with scrim; the grid stays unchanged behind it. | T-04 |
+| Places | One list of 640 dp, centred; the form opens as a side sheet of 480 dp. | |
+| Schedules | One list of 640 dp, centred; detail and editor as a side sheet of 480 dp, time and date as dialogs. | T-07 |
+| Edit layout | Grid with 4 columns; Grid/List stays a switch as on the phone. | |
+| Settings, notifications, sign in | One column of 640 dp, centred; sign in is a single card of 480 dp; error details as a side sheet. | |
+
+Between portrait and landscape most tablets cross 840 dp. Rooms, Places and Schedules then switch between side sheet and fixed pane; an open detail stays open.
+
+**Implementation notes** (work packages TAB-1 to TAB-6)
+
+- `GridColumns` (7.2) becomes a function of the width; `packGrid` and the drag geometry of the room grid and the edit layout take the column count as a parameter.
+- The manifest drops `screenOrientation="portrait"`; the activity keeps windows below 600 dp in portrait with `requestedOrientation`.
+- Navigation rail, `ListDetailPaneScaffold` and `SupportingPaneScaffold` come from `androidx.compose.material3.adaptive` (Apache-2.0, version only in `gradle/libs.versions.toml`). One shared sheet component in `:core:common` shows a bottom sheet, dialog or side sheet depending on the class.
+- Tests: unit tests for the column function and `packGrid` with 2, 4 and 6 columns; screenshot tests of the key screens at 411, 800 and 1280 dp, light and dark; a Compose test that rotating keeps the selection.
+
+![T-01 Rooms, landscape](mockups/png/T-01-rooms-landscape.png) ![T-02 Tile details, landscape](mockups/png/T-02-rooms-detail-landscape.png) ![T-03 Rooms, portrait](mockups/png/T-03-rooms-portrait.png) ![T-04 Tile details, portrait](mockups/png/T-04-rooms-sheet-portrait.png) ![T-05 Places, landscape](mockups/png/T-05-places-landscape.png)
+
+![T-06 Schedules, landscape](mockups/png/T-06-schedules-landscape.png) ![T-07 Schedules, portrait](mockups/png/T-07-schedules-portrait.png) ![T-08 Edit layout, landscape](mockups/png/T-08-edit-layout-landscape.png) ![T-09 Settings, landscape](mockups/png/T-09-settings-landscape.png)
+
 ## 16. Source code management (GitHub)
 
 The code lives in two repositories under the GitHub account **stacknoise**: one for the Android app, one for the HACS integration. They are versioned and released independently and stay compatible through the bridge `api_version` (11.4).
