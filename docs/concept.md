@@ -376,7 +376,7 @@ The app only ever sees entities that the HAAC Bridge exposes to the logged-in HA
 - Remove via swipe or long-press → *Remove from room*. This only deletes the local assignment; nothing changes in HA.
 - Entities can be reordered within a room (drag-and-drop in edit mode).
 
-**Tile sizes and arrangement (M-05 to M-07).** Each assignment has a tile size: 1×1 (default for switches and sensors), 2×1, or 2×2 (default for climate). The room grid has two columns and places tiles in `sortOrder`, filling gaps densely: each tile takes the first free spot, row by row, where it fits. As in the mockups, 1×1 is one column and one row, 2×1 is both columns and one row, and 2×2 is one column and two rows (the climate tile of M-05); the database stores them as `SMALL`, `WIDE` and `LARGE`. Order and size are changed in the edit layout (drag and drop) or in the list arrange mode.
+**Tile sizes and arrangement (M-05 to M-07).** Each assignment has a tile size: 1×1 (default for switches and sensors), 2×1, or 2×2 (default for climate). The room grid has two columns on a phone and more on a tablet (15.7) and places tiles in `sortOrder`, filling gaps densely: each tile takes the first free spot, row by row, where it fits. As in the mockups, 1×1 is one column and one row, 2×1 is two columns and one row, and 2×2 is one column and two rows (the climate tile of M-05); the database stores them as `SMALL`, `WIDE` and `LARGE`. Order and size are changed in the edit layout (drag and drop) or in the list arrange mode.
 
 ### 7.3 Local display names
 
@@ -1294,7 +1294,7 @@ Designed in October 2026 in the Salbei style, light and dark (`docs/mockups/png/
 1. Lists and details sit side by side from Expanded. In Medium the detail opens as a modal side sheet from the right (400 dp; 480 dp for editors). In Compact it stays a screen of its own.
 2. Form bottom sheets (time, date, switch guard, tile size) become centred dialogs, 560 dp wide, in Medium and Expanded. Menus stay popups at their trigger. The speed dial of M-02 becomes a popup at the add button.
 3. Content without a second pane is at most 640 dp wide and centred. The tile grid fills the width.
-4. Tiles keep their size (about 168 dp wide, 120 dp high). Extra width adds columns: `columns = max(2, floor((width + 14) / (168 + 14)))`. The sizes 1×1, 2×1 and 1×2 keep their cell counts (7.2). The layout stores only `sortOrder` and `tileSize`, so the column count may differ per device without a migration.
+4. Tiles keep their height (168 dp) and get at least 152 dp of width. Extra width adds columns: `columns = max(2, floor((width + 14) / (152 + 14)))`. The sizes 1×1, 2×1 and 1×2 keep their cell counts (7.2). The layout stores only `sortOrder` and `tileSize`, so the column count may differ per device without a migration.
 5. Tokens, shapes and type stay as in 15.2. New are only the paddings: 24 dp screen margin from Medium, 28 dp between panes.
 6. Touch targets are at least 48 dp. With a keyboard or mouse, tab order, arrow keys in the grid and right click as long press also work.
 7. Rotating changes only the window class. Selection, scroll position and an open detail survive it (ViewModels and `SavedStateHandle`; no `configChanges`).
