@@ -1,5 +1,6 @@
 """Config flow and options flow: set up HAAC Bridge and choose per user what the app may see (concept 10.2)."""
 
+from collections import Counter
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
@@ -283,7 +284,7 @@ class HaacBridgeOptionsFlow(OptionsFlow):
     async def async_step_names(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Give the explicitly included entities display names for the app; empty keeps the Home Assistant name."""
         entity_ids = sorted(self._rules.get(CONF_INCLUDE_ENTITIES, []))
-        labels = {self._names_label(entity_id): entity_id for entity_id in entity_ids}
+        labels = self._names_labels(entity_ids)
         if user_input is None and entity_ids:
             known = self._record(self._user_id).get(CONF_NAMES, {})
             schema = vol.Schema(
@@ -292,7 +293,11 @@ class HaacBridgeOptionsFlow(OptionsFlow):
                     for label, entity_id in labels.items()
                 }
             )
-            return self.async_show_form(step_id="names", data_schema=schema)
+            return self.async_show_form(
+                step_id="names",
+                data_schema=schema,
+                description_placeholders={"entities": _entity_list(labels)},
+            )
         names = {
             labels[label]: name.strip()
             for label, name in (user_input or {}).items()
@@ -300,11 +305,21 @@ class HaacBridgeOptionsFlow(OptionsFlow):
         }
         return await self._async_save(names)
 
-    def _names_label(self, entity_id: str) -> str:
-        """Return the form label of an entity: its Home Assistant friendly name with the entity_id in brackets."""
-        state = self.hass.states.get(entity_id)
-        friendly = state.name if state else None
-        return f"{friendly} ({entity_id})" if friendly and friendly != entity_id else entity_id
+    def _names_labels(self, entity_ids: list[str]) -> dict[str, str]:
+        """Return the form labels of the entities: the short Home Assistant name, the entity_id if it is missing or not unique.
+
+        The long entity_id stays out of the label because a phone screen wraps it over the input;
+        the form description lists it instead.
+        """
+        friendly: dict[str, str] = {}
+        for entity_id in entity_ids:
+            state = self.hass.states.get(entity_id)
+            friendly[entity_id] = state.name if state and state.name else entity_id
+        counts = Counter(friendly.values())
+        return {
+            (name if counts[name] == 1 else entity_id): entity_id
+            for entity_id, name in friendly.items()
+        }
 
     async def _async_save(self, names: dict[str, str]) -> ConfigFlowResult:
         """Store the selected user's rules and names, replacing an earlier entry of this user.
@@ -378,3 +393,10 @@ def _user_schema(users: list[SelectOptionDict]) -> vol.Schema:
 def _globs_valid(rules: dict[str, list[str]]) -> bool:
     """Return True if every wildcard has the form `domain.pattern`, with the YAML schema's check."""
     return all(valid_glob(glob) for key in _GLOB_KEYS for glob in rules.get(key, []))
+
+
+def _entity_list(labels: dict[str, str]) -> str:
+    """Return a Markdown list of the form labels with their entity_ids, for the form description."""
+    return "\n".join(
+        f"- {label}: `{entity_id}`" for label, entity_id in labels.items() if label != entity_id
+    )
