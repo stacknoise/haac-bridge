@@ -1337,6 +1337,13 @@ Between portrait and landscape most tablets cross 840 dp. Rooms, Places and Sche
 - Navigation rail, `ListDetailPaneScaffold` and `SupportingPaneScaffold` come from `androidx.compose.material3.adaptive` (Apache-2.0, version only in `gradle/libs.versions.toml`). One shared sheet component in `:core:common` shows a bottom sheet, dialog or side sheet depending on the class.
 - Tests: unit tests for the column function and `packGrid` with 2, 4 and 6 columns; screenshot tests of the key screens at 411, 800 and 1280 dp, light and dark; a Compose test that rotating keeps the selection.
 
+**As built (October 2026, TAB-1 to TAB-5).** Built as described: window classes, rail with the instance switcher in its head, the dynamic tile grid, the place tree and the detail pane in Rooms, list and detail for Places and Schedules, side sheets in Medium, the sheet component (`HaacSheet`, `HaacSideSheet`), centred content (`centeredContent`, 640 dp; 480 dp for sign-in and lock screen), sign-in in two columns, settings with categories on the left, notifications as list and detail, and *Add entities* as a dialog. Differences and open items:
+
+- *Add entities* is a dialog of at most 720 × 640 dp (90 % of a smaller window) on a normal destination, so the screen behind it shows only the plain background, not the room.
+- The lock screen stays a centred card of 480 dp; the two-column form is only built for sign-in.
+- Not built yet: the permanent list beside the grid in the edit layout (T-08; Grid/List remains a switch), the layout for windows below 480 dp height, and keyboard and mouse operation of the grid (arrow keys, right click).
+- The mockups T-01 to T-09 stay in place until real screenshots exist.
+
 ![T-01 Rooms, landscape](mockups/png/T-01-rooms-landscape.png) ![T-02 Tile details, landscape](mockups/png/T-02-rooms-detail-landscape.png) ![T-03 Rooms, portrait](mockups/png/T-03-rooms-portrait.png) ![T-04 Tile details, portrait](mockups/png/T-04-rooms-sheet-portrait.png) ![T-05 Places, landscape](mockups/png/T-05-places-landscape.png)
 
 ![T-06 Schedules, landscape](mockups/png/T-06-schedules-landscape.png) ![T-07 Schedules, portrait](mockups/png/T-07-schedules-portrait.png) ![T-08 Edit layout, landscape](mockups/png/T-08-edit-layout-landscape.png) ![T-09 Settings, landscape](mockups/png/T-09-settings-landscape.png)
