@@ -1341,7 +1341,8 @@ Between portrait and landscape most tablets cross 840 dp. Rooms, Places and Sche
 
 - *Add entities* is a dialog of at most 720 × 640 dp (90 % of a smaller window) on a normal destination, so the screen behind it shows only the plain background, not the room.
 - The lock screen stays a centred card of 480 dp; the two-column form is only built for sign-in.
-- Not built yet: the permanent list beside the grid in the edit layout (T-08; Grid/List remains a switch), the layout for windows below 480 dp height, and keyboard and mouse operation of the grid (arrow keys, right click).
+- The edit layout shows the grid and the list side by side from Expanded (T-08, list pane 380 dp, no Grid/List switch); in Medium and Compact the switch stays.
+- Not built yet: the layout for windows below 480 dp height, and keyboard and mouse operation of the grid (arrow keys, right click).
 - The mockups T-01 to T-09 stay in place until real screenshots exist.
 
 ![T-01 Rooms, landscape](mockups/png/T-01-rooms-landscape.png) ![T-02 Tile details, landscape](mockups/png/T-02-rooms-detail-landscape.png) ![T-03 Rooms, portrait](mockups/png/T-03-rooms-portrait.png) ![T-04 Tile details, portrait](mockups/png/T-04-rooms-sheet-portrait.png) ![T-05 Places, landscape](mockups/png/T-05-places-landscape.png)
