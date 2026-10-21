@@ -501,8 +501,9 @@ async def test_names_form_shows_friendly_name_with_entity_id(
         result["flow_id"], {"include_entities": ["sensor.humidity"]}
     )
     assert result["step_id"] == "names"
-    label = "Living room humidity (sensor.humidity)"
+    label = "Living room humidity"
     assert [str(key) for key in result["data_schema"].schema] == [label]
+    assert "`sensor.humidity`" in result["description_placeholders"]["entities"]
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {label: "Humidity"}

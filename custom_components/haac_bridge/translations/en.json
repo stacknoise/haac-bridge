@@ -77,7 +77,7 @@
       },
       "names": {
         "title": "Names in the app",
-        "description": "Optional names for the entities you included one by one. Leave a field empty to keep the Home Assistant name."
+        "description": "Optional names for the entities you included one by one. Leave a field empty to keep the Home Assistant name.\n\n{entities}"
       }
     },
     "error": {
