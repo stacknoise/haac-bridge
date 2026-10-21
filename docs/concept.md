@@ -1114,10 +1114,10 @@ These values are the basis of the Compose theme (`HaacTheme`, "Salbei" in a ligh
 
 *Add entities as built (Salbei).*
 
-- Header with room name; domain tabs *Switch / Sensor / Climate* with counts (with only one kind of entity shared, a plain caption such as *Switch · 2* replaces the tabs); filter field.
+- Header with room name; domain chips *Switch / Sensor / Binary sensor / Climate* with counts, in a horizontally scrollable row so no label is cut off on narrow phones (with only one kind of entity shared, a plain caption such as *Switch · 2* replaces the chips); filter field.
 - Rows: checkbox, local or HA name, live state on the right (ON/OFF, value).
 - Entities already in another room show "in Kitchen" as a hint but stay selectable (15.5 item 2).
-- Bottom button summarises the selection across tabs: "Add 2 switches · +1 sensor, +1 climate".
+- Bottom button summarises the selection across the chips: "Add 2 switches · +1 sensor, +1 climate".
 
 #### M-05 Room grid with live states (7, 8)
 
