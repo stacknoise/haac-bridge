@@ -258,6 +258,7 @@ sequenceDiagram
 - If the user has several MFA modules, HA first asks for one (`select_mfa_module`); the app picks the first module offered and then asks only for its code.
 - The password lives only in a `CharArray` for the duration of the request and is overwritten afterwards; it is never logged, persisted, put in a `String` constant or sent anywhere except to the configured HA server over TLS.
 - HTTP logging is disabled for all `/auth/*` requests, also in debug builds.
+- **User agent**: every request of the app (REST and WebSocket) carries `User-Agent: HAAC/<version> (Android <sdk>)` instead of the OkHttp default, so HA's log (e.g. `homeassistant.components.http.ban` for a rejected `/auth/token` request) shows that HAAC sent it. The header holds no token and no instance data.
 
 ### 5.2 Token handling
 
