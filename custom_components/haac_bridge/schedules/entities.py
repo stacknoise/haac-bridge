@@ -1,7 +1,5 @@
 """The HA entities of a schedule: an `enabled` switch and a `next run` sensor (concept 19.5)."""
 
-from __future__ import annotations
-
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any

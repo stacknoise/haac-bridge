@@ -26,8 +26,11 @@ ruff check .                              # lint, incl. pydocstyle and complexit
 ruff format --check .                     # formatting (ruff format . fixes it)
 bandit -c pyproject.toml -r custom_components scripts
 python scripts/code_index.py --check      # code index and error code list up to date, docstrings present
+python scripts/build_dependencies.py --check   # dependency map in docs/review up to date
 pytest                                    # needs Linux/WSL/container
 ```
+
+The dependency map (layers, cycles, per-module details) is generated, not written by hand: `python scripts/build_dependencies.py` writes `docs/review/dependencies.html` and `docs/review/dependency-graph.html`. Run it with every code change (not only when imports move) and commit the result in the same commit, like the code index; CI fails (`--check`) if it is outdated. Imports under `TYPE_CHECKING` are shown separately and do not count as dependencies.
 
 Besides these, CI runs `hassfest`, the HACS validation (`hacs/action`), PMD CPD (copy-paste detection) and CodeQL.
 
@@ -164,7 +167,7 @@ Every error of the bridge is a `HaacBridgeError` (derived from Home Assistant's 
 - Every module, class and function, including private ones, has a **one-line docstring summary** (Google style; `ruff` enforces pydocstyle).
 - After adding, renaming or removing a symbol, or after changing a docstring or a signature: `python scripts/code_index.py`, and commit the regenerated `docs/code-index.md` and `docs/error-codes.md` **in the same commit**. CI (`--check`) fails otherwise.
 - Never edit the files by hand. After a merge or rebase conflict in `docs/code-index.md`, regenerate it.
-- The generator reads the sources with Python's `ast` module and runs without Home Assistant. `ast.unparse` renders some code differently between Python versions (for example `lambda: None`), so **run it with Python 3.14**, the version CI uses. Keep the sources parseable by older versions (no `type X = …` statements; use plain alias assignments).
+- The generator reads the sources with Python's `ast` module and runs without Home Assistant. `ast.unparse` renders some code differently between Python versions (for example `lambda: None`), so **run it with Python 3.14**, the version CI uses. The sources use the Python 3.14 form `except A, B:` (written by `ruff format`), so older versions cannot parse them. Still no `type X = …` statements; use plain alias assignments. Do not add `from __future__ import annotations`: annotations are evaluated lazily since Python 3.14.
 
 ## 7. No duplicate code and code style (concept 18.6)
 

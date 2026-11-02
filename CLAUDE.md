@@ -19,7 +19,9 @@ docs/concept.md
 docs/development.md       # developer guide: setup, checks, factories, error codes, code index, releases
 docs/code-index.md        # GENERATED: every module, class and function with a one-line summary (concept 18.5)
 docs/error-codes.md       # GENERATED: every HAB error code (concept 18.3)
+docs/review/              # GENERATED: dependency map (dependencies.html, dependency-graph.html)
 scripts/code_index.py     # generator for the two files above
+scripts/build_dependencies.py  # generator for docs/review/ (dependency map, development.md section 1)
 custom_components/haac_bridge/
   __init__.py  config_flow.py  manifest.json  const.py  services.yaml
   translations/en.json    # user texts of exceptions, issues and the config/options flow
@@ -53,6 +55,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 **Code index (18.5)**
 - Every module, class and function, including private ones, has a one-line docstring summary.
 - After adding, renaming or removing a class or function, run `python scripts/code_index.py` and commit the regenerated `docs/code-index.md` and `docs/error-codes.md` in the same commit. Never edit them by hand. CI (`--check`, CPD) fails otherwise.
+- With every code change (also one that moves no import), run `python scripts/build_dependencies.py` and commit the regenerated `docs/review/` in the same commit, like the code index. Never edit those files by hand.
 
 ## Non-negotiable rules
 
@@ -70,7 +73,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 ## Conventions
 
 - Python version required by Home Assistant 2026.9 (>= 3.14.2; CI uses 3.14); use HA's `entityfilter` helper and a `voluptuous` config schema; async code only.
-- Keep the sources parseable by older Python for `scripts/code_index.py` (no `type X = ...` statements; use plain alias assignments).
+- `scripts/code_index.py` and `scripts/build_dependencies.py` run with Python 3.14, like CI (`ruff format` writes the 3.14 form `except A, B:`, which older Python cannot parse). Still no `type X = ...` statements; use plain alias assignments, and no `from __future__ import annotations` (annotations are evaluated lazily since 3.14).
 - Test and lint dependencies are pinned in `requirements_test.txt` (pytest-homeassistant-custom-component for the minimum HA version) and `requirements_lint.txt`; tool settings live in `pyproject.toml`.
 - Must pass `hassfest`, HACS validation (`hacs/action`), `ruff` (incl. pydocstyle and complexity rules), `bandit`, PMD CPD (fails from 100 duplicated tokens) and `python scripts/code_index.py --check`.
 - Tests with `pytest-homeassistant-custom-component`, covering the cases in concept 14.2.

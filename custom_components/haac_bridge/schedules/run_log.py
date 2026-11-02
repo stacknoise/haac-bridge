@@ -1,7 +1,5 @@
 """The log of schedule runs in `.storage/haac_bridge.schedule_runs` (concept 19.11)."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import datetime
 import logging

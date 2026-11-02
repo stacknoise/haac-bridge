@@ -1,7 +1,5 @@
 """Persistent store of the entities each user deactivated, `.storage/haac_bridge.disabled_entities` (concept 7.5)."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from homeassistant.core import HomeAssistant

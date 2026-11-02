@@ -1,7 +1,5 @@
 """AuditEntryFactory: one audit entry per kind of action (concept 18.2, 21.3)."""
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Any
 

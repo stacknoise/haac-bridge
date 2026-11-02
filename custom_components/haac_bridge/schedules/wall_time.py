@@ -5,8 +5,6 @@ HA's `find_next_time_expression_time` is not used: it skips the whole day when t
 into a DST gap, but a schedule must still run on that day.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import TYPE_CHECKING
 

@@ -4,8 +4,6 @@ A rule only knows dates; the time of day is added by `wall_time.py` and the sun 
 rules need only the standard library besides the `Repeat` data class.
 """
 
-from __future__ import annotations
-
 from calendar import isleap, monthrange
 from collections.abc import Callable, Collection
 from datetime import date, timedelta

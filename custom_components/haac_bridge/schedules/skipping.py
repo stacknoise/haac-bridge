@@ -3,8 +3,6 @@
 Like `recurrence.py` this module needs only the standard library besides the rule it wraps.
 """
 
-from __future__ import annotations
-
 from datetime import date, timedelta
 
 from .recurrence import DateRule

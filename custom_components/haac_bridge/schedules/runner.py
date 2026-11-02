@@ -1,7 +1,5 @@
 """Runs one schedule: re-checks owner and exposure, switches the entities as the owner (concept 19.3)."""
 
-from __future__ import annotations
-
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass

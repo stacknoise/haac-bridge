@@ -1,7 +1,5 @@
 """ScheduleManager: store, planner and runner together, and the operations of the commands (concept 19.4)."""
 
-from __future__ import annotations
-
 from datetime import date, datetime
 import hashlib
 from typing import Any
