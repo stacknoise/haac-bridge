@@ -158,6 +158,9 @@
     "sch_in_past": {
       "message": "Pick a date and time in the future"
     },
+    "sch_skip_invalid": {
+      "message": "This run cannot be skipped"
+    },
     "ws_invalid_request": {
       "message": "The request could not be understood"
     },

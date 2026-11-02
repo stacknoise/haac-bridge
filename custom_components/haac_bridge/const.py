@@ -11,7 +11,14 @@ API_VERSION: Final = 1
 SUPPORTED_DOMAINS: Final = ("binary_sensor", "climate", "sensor", "switch")
 """Entity domains returned in v1, regardless of the user's filter (10.2)."""
 
-FEATURES: Final = ("schedules", "entity_disable", "schedule_repeat", "schedule_runs", "client_info")
+FEATURES: Final = (
+    "schedules",
+    "entity_disable",
+    "schedule_repeat",
+    "schedule_runs",
+    "client_info",
+    "schedule_skip",
+)
 """Optional features this bridge offers; `haac_bridge/info` reports them to the app (11.2, 11.4)."""
 
 CONF_USERS: Final = "users"
@@ -61,6 +68,12 @@ MAX_START_DATE_AHEAD: Final = timedelta(days=366)
 
 NEXT_RUNS_COUNT: Final = 3
 """How many following runs `next_runs` and `schedules/preview` return (concept 19.10)."""
+
+UPCOMING_RUNS_LIMIT: Final = 14
+"""How many runs `upcoming_runs` shows at most, skipped ones included; only these can be skipped (concept 19.12)."""
+
+MAX_SKIPPED_DATES: Final = 30
+"""Most skipped runs a schedule can hold at the same time (concept 19.12)."""
 
 RUN_NOW_COOLDOWN: Final = 10
 """Seconds after a manual run during which run_now of the same schedule is refused (HAB-SCH-007)."""
