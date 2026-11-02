@@ -55,6 +55,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 **Code index (18.5)**
 - Every module, class and function, including private ones, has a one-line docstring summary.
 - After adding, renaming or removing a class or function, run `python scripts/code_index.py` and commit the regenerated `docs/code-index.md` and `docs/error-codes.md` in the same commit. Never edit them by hand. CI (`--check`, CPD) fails otherwise.
+- With every code change (also one that moves no import), run `python scripts/build_dependencies.py` and commit the regenerated `docs/review/` in the same commit, like the code index. Never edit those files by hand.
 
 ## Non-negotiable rules
 
