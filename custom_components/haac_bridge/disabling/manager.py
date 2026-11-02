@@ -1,7 +1,5 @@
 """Deactivating and activating entities for a user, with the effect on their schedules (concept 7.5)."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from homeassistant.auth.models import User

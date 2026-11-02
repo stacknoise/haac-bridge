@@ -1,7 +1,5 @@
 """Live subscription of one app connection to schedule changes (concept 19.4)."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 from homeassistant.auth.models import User

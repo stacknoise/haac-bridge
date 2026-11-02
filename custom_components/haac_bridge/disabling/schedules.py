@@ -1,7 +1,5 @@
 """How a deactivated entity affects the schedules of its user: blocking, switching off and on (concept 7.5)."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import TYPE_CHECKING
 

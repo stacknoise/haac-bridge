@@ -1,5 +1,6 @@
 """Tests for haac_bridge/history and haac_bridge/statistics (concept 10.3, 11.2, 14.2)."""
 
+import asyncio
 from collections.abc import Callable, Coroutine
 from datetime import timedelta
 from typing import Any
@@ -15,6 +16,9 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 from sqlalchemy.exc import OperationalError
+
+from custom_components.haac_bridge.const import MAX_CONCURRENT_QUERIES
+from custom_components.haac_bridge.history.queries import _async_run
 
 CONFIG = {
     "users": [
@@ -260,3 +264,24 @@ async def test_an_open_end_counts_up_to_now(client: Any) -> None:
         },
     )
     assert reply["error"]["code"] == "HAB-HIST-002"
+
+
+async def test_parallel_recorder_queries_are_limited(hass: HomeAssistant) -> None:
+    """Many requests at once never run more than MAX_CONCURRENT_QUERIES queries together (S1)."""
+    running = 0
+    peak = 0
+
+    async def slow_job(_query: Callable[[], Any]) -> str:
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+        return "done"
+
+    instance = type("Instance", (), {"async_add_executor_job": staticmethod(slow_job)})()
+    with patch("custom_components.haac_bridge.history.queries.get_instance", return_value=instance):
+        results = await asyncio.gather(*(_async_run(hass, lambda: None) for _ in range(8)))
+
+    assert results == ["done"] * 8
+    assert peak == MAX_CONCURRENT_QUERIES

@@ -1,7 +1,5 @@
 """Runtime data of HAAC Bridge stored in hass.data (concept 18.2)."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 

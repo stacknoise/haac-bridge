@@ -1,7 +1,5 @@
 """Trigger planners: when a schedule runs next and last ran (concept 19.3, 18.2 TriggerFactory)."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, tzinfo
 from typing import NamedTuple, Protocol

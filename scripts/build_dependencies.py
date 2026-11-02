@@ -217,7 +217,7 @@ def analyse_python():
         modules[mid] = {
             "id": mid,
             "package": package,
-            "path": str(path.relative_to(ROOT)),
+            "path": path.relative_to(ROOT).as_posix(),
             "doc": first_line(ast.get_docstring(tree)),
             "lines": len(lines),
             "code": code,
@@ -444,7 +444,7 @@ def analyse_kotlin():
                 "full": pkg,
             },
         )
-        mod["paths"].add(str(path.parent.relative_to(ROOT)))
+        mod["paths"].add(path.parent.relative_to(ROOT).as_posix())
         lines = source.splitlines()
         mod["lines"] += len(lines)
         mod["code"] += sum(
@@ -752,9 +752,15 @@ def main():
     """Write both HTML files."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default=str(ROOT / "docs" / "review"))
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; exit 1 if the files in --out differ from a fresh run",
+    )
     args = parser.parse_args()
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    if not args.check:
+        out.mkdir(parents=True, exist_ok=True)
     data = build()
     light = dict(
         data, modules=[{k: v for k, v in m.items() if k != "entries"} for m in data["modules"]]
@@ -764,6 +770,7 @@ def main():
         for name, payload in (("dependencies.html", data), ("dependency-graph.html", light))
     }
     pkg_label = "Packages" if data["lang"] == "python" else "Gradle modules"
+    pages = {}
     for name, template in (
         ("dependencies.html", PAGE_DETAILS),
         ("dependency-graph.html", PAGE_GRAPH),
@@ -774,8 +781,25 @@ def main():
             .replace("__PKG__", pkg_label)
             .replace("__DATA__", blobs[name])
         )
-        (out / name).write_text(page, encoding="utf-8")
+        pages[name] = page
+    if args.check:
+        stale = [name for name, page in pages.items() if not _same(out / name, page)]
+        if stale:
+            print(f"Outdated: {', '.join(stale)}. Run: python scripts/build_dependencies.py")
+            sys.exit(1)
+        print("Dependency map is up to date.")
+        return
+    for name, page in pages.items():
+        with (out / name).open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(page)
     print(f"{len(data['modules'])} modules, {len(data['packages'])} packages -> {out}")
+
+
+def _same(path, page):
+    """Return True if the file holds exactly `page` (line endings ignored)."""
+    if not path.exists():
+        return False
+    return path.read_bytes().replace(b"\r\n", b"\n") == page.encode("utf-8")
 
 
 if __name__ == "__main__":

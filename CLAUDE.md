@@ -73,7 +73,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 ## Conventions
 
 - Python version required by Home Assistant 2026.9 (>= 3.14.2; CI uses 3.14); use HA's `entityfilter` helper and a `voluptuous` config schema; async code only.
-- Keep the sources parseable by older Python for `scripts/code_index.py` (no `type X = ...` statements; use plain alias assignments).
+- `scripts/code_index.py` and `scripts/build_dependencies.py` run with Python 3.14, like CI (`ruff format` writes the 3.14 form `except A, B:`, which older Python cannot parse). Still no `type X = ...` statements; use plain alias assignments, and no `from __future__ import annotations` (annotations are evaluated lazily since 3.14).
 - Test and lint dependencies are pinned in `requirements_test.txt` (pytest-homeassistant-custom-component for the minimum HA version) and `requirements_lint.txt`; tool settings live in `pyproject.toml`.
 - Must pass `hassfest`, HACS validation (`hacs/action`), `ruff` (incl. pydocstyle and complexity rules), `bandit`, PMD CPD (fails from 100 duplicated tokens) and `python scripts/code_index.py --check`.
 - Tests with `pytest-homeassistant-custom-component`, covering the cases in concept 14.2.

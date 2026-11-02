@@ -4,6 +4,7 @@ Callers pass only entity IDs that already passed the exposure filter. Both queri
 recorder's executor, like Home Assistant's own history and statistics commands.
 """
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -17,9 +18,18 @@ import homeassistant.util.dt as dt_util
 from sqlalchemy.exc import SQLAlchemyError
 import voluptuous as vol
 
-from ..const import MAX_HISTORY_PERIOD, MAX_HOURLY_STATISTICS_PERIOD, MAX_STATISTICS_PERIOD
+from ..const import (
+    DOMAIN,
+    MAX_CONCURRENT_QUERIES,
+    MAX_HISTORY_PERIOD,
+    MAX_HOURLY_STATISTICS_PERIOD,
+    MAX_STATISTICS_PERIOD,
+)
 from ..core.errors import ErrorCode, HistoryError, RequestError
 from ..entities.attributes import has_hidden, shareable_attributes
+
+_GATE_KEY: Final = f"{DOMAIN}_query_gate"
+"""Key in `hass.data` of the semaphore that limits parallel recorder queries."""
 
 PERIODS: Final = ("hour", "day", "week", "month")
 """Statistic periods the app may request (concept 11.2)."""
@@ -129,8 +139,14 @@ def _statistics_in_ms(
 
 
 async def _async_run(hass: HomeAssistant, query: Callable[[], Any]) -> Any:
-    """Run a recorder query in its executor; database or recorder errors become HAB-HIST-001."""
+    """Run a recorder query in its executor; database or recorder errors become HAB-HIST-001.
+
+    At most MAX_CONCURRENT_QUERIES queries of the bridge run at once; further ones wait, so many
+    parallel requests of one user cannot occupy the recorder (review finding S1).
+    """
+    gate = hass.data.setdefault(_GATE_KEY, asyncio.Semaphore(MAX_CONCURRENT_QUERIES))
     try:
-        return await get_instance(hass).async_add_executor_job(query)
+        async with gate:
+            return await get_instance(hass).async_add_executor_job(query)
     except (SQLAlchemyError, HomeAssistantError) as err:
         raise HistoryError(ErrorCode.HIST_UNAVAILABLE) from err

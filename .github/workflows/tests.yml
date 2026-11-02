@@ -33,6 +33,8 @@ jobs:
         run: bandit -c pyproject.toml -r custom_components scripts
       - name: Code index up to date (concept 18.5)
         run: python scripts/code_index.py --check
+      - name: Dependency map up to date (docs/review)
+        run: python scripts/build_dependencies.py --check
 
   cpd:
     name: Copy-paste detection (CPD)

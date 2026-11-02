@@ -1,7 +1,5 @@
 """Persistent storage of the schedules in `.storage/haac_bridge.schedules` (concept 19.2)."""
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 import logging
 from typing import Any

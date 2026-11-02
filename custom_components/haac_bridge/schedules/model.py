@@ -1,7 +1,5 @@
 """Schedule data model, validation and (de)serialisation (concept 19.2)."""
 
-from __future__ import annotations
-
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time

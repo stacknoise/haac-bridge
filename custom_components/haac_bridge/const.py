@@ -112,6 +112,9 @@ ALLOWED_SERVICES: Final[dict[str, dict[str, frozenset[str]]]] = {
 Matches what the app and the schedules call; anything else, even if HA has it, is refused.
 """
 
+MAX_CONCURRENT_QUERIES: Final = 2
+"""Most recorder queries (history, statistics) of the bridge that run at the same time (review finding S1)."""
+
 MAX_HISTORY_ENTITIES: Final = 50
 """Most entities one history or statistics request may name (review finding S2)."""
 
