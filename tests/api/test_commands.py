@@ -61,6 +61,7 @@ async def test_info(hass: HomeAssistant, anton_client: Any) -> None:
             "schedule_repeat",
             "schedule_runs",
             "client_info",
+            "schedule_skip",
         ],
         "ha_version": HA_VERSION,
         "instance_id": await instance_id.async_get(hass),

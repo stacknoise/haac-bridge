@@ -17,6 +17,7 @@ from ..const import (
     MAX_INTERVAL,
     MAX_NAME_LENGTH,
     MAX_OFFSET_MIN,
+    MAX_SKIPPED_DATES,
     MAX_START_DATE_AHEAD,
     SCHEDULE_DOMAIN,
 )
@@ -177,6 +178,7 @@ class Schedule:
     repeat: Repeat = field(default_factory=Repeat)
     notify: bool = False
     off_reason: OffReason | None = None
+    skipped_dates: frozenset[date] = frozenset()
 
     @property
     def active(self) -> bool:
@@ -208,6 +210,7 @@ class Schedule:
             "repeat": self.repeat.to_dict(),
             "notify": self.notify,
             "off_reason": None if self.off_reason is None else self.off_reason.value,
+            "skipped_dates": sorted(day.isoformat() for day in self.skipped_dates),
         }
 
     def with_changes(self, **changes: Any) -> Schedule:
@@ -322,6 +325,20 @@ def _parse_date(raw: object) -> date:
         return date.fromisoformat(raw)
     except ValueError:
         raise _invalid() from None
+
+
+def parse_skip_date(raw: object) -> date:
+    """Return the date of a run to skip or to take up again, or raise HAB-SCH-001."""
+    return _parse_date(raw)
+
+
+def parse_skipped_dates(raw: object) -> frozenset[date]:
+    """Return the stored dates of skipped runs; missing means none (concept 19.12)."""
+    if raw is None:
+        return frozenset()
+    if not isinstance(raw, list | tuple) or len(raw) > MAX_SKIPPED_DATES:
+        raise _invalid()
+    return frozenset(_parse_date(item) for item in raw)
 
 
 def _parse_interval(freq: RepeatFreq, raw: object) -> int:
@@ -474,6 +491,7 @@ def schedule_from_dict(raw: object) -> Schedule:
         repeat=repeat,
         notify=parse_notify(raw.get("notify", False)),
         off_reason=parse_off_reason(raw.get("off_reason")),
+        skipped_dates=parse_skipped_dates(raw.get("skipped_dates")),
     )
 
 

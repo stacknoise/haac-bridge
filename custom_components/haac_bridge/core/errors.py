@@ -80,6 +80,9 @@ class ErrorCode(StrEnum):
     SCH_IN_PAST = "HAB-SCH-009"
     """The date or time of a one-off schedule, or the end date of a repeating one, is in the past."""
 
+    SCH_SKIP_INVALID = "HAB-SCH-010"
+    """The run to skip is not one of the next runs of the schedule, or it would leave no run at all."""
+
     WS_INVALID_REQUEST = "HAB-WS-001"
     """The request fields of a haac_bridge/* command failed validation."""
 
@@ -119,6 +122,7 @@ APP_CODES: Final[dict[ErrorCode, str | None]] = {
     ErrorCode.SCH_BUSY: "HAAC-BRG-005",
     ErrorCode.SCH_BLOCKED: "HAAC-SCH-008",
     ErrorCode.SCH_IN_PAST: "HAAC-SCH-009",
+    ErrorCode.SCH_SKIP_INVALID: "HAAC-SCH-010",
     ErrorCode.WS_INVALID_REQUEST: "HAAC-BRG-005",
     ErrorCode.INT_UNEXPECTED: "HAAC-BRG-005",
 }

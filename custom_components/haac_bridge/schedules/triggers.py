@@ -4,23 +4,32 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import date, datetime, timedelta, tzinfo
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from homeassistant.const import SUN_EVENT_SUNRISE, SUN_EVENT_SUNSET
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.util import dt as dt_util
 
-from ..const import NEXT_RUNS_COUNT
+from ..const import NEXT_RUNS_COUNT, UPCOMING_RUNS_LIMIT
 from ..core.errors import ErrorCode, ScheduleError
 from .model import Repeat, When, WhenType
 from .recurrence import DateRule, RecurrenceFactory
+from .skipping import SkippingRule
 from .wall_time import next_wall_run, previous_wall_run
 
 SUN_SEARCH_DAYS = 368
 """Days a sun trigger looks ahead or back for an event before it gives up (concept 19.3 step 5).
 
 A year plus the days around it, so a yearly schedule is found from any day."""
+
+
+class UpcomingRun(NamedTuple):
+    """One entry of `upcoming_runs`: when, on which local date and whether the user skipped it."""
+
+    at: datetime
+    day: date
+    skipped: bool
 
 
 class Trigger(Protocol):
@@ -108,13 +117,25 @@ class TriggerFactory:
         self._hass = hass
         self._recurrence = recurrence or RecurrenceFactory()
 
-    def create(self, when: When, repeat: Repeat | None = None) -> Trigger:
-        """Return the planner for this trigger, bound to the current HA time zone.
+    def date_rule(
+        self, when: When, repeat: Repeat | None = None, skipped: frozenset[date] = frozenset()
+    ) -> DateRule:
+        """Return the dates of a schedule without the skipped ones (concept 19.12).
 
         Without `repeat` the schedule runs weekly on the weekdays of `when`.
         """
-        tz = dt_util.get_default_time_zone()
         rule = self._recurrence.create(repeat or Repeat(), when.days)
+        return SkippingRule(rule, skipped) if skipped else rule
+
+    def create(
+        self, when: When, repeat: Repeat | None = None, skipped: frozenset[date] = frozenset()
+    ) -> Trigger:
+        """Return the planner for this trigger, bound to the current HA time zone.
+
+        The skipped dates are left out of the runs.
+        """
+        tz = dt_util.get_default_time_zone()
+        rule = self.date_rule(when, repeat, skipped)
         builders: dict[WhenType, Callable[[], Trigger]] = {
             WhenType.TIME: lambda: TimeTrigger(when, rule, tz),
             WhenType.SUNRISE: lambda: SunTrigger(self._hass, when, rule, SUN_EVENT_SUNRISE, tz),
@@ -123,21 +144,52 @@ class TriggerFactory:
         return builders[when.type]()
 
     def upcoming(
-        self, when: When, repeat: Repeat, after: datetime, count: int = NEXT_RUNS_COUNT
+        self,
+        when: When,
+        repeat: Repeat,
+        after: datetime,
+        count: int = NEXT_RUNS_COUNT,
+        skipped: frozenset[date] = frozenset(),
     ) -> list[datetime]:
         """Return up to `count` runs after `after`, in order (concept 19.10 `next_runs`)."""
-        trigger = self.create(when, repeat)
+        trigger = self.create(when, repeat, skipped)
         runs: list[datetime] = []
         while len(runs) < count and (found := trigger.next_run(runs[-1] if runs else after)):
             runs.append(found)
         return runs
 
-    def is_ended(self, when: When, repeat: Repeat, after: datetime) -> bool:
+    def run_dates(self, when: When, repeat: Repeat, after: datetime) -> list[tuple[datetime, date]]:
+        """Return the next runs of the rule with their local dates, skips ignored (concept 19.12).
+
+        At most `UPCOMING_RUNS_LIMIT` runs; these are the ones the user can skip.
+        """
+        return [
+            (run, dt_util.as_local(run).date())
+            for run in self.upcoming(when, repeat, after, UPCOMING_RUNS_LIMIT)
+        ]
+
+    def upcoming_with_skips(
+        self, when: When, repeat: Repeat, after: datetime, skipped: frozenset[date]
+    ) -> list[UpcomingRun]:
+        """Return the next runs including the skipped ones between them, each with its date and skip flag.
+
+        It ends after `NEXT_RUNS_COUNT` runs that will happen or at `UPCOMING_RUNS_LIMIT` entries.
+        """
+        entries: list[UpcomingRun] = []
+        for run, day in self.run_dates(when, repeat, after):
+            entries.append(UpcomingRun(run, day, day in skipped))
+            if sum(not entry.skipped for entry in entries) >= NEXT_RUNS_COUNT:
+                break
+        return entries
+
+    def is_ended(
+        self, when: When, repeat: Repeat, after: datetime, skipped: frozenset[date] = frozenset()
+    ) -> bool:
         """Return whether the schedule has no run left after `after`, as the rule ends (concept 19.10).
 
         A sun schedule without an event within a year is not ended: its rule still has dates.
         """
-        if self.create(when, repeat).next_run(after) is not None:
+        if self.create(when, repeat, skipped).next_run(after) is not None:
             return False
         today = after.astimezone(dt_util.get_default_time_zone()).date()
-        return self._recurrence.create(repeat, when.days).next_date(today) is None
+        return self.date_rule(when, repeat, skipped).next_date(today) is None

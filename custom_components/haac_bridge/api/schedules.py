@@ -103,6 +103,20 @@ async def ws_schedules_preview(
 
 
 @bridge_command(
+    "haac_bridge/schedules/skip_run",
+    {vol.Required("schedule_id"): str, vol.Required("date"): str, vol.Required("skip"): bool},
+)
+async def ws_schedules_skip_run(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> dict[str, Any]:
+    """Skip the run of one date of a schedule or take it up again, and return the schedule."""
+    manager = get_data(hass).schedules
+    user = require_user(connection)
+    schedule = await manager.async_skip_run(user, msg["schedule_id"], msg["date"], skip=msg["skip"])
+    return await manager.async_describe(schedule, user)
+
+
+@bridge_command(
     "haac_bridge/schedules/runs",
     {vol.Optional("log_id"): str, vol.Optional("after_seq"): vol.All(int, vol.Range(min=0))},
 )

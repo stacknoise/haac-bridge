@@ -27,5 +27,6 @@ Every error of the integration carries one of these codes (format `HAB-<AREA>-<N
 | HAB-SCH-007 | This schedule ran a moment ago, try again shortly | HAAC-BRG-005 | run_now while the schedule is running or within RUN_NOW_COOLDOWN of the last manual run. |
 | HAB-SCH-008 | This schedule uses a deactivated device. Activate the device first | HAAC-SCH-008 | The schedule contains an entity its owner deactivated; it cannot be switched on or run. |
 | HAB-SCH-009 | Pick a date and time in the future | HAAC-SCH-009 | The date or time of a one-off schedule, or the end date of a repeating one, is in the past. |
+| HAB-SCH-010 | This run cannot be skipped | HAAC-SCH-010 | The run to skip is not one of the next runs of the schedule, or it would leave no run at all. |
 | HAB-WS-001 | The request could not be understood | HAAC-BRG-005 | The request fields of a haac_bridge/* command failed validation. |
 | HAB-INT-000 | Something went wrong in HAAC Bridge | HAAC-BRG-005 | An exception without a HAB code reached the command wrapper. |

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import hashlib
 from typing import Any
 
@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 from ..audit.factory import user_label
 from ..const import (
     MAX_SCHEDULES_PER_USER,
+    MAX_SKIPPED_DATES,
     RUN_NOW_COOLDOWN,
     SIGNAL_SCHEDULE_CHANGED,
     SIGNAL_SCHEDULES_CHANGED,
@@ -34,6 +35,7 @@ from .model import (
     parse_name,
     parse_notify,
     parse_repeat,
+    parse_skip_date,
     parse_when,
 )
 from .planner import SchedulePlanner
@@ -78,10 +80,11 @@ class ScheduleManager:
         # Runs wait and sweeps do nothing then, so UI users never look unconfigured by mistake.
         self.users_ready = False
         self.store = ScheduleStore(hass)
+        self._triggers = TriggerFactory(hass)
         self.planner = SchedulePlanner(
             hass,
             self.store,
-            TriggerFactory(hass),
+            self._triggers,
             self._async_run_due,
             self.notify,
         )
@@ -148,7 +151,7 @@ class ScheduleManager:
     def revision_for(self, user: User) -> str:
         """Return a hash over the visible schedules, the scope and the caller's newest run log entry.
 
-        Per schedule: id, version, `notify`, pause, last run and next run (concept 11.2, 19.11).
+        Per schedule: id, version, `notify`, pause, last run, next run and skipped dates (concept 11.2, 19.12).
         """
         digest = hashlib.sha256(self.scope_of(user).encode())
         digest.update(f"runs\t{self.run_log.last_seq_of(user.id)}\n".encode())
@@ -163,6 +166,7 @@ class ScheduleManager:
                 f"{paused.reason.value}@{paused.at.isoformat()}" if paused else "",
                 last_run.at.isoformat() if last_run else "",
                 planned.isoformat() if planned else "",
+                ",".join(sorted(day.isoformat() for day in schedule.skipped_dates)),
             )
             digest.update(("\t".join(parts) + "\n").encode())
         return digest.hexdigest()
@@ -191,6 +195,10 @@ class ScheduleManager:
             "blocked_by": blocked_by(get_data(self._hass).disabled, schedule),
             "next_run": planned.isoformat() if planned else None,
             "next_runs": [run.isoformat() for run in self.planner.next_runs(schedule)],
+            "upcoming_runs": [
+                {"at": run.at.isoformat(), "date": run.day.isoformat(), "skipped": run.skipped}
+                for run in self.planner.upcoming_runs(schedule)
+            ],
             "expired": self.planner.is_expired(schedule),
         }
 
@@ -230,6 +238,8 @@ class ScheduleManager:
         )
         if updated.enabled != current.enabled:
             updated = updated.with_changes(off_reason=None)
+        if "repeat" in changes or "when" in changes:
+            updated = self._with_valid_skips(updated)
         self._require_unblocked_if_enabled(updated)
         if updated.enabled and (not current.enabled or "repeat" in changes or "when" in changes):
             self._require_dates_left(updated)
@@ -257,6 +267,33 @@ class ScheduleManager:
         await self.planner.async_plan(schedule_id)
         self.notify(schedule_id)
         self._audit_change("enabled" if enabled else "disabled", "ha", updated)
+
+    async def async_skip_run(
+        self, user: User, schedule_id: str, raw_date: object, *, skip: bool
+    ) -> Schedule:
+        """Skip the run of one date of a schedule, or take it up again (concept 19.12).
+
+        Only a date among the next runs can be skipped, and not if no run would be left (HAB-SCH-010).
+        The version `updated_at` stays, so an open editor does not run into a conflict.
+        """
+        schedule = self._require(schedule_id)
+        self._require_access(user, schedule)
+        day = parse_skip_date(raw_date)
+        now = dt_util.utcnow()
+        kept = self._future_skips(schedule, now)
+        skipped = kept | {day} if skip else kept - {day}
+        if skip and day not in kept:
+            self._require_skippable(schedule, day, skipped, now)
+        if skipped != schedule.skipped_dates:
+            updated = schedule.with_changes(skipped_dates=skipped)
+            await self.store.async_replace(updated)
+            await self.planner.async_plan(schedule_id)
+            self.notify(schedule_id)
+            self._audit_change(
+                "skipped" if skip else "unskipped", user_label(user), updated, date=day.isoformat()
+            )
+            return updated
+        return schedule
 
     async def async_wipe(self) -> None:
         """Delete every schedule and the storage file; called when the config entry is removed."""
@@ -374,6 +411,35 @@ class ScheduleManager:
         """Allow the owner and admins; anybody else gets HAB-SCH-006."""
         if schedule.owner != user.id and not user.is_admin:
             raise ScheduleError(ErrorCode.SCH_NOT_ALLOWED)
+
+    @staticmethod
+    def _future_skips(schedule: Schedule, now: datetime) -> frozenset[date]:
+        """Return the skipped dates that are not in the past; the others are dropped on the next change."""
+        today = dt_util.as_local(now).date()
+        return frozenset(day for day in schedule.skipped_dates if day >= today)
+
+    def _require_skippable(
+        self, schedule: Schedule, day: date, skipped: frozenset[date], now: datetime
+    ) -> None:
+        """Raise HAB-SCH-010 unless `day` is one of the next runs, skipping it keeps a run and the limit holds."""
+        upcoming = {
+            found for _, found in self._triggers.run_dates(schedule.when, schedule.repeat, now)
+        }
+        left = self._triggers.create(schedule.when, schedule.repeat, skipped).next_run(now)
+        if day not in upcoming or left is None or len(skipped) > MAX_SKIPPED_DATES:
+            raise ScheduleError(ErrorCode.SCH_SKIP_INVALID)
+
+    def _with_valid_skips(self, schedule: Schedule) -> Schedule:
+        """Return the schedule keeping only the skips that still are runs of its changed rule.
+
+        If that would leave no run at all, no run is skipped any more (concept 19.12).
+        """
+        now = dt_util.utcnow()
+        rule = self._triggers.date_rule(schedule.when, schedule.repeat)
+        kept = frozenset(day for day in self._future_skips(schedule, now) if rule.matches(day))
+        if kept and self._triggers.is_ended(schedule.when, schedule.repeat, now, kept):
+            kept = frozenset()
+        return schedule.with_changes(skipped_dates=kept)
 
     def _require_dates_left(self, schedule: Schedule) -> None:
         """Raise HAB-SCH-009 if the schedule has no date left, e.g. a one-off in the past (concept 19.10)."""

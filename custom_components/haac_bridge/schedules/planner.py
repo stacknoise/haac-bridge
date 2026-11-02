@@ -21,7 +21,7 @@ from .model import (
     parse_when,
 )
 from .store import ScheduleStore
-from .triggers import Trigger, TriggerFactory
+from .triggers import Trigger, TriggerFactory, UpcomingRun
 
 
 class SchedulePlanner:
@@ -115,7 +115,9 @@ class SchedulePlanner:
         reference = after or dt_util.utcnow()
         next_run = self._trigger(schedule).next_run(reference)
         if next_run is None:
-            if self._triggers.is_ended(schedule.when, schedule.repeat, reference):
+            if self._triggers.is_ended(
+                schedule.when, schedule.repeat, reference, schedule.skipped_dates
+            ):
                 self._ended.add(schedule_id)
             else:
                 await self._async_set_sun_pause(schedule, paused=True)
@@ -144,12 +146,26 @@ class SchedulePlanner:
         if schedule.id not in self._planned:
             return []
         return self._triggers.upcoming(
-            schedule.when, schedule.repeat, dt_util.utcnow(), NEXT_RUNS_COUNT
+            schedule.when,
+            schedule.repeat,
+            dt_util.utcnow(),
+            NEXT_RUNS_COUNT,
+            schedule.skipped_dates,
+        )
+
+    def upcoming_runs(self, schedule: Schedule) -> list[UpcomingRun]:
+        """Return the next runs of a planned schedule with the skipped ones between them (concept 19.12)."""
+        if schedule.id not in self._planned:
+            return []
+        return self._triggers.upcoming_with_skips(
+            schedule.when, schedule.repeat, dt_util.utcnow(), schedule.skipped_dates
         )
 
     def is_expired(self, schedule: Schedule) -> bool:
         """Return whether the schedule has no date left, e.g. a one-off in the past (concept 19.10)."""
-        return self._triggers.is_ended(schedule.when, schedule.repeat, dt_util.utcnow())
+        return self._triggers.is_ended(
+            schedule.when, schedule.repeat, dt_util.utcnow(), schedule.skipped_dates
+        )
 
     def preview(self, raw_when: object, raw_repeat: object) -> list[datetime]:
         """Return the next runs of a draft that is not saved, or raise HAB-SCH-001 / HAB-SCH-009."""
@@ -162,7 +178,7 @@ class SchedulePlanner:
 
     def _trigger(self, schedule: Schedule) -> Trigger:
         """Return the trigger of a schedule for its time and its date rule."""
-        return self._triggers.create(schedule.when, schedule.repeat)
+        return self._triggers.create(schedule.when, schedule.repeat, schedule.skipped_dates)
 
     def _cancel(self, schedule_id: str) -> None:
         """Cancel the timer of one schedule."""
