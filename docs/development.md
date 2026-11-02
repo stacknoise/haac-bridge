@@ -29,6 +29,8 @@ python scripts/code_index.py --check      # code index and error code list up to
 pytest                                    # needs Linux/WSL/container
 ```
 
+The dependency map (layers, cycles, per-module details) is generated, not written by hand: `python scripts/build_dependencies.py` writes `docs/review/dependencies.html` and `docs/review/dependency-graph.html`. Run it after a change that moves imports or modules and commit the result; CI does not check it. Imports under `TYPE_CHECKING` are shown separately and do not count as dependencies.
+
 Besides these, CI runs `hassfest`, the HACS validation (`hacs/action`), PMD CPD (copy-paste detection) and CodeQL.
 
 ## 2. Project layout

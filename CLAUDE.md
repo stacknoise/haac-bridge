@@ -19,7 +19,9 @@ docs/concept.md
 docs/development.md       # developer guide: setup, checks, factories, error codes, code index, releases
 docs/code-index.md        # GENERATED: every module, class and function with a one-line summary (concept 18.5)
 docs/error-codes.md       # GENERATED: every HAB error code (concept 18.3)
+docs/review/              # GENERATED: dependency map (dependencies.html, dependency-graph.html)
 scripts/code_index.py     # generator for the two files above
+scripts/build_dependencies.py  # generator for docs/review/ (dependency map, development.md section 1)
 custom_components/haac_bridge/
   __init__.py  config_flow.py  manifest.json  const.py  services.yaml
   translations/en.json    # user texts of exceptions, issues and the config/options flow
