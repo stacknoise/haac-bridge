@@ -12,7 +12,6 @@ from homeassistant.helpers.entityfilter import (
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
-from ..audit.levels import LogLevel
 from ..const import (
     CONF_ACTIVITY,
     CONF_ENTITY_CONFIG,
@@ -25,6 +24,7 @@ from ..const import (
     CONF_USERS,
     DOMAIN,
 )
+from ..core.log_settings import LogLevel
 
 
 def valid_glob(value: str) -> bool:

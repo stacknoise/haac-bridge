@@ -6,14 +6,14 @@ from typing import TYPE_CHECKING, Any, Protocol
 from homeassistant.core import HomeAssistant
 from homeassistant.util.hass_dict import HassKey
 
-from ..audit.factory import AuditEntryFactory
-from ..audit.levels import LoggingSettings
 from ..const import DOMAIN
 from .error_factory import ErrorFactory
+from .log_settings import LoggingSettings
 from .response_factory import ResponseFactory
 
 if TYPE_CHECKING:
     from ..audit.entry import AuditEntry
+    from ..audit.factory import AuditEntryFactory
     from ..config.schema import UserEntry
     from ..entities.descriptor_factory import DescriptorFactory
     from ..exposure.exposure import Exposure
@@ -121,12 +121,12 @@ class HaacBridgeData:
     services: ServiceCallFactory
     exposure: Exposure
     schedules: ScheduleManager
+    audit_entries: AuditEntryFactory
     errors: ErrorFactory = field(default_factory=ErrorFactory)
     responses: ResponseFactory = field(default_factory=ResponseFactory)
     disabled: DisabledEntities = field(default_factory=NoDisabledEntities)
     run_log: RunLog = field(default_factory=NoRunLog)
     audit: AuditLog = field(default_factory=NoAuditLog)
-    audit_entries: AuditEntryFactory = field(default_factory=AuditEntryFactory)
     yaml_logging: dict[str, Any] = field(default_factory=dict)
     issue_ids: set[str] = field(default_factory=set)
     yaml_entries: list[UserEntry] = field(default_factory=list)

@@ -15,7 +15,7 @@ from homeassistant.helpers import (
     entity_registry as er,
 )
 
-from ..entities.attributes import shareable_attributes
+from ..core.attributes import shareable_attributes
 
 DomainFields = Callable[[State, er.RegistryEntry | None], dict[str, Any]]
 

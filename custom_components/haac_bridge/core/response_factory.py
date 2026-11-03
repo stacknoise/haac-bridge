@@ -7,7 +7,7 @@ from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api.messages import cached_state_diff_message
 from homeassistant.core import Event, EventStateChangedData
 
-from ..entities.attributes import has_hidden, shareable_state
+from .attributes import has_hidden, shareable_state
 from .errors import HaacBridgeError
 
 

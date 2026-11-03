@@ -10,7 +10,7 @@ from homeassistant.util import dt as dt_util
 from ..const import DOMAIN, MAX_DISABLED_PER_USER
 from ..core.errors import EntityNotFoundError, ErrorCode, RequestError
 from ..core.runtime import get_data
-from .schedules import changes_for
+from ..schedules.disabled import changes_for
 
 SIGNAL_DISABLED_CHANGED = f"{DOMAIN}_disabled_changed"
 """Dispatcher signal sent with the user id after that user deactivated or activated an entity."""

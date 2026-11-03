@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from ..core.errors import ErrorCode, ScheduleError
-from ..schedules.model import OffReason, Schedule
+from .model import OffReason, Schedule
 
 if TYPE_CHECKING:
     from ..core.runtime import DisabledEntities

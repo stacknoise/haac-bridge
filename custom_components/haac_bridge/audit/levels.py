@@ -1,34 +1,11 @@
 """Log level and Activity switch of the bridge: reading, merging and applying them (concept 21.2)."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from enum import StrEnum
 import logging
 from typing import Any
 
-from ..const import CONF_ACTIVITY, CONF_LEVEL, DEFAULT_LOG_LEVEL, LOGGER_NAME
-
-
-class LogLevel(StrEnum):
-    """The log levels an administrator can choose."""
-
-    DEBUG = "debug"
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-
-    @property
-    def number(self) -> int:
-        """Return the number of the level in the `logging` module."""
-        return logging.getLevelNamesMapping()[self.name]
-
-
-@dataclass(frozen=True, slots=True)
-class LoggingSettings:
-    """The log level and whether switching actions appear in the Activity page."""
-
-    level: LogLevel = field(default=LogLevel(DEFAULT_LOG_LEVEL))
-    activity: bool = True
+from ..const import CONF_ACTIVITY, CONF_LEVEL, LOGGER_NAME
+from ..core.log_settings import LoggingSettings, LogLevel
 
 
 def _level_of(section: Mapping[str, Any] | None) -> LogLevel | None:

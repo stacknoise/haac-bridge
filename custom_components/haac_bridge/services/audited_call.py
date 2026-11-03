@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from ..core.errors import ErrorCode, HaacBridgeError
 from ..core.runtime import get_data
-from ..services.call_factory import ValidatedServiceCall, async_execute
+from .call_factory import ValidatedServiceCall, async_execute
 
 
 @dataclass(frozen=True, slots=True)
