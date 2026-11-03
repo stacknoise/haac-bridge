@@ -5,7 +5,8 @@ import logging
 import pytest
 
 from custom_components.haac_bridge.audit.entry import AuditEntry
-from custom_components.haac_bridge.audit.log import format_line, format_value
+from custom_components.haac_bridge.audit.log import format_line
+from custom_components.haac_bridge.core.formatting import format_value
 
 LS = chr(0x2028)
 PS = chr(0x2029)

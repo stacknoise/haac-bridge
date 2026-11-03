@@ -49,7 +49,7 @@ custom_components/haac_bridge/
   history/     filtered history and statistics, limits
   areas/       areas and floors catalog (import into the app)
   instance/    instance id and addresses for haac_bridge/info
-  disabling/   per-user deactivated entities: store, manager (concept 19)
+  disabling/   per-user deactivated entities: store, manager (concept 7.5); their effect on schedules is schedules/disabled.py
   audit/       AuditLog (log lines and Activity events), AuditEntryFactory, log level settings, device name (concept 21)
   logbook.py   describes the haac_bridge_action events for the Activity page
   schedules/   model, store, triggers, recurrence, planner, runner, run_log, manager, entities (concept 19)
@@ -102,7 +102,7 @@ The caller is always `connection.user`; the bridge never accepts a user name or 
 4. Write tests (section 8) and document the command in concept 11.2.
 5. Reuse the building blocks instead of writing them again:
    - A subscription ends the caller's previous one of the same kind with `async_end_subscriptions_of` (`core/subscriptions.py`); one per connection.
-   - A state for the app goes through `shareable_state` or `compressed_state` (`entities/attributes.py`), never `State.as_dict()` directly.
+   - A state for the app goes through `shareable_state` or `compressed_state` (`core/attributes.py`), never `State.as_dict()` directly.
    - A recorder query takes its range from `TimeRange` and checks it with `check_length` against the limits in `const.py`.
    - A service call is built by `ServiceCallFactory`; it checks `ALLOWED_SERVICES` and runs with `SERVICE_TIMEOUT`.
    - Work that may take long (a schedule run) runs in the background (`runner.async_run_in_background`); the command replies at once.

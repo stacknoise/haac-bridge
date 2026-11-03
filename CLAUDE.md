@@ -65,7 +65,7 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 - `haac_bridge/call_service` executes only if the `entity_id` is exposed to the caller and the service and its `service_data` keys are in `const.ALLOWED_SERVICES` (table in concept 11.4); the bridge sets the target itself and calls with `SERVICE_TIMEOUT`. A change of the list also changes that table.
 - History and statistics are filtered with the same exposure before querying the recorder, and stay within the limits of `const.py` (`TimeRange.check_length`, 10.3).
 - Entities of the platform `haac_bridge` are never exposed (`exposure/own_entities.py`).
-- Every state that reaches the app (list, events, history) goes through `entities/attributes.py` (`shareable_state`, `compressed_state`), so hidden attributes are never sent (11.3).
+- Every state that reaches the app (list, events, history) goes through `core/attributes.py` (`shareable_state`, `compressed_state`), so hidden attributes are never sent (11.3).
 - `Exposure` caches its answers. A new input to an exposure decision needs an `async_invalidate_*` call where that input changes (`_async_follow_exposure_inputs` in `__init__.py`).
 - Actions (service calls, schedule runs, changes) are logged and shown in Activity only through `AuditLog.record(...)` with an entry from `AuditEntryFactory` (concept 21); user-typed values go through `format_value`; no IP addresses or tokens in logs. Default log level `warning`; the action log needs `info`.
 - A breaking change of any `haac_bridge/*` command raises `api_version` and the major version (16.4).

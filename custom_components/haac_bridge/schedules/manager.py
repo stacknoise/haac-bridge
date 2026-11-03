@@ -19,7 +19,7 @@ from ..const import (
 )
 from ..core.errors import ErrorCode, RequestError, ScheduleError
 from ..core.runtime import get_data
-from ..disabling.schedules import blocked_by, require_unblocked
+from .disabled import blocked_by, require_unblocked
 from .model import (
     Paused,
     PauseReason,

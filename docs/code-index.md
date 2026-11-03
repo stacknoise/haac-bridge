@@ -76,6 +76,12 @@ Lists every module, class and function of the integration with signature, file a
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
 | `haac_bridge.core.__init__` | `module` | `custom_components/haac_bridge/core/__init__.py` | Shared building blocks: errors, factories for errors and replies, command wrapper, runtime data. |
+| `haac_bridge.core.attributes` | `module` | `custom_components/haac_bridge/core/attributes.py` | Attributes the bridge never passes to the app (review finding S5, concept 11.3). |
+| `is_hidden` | `def is_hidden(name: str) -> bool` | `custom_components/haac_bridge/core/attributes.py` | Return True for an attribute that names other entities or carries an access link. |
+| `has_hidden` | `def has_hidden(attributes: Mapping[str, Any]) -> bool` | `custom_components/haac_bridge/core/attributes.py` | Return True if any attribute must be left out; most states have none. |
+| `shareable_attributes` | `def shareable_attributes(attributes: Mapping[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/core/attributes.py` | Return the attributes without the hidden ones. |
+| `shareable_state` | `def shareable_state(state: State) -> State` | `custom_components/haac_bridge/core/attributes.py` | Return the state itself, or a copy without hidden attributes if it has any. |
+| `compressed_state` | `def compressed_state(state: State) -> CompressedState` | `custom_components/haac_bridge/core/attributes.py` | Return HA's compressed state for adds, without hidden attributes. |
 | `haac_bridge.core.caller` | `module` | `custom_components/haac_bridge/core/caller.py` | Resolves the calling HA user of a WebSocket request (concept 10.3). |
 | `require_user` | `def require_user(connection: ActiveConnection) -> User` | `custom_components/haac_bridge/core/caller.py` | Return the HA user bound to the connection's access token, never a user named by the client. |
 | `haac_bridge.core.command` | `module` | `custom_components/haac_bridge/core/command.py` | Command wrapper: every haac_bridge/* command runs through it (concept 18.3). |
@@ -106,6 +112,12 @@ Lists every module, class and function of the integration with signature, file a
 | `ScheduleError` | `class ScheduleError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A schedule is invalid, missing, in conflict or not allowed (area SCH). |
 | `RequestError` | `class RequestError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | A WebSocket request has an invalid format (area WS). |
 | `InternalError` | `class InternalError(HaacBridgeError)` | `custom_components/haac_bridge/core/errors.py` | Unexpected error inside the bridge (area INT). |
+| `haac_bridge.core.formatting` | `module` | `custom_components/haac_bridge/core/formatting.py` | Formatting of values for log lines (concept 21.7). |
+| `format_value` | `def format_value(value: Any) -> str` | `custom_components/haac_bridge/core/formatting.py` | Return a value for a log line: plain words as they are, everything else as JSON. |
+| `haac_bridge.core.log_settings` | `module` | `custom_components/haac_bridge/core/log_settings.py` | Log level and Activity switch as values; shared by the runtime data and the audit log (concept 21.2). |
+| `LogLevel` | `class LogLevel(StrEnum)` | `custom_components/haac_bridge/core/log_settings.py` | The log levels an administrator can choose. |
+| `LogLevel.number` | `def number(self) -> int` | `custom_components/haac_bridge/core/log_settings.py` | Return the number of the level in the `logging` module. |
+| `LoggingSettings` | `class LoggingSettings` | `custom_components/haac_bridge/core/log_settings.py` | The log level and whether switching actions appear in the Activity page. |
 | `haac_bridge.core.response_factory` | `module` | `custom_components/haac_bridge/core/response_factory.py` | ResponseFactory: builds every WebSocket reply of HAAC Bridge (concept 11, 18.2). |
 | `ResponseFactory` | `class ResponseFactory` | `custom_components/haac_bridge/core/response_factory.py` | Creates result and error messages in HA's WebSocket reply format. |
 | `ResponseFactory.result` | `def result(self, msg_id: int, payload: Any) -> dict[str, Any]` | `custom_components/haac_bridge/core/response_factory.py` | Return a success reply carrying `payload`. |
@@ -215,12 +227,6 @@ Lists every module, class and function of the integration with signature, file a
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
 | `haac_bridge.entities.__init__` | `module` | `custom_components/haac_bridge/entities/__init__.py` | Entity descriptors sent to the app. |
-| `haac_bridge.entities.attributes` | `module` | `custom_components/haac_bridge/entities/attributes.py` | Attributes the bridge never passes to the app (review finding S5, concept 11.3). |
-| `is_hidden` | `def is_hidden(name: str) -> bool` | `custom_components/haac_bridge/entities/attributes.py` | Return True for an attribute that names other entities or carries an access link. |
-| `has_hidden` | `def has_hidden(attributes: Mapping[str, Any]) -> bool` | `custom_components/haac_bridge/entities/attributes.py` | Return True if any attribute must be left out; most states have none. |
-| `shareable_attributes` | `def shareable_attributes(attributes: Mapping[str, Any]) -> dict[str, Any]` | `custom_components/haac_bridge/entities/attributes.py` | Return the attributes without the hidden ones. |
-| `shareable_state` | `def shareable_state(state: State) -> State` | `custom_components/haac_bridge/entities/attributes.py` | Return the state itself, or a copy without hidden attributes if it has any. |
-| `compressed_state` | `def compressed_state(state: State) -> CompressedState` | `custom_components/haac_bridge/entities/attributes.py` | Return HA's compressed state for adds, without hidden attributes. |
 | `haac_bridge.entities.descriptor_factory` | `module` | `custom_components/haac_bridge/entities/descriptor_factory.py` | DescriptorFactory: builds the entity descriptors sent to the app (concept 11.3, 18.2). |
 | `_no_fields` | `def _no_fields(state: State, entry: er.RegistryEntry \| None) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return no domain-specific fields (switch, climate: everything is in attributes). |
 | `_sensor_fields` | `def _sensor_fields(state: State, entry: er.RegistryEntry \| None) -> dict[str, Any]` | `custom_components/haac_bridge/entities/descriptor_factory.py` | Return unit, state class and display precision a sensor tile needs (8.3). |
@@ -247,6 +253,9 @@ Lists every module, class and function of the integration with signature, file a
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
 | `haac_bridge.services.__init__` | `module` | `custom_components/haac_bridge/services/__init__.py` | Service calls: validated against the caller's exposure and executed with the caller's context. |
+| `haac_bridge.services.audited_call` | `module` | `custom_components/haac_bridge/services/audited_call.py` | The audited service call of `haac_bridge/call_service` (concept 21.3, 21.4). |
+| `ServiceRequest` | `class ServiceRequest` | `custom_components/haac_bridge/services/audited_call.py` | What a client asked for: the target, the service and its data, the device name and the source. |
+| `async_audited_call` | `async def async_audited_call(hass: HomeAssistant, user: User, request: ServiceRequest) -> None` | `custom_components/haac_bridge/services/audited_call.py` | Check and carry out a service call for the user, then record what happened. |
 | `haac_bridge.services.call_factory` | `module` | `custom_components/haac_bridge/services/call_factory.py` | ServiceCallFactory: validated service calls for haac_bridge/call_service (concept 10.3, 11.4, 18.2). |
 | `ValidatedServiceCall` | `class ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | A service call that passed all checks; the target is always exactly one entity. |
 | `ValidatedServiceCall.as_user` | `def as_user(self, user_id: str) -> ValidatedServiceCall` | `custom_components/haac_bridge/services/call_factory.py` | Return the same call in a new context of another user, as for a manual run of a schedule. |
@@ -321,9 +330,6 @@ Lists every module, class and function of the integration with signature, file a
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
 | `haac_bridge.audit.__init__` | `module` | `custom_components/haac_bridge/audit/__init__.py` | Audit log and Activity entries: what the bridge did, for whom and with what result (concept 21). |
-| `haac_bridge.audit.actions` | `module` | `custom_components/haac_bridge/audit/actions.py` | The audited service call of `haac_bridge/call_service` (concept 21.3, 21.4). |
-| `ServiceRequest` | `class ServiceRequest` | `custom_components/haac_bridge/audit/actions.py` | What a client asked for: the target, the service and its data, the device name and the source. |
-| `async_audited_call` | `async def async_audited_call(hass: HomeAssistant, user: User, request: ServiceRequest) -> None` | `custom_components/haac_bridge/audit/actions.py` | Check and carry out a service call for the user, then record what happened. |
 | `haac_bridge.audit.client` | `module` | `custom_components/haac_bridge/audit/client.py` | The device name the app sends and the source of a call (concept 21.3, 21.5). |
 | `_printable` | `def _printable(value: str) -> str` | `custom_components/haac_bridge/audit/client.py` | Voluptuous validator: reject a device name with control characters. |
 | `source_of` | `def source_of(hass: HomeAssistant, connection: ActiveConnection) -> str` | `custom_components/haac_bridge/audit/client.py` | Return `app` if the connection's refresh token belongs to the HAAC app, else `other`. |
@@ -349,16 +355,12 @@ Lists every module, class and function of the integration with signature, file a
 | `AuditEntryFactory.startup` | `def startup(self, **details: Any) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the entry written when the integration has started. |
 | `AuditEntryFactory.command` | `def command(self, *, command_type: str, user_id: str \| None, duration_ms: int) -> AuditEntry` | `custom_components/haac_bridge/audit/factory.py` | Return the debug entry of one `haac_bridge/*` command. |
 | `haac_bridge.audit.levels` | `module` | `custom_components/haac_bridge/audit/levels.py` | Log level and Activity switch of the bridge: reading, merging and applying them (concept 21.2). |
-| `LogLevel` | `class LogLevel(StrEnum)` | `custom_components/haac_bridge/audit/levels.py` | The log levels an administrator can choose. |
-| `LogLevel.number` | `def number(self) -> int` | `custom_components/haac_bridge/audit/levels.py` | Return the number of the level in the `logging` module. |
-| `LoggingSettings` | `class LoggingSettings` | `custom_components/haac_bridge/audit/levels.py` | The log level and whether switching actions appear in the Activity page. |
 | `_level_of` | `def _level_of(section: Mapping[str, Any] \| None) -> LogLevel \| None` | `custom_components/haac_bridge/audit/levels.py` | Return the level named in a `logging` block, or None if it is missing or damaged. |
 | `_activity_of` | `def _activity_of(section: Mapping[str, Any] \| None) -> bool \| None` | `custom_components/haac_bridge/audit/levels.py` | Return the Activity switch of a `logging` block, or None if it is missing or damaged. |
 | `merge_settings` | `def merge_settings(yaml_section: Mapping[str, Any] \| None, options_section: Mapping[str, Any] \| None) -> LoggingSettings` | `custom_components/haac_bridge/audit/levels.py` | Return the settings: a value in the YAML wins over the option, damaged values fall back (concept 21.2). |
 | `yaml_keys` | `def yaml_keys(yaml_section: Mapping[str, Any] \| None) -> set[str]` | `custom_components/haac_bridge/audit/levels.py` | Return which of `level` and `activity` the YAML sets, so the options form can say so. |
 | `apply_level` | `def apply_level(level: LogLevel) -> None` | `custom_components/haac_bridge/audit/levels.py` | Set the level of the package logger; every module logger of the bridge inherits it. |
 | `haac_bridge.audit.log` | `module` | `custom_components/haac_bridge/audit/log.py` | AuditLog: writes audit entries to the HA log and fires the Activity event (concept 21.3, 21.4). |
-| `format_value` | `def format_value(value: Any) -> str` | `custom_components/haac_bridge/audit/log.py` | Return a value for a log line: plain words as they are, everything else as JSON. |
 | `format_line` | `def format_line(entry: AuditEntry) -> str` | `custom_components/haac_bridge/audit/log.py` | Return the log line of an entry: `action=… key=value …`. |
 | `AuditLog` | `class AuditLog` | `custom_components/haac_bridge/audit/log.py` | Records audit entries; the level and the Activity switch come from `configure`. |
 | `AuditLog.__init__` | `def __init__(self, hass: HomeAssistant) -> None` | `custom_components/haac_bridge/audit/log.py` | Start with the default settings. |
@@ -376,10 +378,6 @@ Lists every module, class and function of the integration with signature, file a
 | `async_set_disabled` | `async def async_set_disabled(hass: HomeAssistant, user: User, entity_id: str, *, disabled: bool) -> dict[str, Any]` | `custom_components/haac_bridge/disabling/manager.py` | Deactivate or activate an entity for the caller; return their full list and the schedules switched. |
 | `_async_follow_in_schedules` | `async def _async_follow_in_schedules(hass: HomeAssistant, user_id: str, entity_id: str) -> list[str]` | `custom_components/haac_bridge/disabling/manager.py` | Store, re-plan and announce the changes to the user's schedules; return the ids switched. |
 | `async_sweep` | `async def async_sweep(hass: HomeAssistant) -> None` | `custom_components/haac_bridge/disabling/manager.py` | Drop the entries of users who are gone or no longer configured (concept 19.6.3). |
-| `haac_bridge.disabling.schedules` | `module` | `custom_components/haac_bridge/disabling/schedules.py` | How a deactivated entity affects the schedules of its user: blocking, switching off and on (concept 7.5). |
-| `blocked_by` | `def blocked_by(disabled: DisabledEntities, schedule: Schedule) -> list[str]` | `custom_components/haac_bridge/disabling/schedules.py` | Return the entities of the schedule that its owner deactivated, in the order of the schedule. |
-| `require_unblocked` | `def require_unblocked(disabled: DisabledEntities, schedule: Schedule) -> None` | `custom_components/haac_bridge/disabling/schedules.py` | Raise HAB-SCH-008 if the schedule contains an entity its owner deactivated. |
-| `changes_for` | `def changes_for(disabled: DisabledEntities, schedules: list[Schedule], entity_id: str, now: datetime) -> tuple[list[Schedule], list[str]]` | `custom_components/haac_bridge/disabling/schedules.py` | Return the schedules to store after `entity_id` was deactivated or activated, and the ids switched. |
 | `haac_bridge.disabling.store` | `module` | `custom_components/haac_bridge/disabling/store.py` | Persistent store of the entities each user deactivated, `.storage/haac_bridge.disabled_entities` (concept 7.5). |
 | `_readable` | `def _readable(raw: object) -> dict[str, dict[str, str]]` | `custom_components/haac_bridge/disabling/store.py` | Return the `users` part of stored data, leaving out everything that is not user -> entity -> time. |
 | `DisabledStore` | `class DisabledStore` | `custom_components/haac_bridge/disabling/store.py` | Holds the deactivated entities of all users in memory and writes them after every change. |
@@ -407,6 +405,10 @@ Lists every module, class and function of the integration with signature, file a
 | Symbol | Signature | File | Description |
 | --- | --- | --- | --- |
 | `haac_bridge.schedules.__init__` | `module` | `custom_components/haac_bridge/schedules/__init__.py` | Schedules: store, trigger planning, runner, user lifecycle and HA entities (concept 19). |
+| `haac_bridge.schedules.disabled` | `module` | `custom_components/haac_bridge/schedules/disabled.py` | How a deactivated entity affects the schedules of its user: blocking, switching off and on (concept 7.5). |
+| `blocked_by` | `def blocked_by(disabled: DisabledEntities, schedule: Schedule) -> list[str]` | `custom_components/haac_bridge/schedules/disabled.py` | Return the entities of the schedule that its owner deactivated, in the order of the schedule. |
+| `require_unblocked` | `def require_unblocked(disabled: DisabledEntities, schedule: Schedule) -> None` | `custom_components/haac_bridge/schedules/disabled.py` | Raise HAB-SCH-008 if the schedule contains an entity its owner deactivated. |
+| `changes_for` | `def changes_for(disabled: DisabledEntities, schedules: list[Schedule], entity_id: str, now: datetime) -> tuple[list[Schedule], list[str]]` | `custom_components/haac_bridge/schedules/disabled.py` | Return the schedules to store after `entity_id` was deactivated or activated, and the ids switched. |
 | `haac_bridge.schedules.entities` | `module` | `custom_components/haac_bridge/schedules/entities.py` | The HA entities of a schedule: an `enabled` switch and a `next run` sensor (concept 19.5). |
 | `unique_id` | `def unique_id(schedule_id: str, suffix: str) -> str` | `custom_components/haac_bridge/schedules/entities.py` | Return the unique id of a schedule entity, e.g. `haac_bridge_schedule_<id>_enabled`. |
 | `schedule_id_of` | `def schedule_id_of(entity_unique_id: str) -> str \| None` | `custom_components/haac_bridge/schedules/entities.py` | Return the schedule id inside a unique id of this integration, or None if it has another form. |

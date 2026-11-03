@@ -25,7 +25,7 @@ from homeassistant.helpers.selector import (
 )
 import voluptuous as vol
 
-from .audit.levels import LogLevel, merge_settings, yaml_keys
+from .audit.levels import merge_settings, yaml_keys
 from .config.schema import valid_glob
 from .config.ui_users import FILTER_KEYS, INCLUDE_KEYS, user_options, users_of
 from .config.ui_yaml import export_users, import_users
@@ -39,6 +39,7 @@ from .const import (
     DOMAIN,
     SUPPORTED_DOMAINS,
 )
+from .core.log_settings import LogLevel
 from .core.runtime import get_data
 
 _DOMAIN_SELECTOR = SelectSelector(

@@ -25,8 +25,8 @@ from ..const import (
     MAX_HOURLY_STATISTICS_PERIOD,
     MAX_STATISTICS_PERIOD,
 )
+from ..core.attributes import has_hidden, shareable_attributes
 from ..core.errors import ErrorCode, HistoryError, RequestError
-from ..entities.attributes import has_hidden, shareable_attributes
 
 _GATE_KEY: Final = f"{DOMAIN}_query_gate"
 """Key in `hass.data` of the semaphore that limits parallel recorder queries."""

@@ -15,11 +15,11 @@ from homeassistant.core import Event, EventStateChangedData, HomeAssistant, call
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from ..const import SIGNAL_EXPOSURE_CHANGED
+from ..core.attributes import compressed_state
 from ..core.runtime import get_data
 from ..core.subscriptions import async_end_subscriptions_of
 from ..disabling.manager import SIGNAL_DISABLED_CHANGED, disabled_list
 from ..exposure.exposure import compute_revision
-from .attributes import compressed_state
 
 ADDED = "a"
 CHANGED = "c"

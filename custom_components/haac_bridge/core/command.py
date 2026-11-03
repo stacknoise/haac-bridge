@@ -12,8 +12,8 @@ from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
-from ..audit.log import format_value
 from .errors import ErrorCode, HaacBridgeError
+from .formatting import format_value
 from .runtime import get_data
 
 _LOGGER = logging.getLogger(__name__)

@@ -12,7 +12,7 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
-from custom_components.haac_bridge.entities.attributes import is_hidden
+from custom_components.haac_bridge.core.attributes import is_hidden
 
 SENSOR = "sensor.house_max_temperature"
 ATTRIBUTES = {

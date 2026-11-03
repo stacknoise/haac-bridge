@@ -11,8 +11,8 @@ from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.haac_bridge.audit.levels import LoggingSettings, LogLevel
 from custom_components.haac_bridge.const import DOMAIN, LOGGER_NAME
+from custom_components.haac_bridge.core.log_settings import LoggingSettings, LogLevel
 from custom_components.haac_bridge.core.runtime import get_data
 
 

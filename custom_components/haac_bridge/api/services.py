@@ -7,10 +7,10 @@ from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 
-from ..audit.actions import ServiceRequest, async_audited_call
 from ..audit.client import CLIENT_FIELD, source_of
 from ..core.caller import require_user
 from ..core.command import bridge_command
+from ..services.audited_call import ServiceRequest, async_audited_call
 
 
 @bridge_command(
