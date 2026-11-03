@@ -160,13 +160,11 @@ def py_doc(node):
     return collapse(text.split("\n\n")[0], MAX_DOC)
 
 
-def py_sig(node):
-    """Return the one-line signature of a function node."""
-    prefix = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
-    sig = f"{prefix} {node.name}({ast.unparse(node.args)})"
-    if node.returns is not None:
-        sig += f" -> {ast.unparse(node.returns)}"
-    return collapse(sig, MAX_SIG)
+def py_sig(node, lines):
+    """Return the one-line signature of a function node, taken from its source text."""
+    first = node.body[0].lineno - 1
+    header = lines[node.lineno - 1 : max(first, node.lineno)]
+    return collapse(" ".join(header).rstrip().removesuffix(":"), MAX_SIG)
 
 
 def py_method(node, lines):
@@ -180,7 +178,7 @@ def py_method(node, lines):
         "e": end,
         "loc": count_code(lines[node.lineno - 1 : end]),
         "cc": cc,
-        "sig": py_sig(node),
+        "sig": py_sig(node, lines),
         "doc": py_doc(node),
         "vis": vis,
     }
@@ -252,7 +250,7 @@ def py_types_of(info):
                     "e": node.end_lineno,
                     "dl": node.lineno,
                     "doc": py_doc(node),
-                    "bases": [ast.unparse(b) for b in node.bases],
+                    "bases": [ast.get_source_segment(info["source"], b) or "" for b in node.bases],
                     "meths": [py_method(f, lines) for f in funcs],
                     "nodes": [node],
                 }
