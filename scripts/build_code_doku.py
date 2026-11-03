@@ -777,6 +777,12 @@ def render(profile, command):
     return page
 
 
+def describe_difference(old, new):
+    """Return the place where two pages first differ, for the message of --check."""
+    at = next((i for i, (a, b) in enumerate(zip(old, new, strict=False)) if a != b), 0)
+    return f"first difference at {at}: committed {old[at - 60 : at + 60]!r} / generated {new[at - 60 : at + 60]!r}"
+
+
 def main():
     """Write docs/code-doku/index.html, or with --check compare it to the committed one."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -787,8 +793,10 @@ def main():
     target = ROOT / args.out / "index.html"
     page = render(profile, "python3 scripts/build_code_doku.py")
     if args.check:
-        if not target.exists() or target.read_text(encoding="utf-8") != page:
+        old = target.read_text(encoding="utf-8") if target.exists() else ""
+        if old != page:
             print(f"{target.relative_to(ROOT)} is outdated: run python3 scripts/build_code_doku.py")
+            print(describe_difference(old, page))
             return 1
         return 0
     target.parent.mkdir(parents=True, exist_ok=True)
