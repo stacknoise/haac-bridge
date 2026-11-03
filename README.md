@@ -118,7 +118,7 @@ haac_bridge:
 
 | Key | Meaning |
 | --- | --- |
-| `users[].username` / `users[].user_id` | The Home Assistant user. `user_id` survives renames and is preferred for production. |
+| `users[].username` / `users[].user_id` | The Home Assistant user. `user_id` survives renames and is preferred for production. A `username` entry follows the login name: if a user is deleted and created again under the same name, the new account inherits the exposure, a `user_id` entry never does. |
 | `filter.include_domains` / `exclude_domains` | Whole domains |
 | `filter.include_entities` / `exclude_entities` | Single entity IDs |
 | `filter.include_entity_globs` / `exclude_entity_globs` | Wildcards such as `sensor.*_temperature` |
