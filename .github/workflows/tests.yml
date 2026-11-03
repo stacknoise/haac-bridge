@@ -35,6 +35,8 @@ jobs:
         run: python scripts/code_index.py --check
       - name: Dependency map up to date (docs/review)
         run: python scripts/build_dependencies.py --check
+      - name: Code documentation up to date (docs/code-doku)
+        run: python scripts/build_code_doku.py --check
 
   cpd:
     name: Copy-paste detection (CPD)

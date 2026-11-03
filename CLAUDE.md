@@ -20,8 +20,10 @@ docs/development.md       # developer guide: setup, checks, factories, error cod
 docs/code-index.md        # GENERATED: every module, class and function with a one-line summary (concept 18.5)
 docs/error-codes.md       # GENERATED: every HAB error code (concept 18.3)
 docs/review/              # GENERATED: dependency map (dependencies.html, dependency-graph.html)
+docs/code-doku/           # GENERATED: code documentation (index.html): explorer with metrics and source, dependency map
 scripts/code_index.py     # generator for the two files above
 scripts/build_dependencies.py  # generator for docs/review/ (dependency map, development.md section 1)
+scripts/build_code_doku.py     # generator for docs/code-doku/ (development.md section 1); code_doku_template.html is its page
 custom_components/haac_bridge/
   __init__.py  config_flow.py  manifest.json  const.py  services.yaml
   translations/en.json    # user texts of exceptions, issues and the config/options flow
@@ -56,6 +58,11 @@ LICENSE  NOTICE           # Apache-2.0 (concept 16.2)
 - Every module, class and function, including private ones, has a one-line docstring summary.
 - After adding, renaming or removing a class or function, run `python scripts/code_index.py` and commit the regenerated `docs/code-index.md` and `docs/error-codes.md` in the same commit. Never edit them by hand. CI (`--check`, CPD) fails otherwise.
 - With every code change (also one that moves no import), run `python scripts/build_dependencies.py` and commit the regenerated `docs/review/` in the same commit, like the code index. Never edit those files by hand.
+
+**Code documentation (standing rule)**
+- `docs/code-doku/index.html` is the code documentation of this repository (explorer with metrics and source text, dependency map; same standard as the other Stacknoise projects). It must always match the code.
+- With **every** code change, run `python scripts/build_code_doku.py` and commit the regenerated `docs/code-doku/` in the same commit. CI (`--check`) fails otherwise. Never edit it by hand.
+- The page shows the docstrings, so a changed behaviour also needs a changed docstrings. A change of the structure (new module, new layer, new rule) updates `CLAUDE.md`, `docs/development.md` and, where it is specified there, `docs/concept.md` in the same pull request.
 
 ## Non-negotiable rules
 
