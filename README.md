@@ -7,6 +7,16 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 
 > This project is not affiliated with or endorsed by Home Assistant, the Open Home Foundation or Nabu Casa.
 
+## Installation (HACS)
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stacknoise&repository=haac-bridge&category=integration)
+
+HAAC Bridge is part of the official HACS list, so no custom repository is needed.
+
+1. Click the button above. It opens HAAC Bridge in the HACS of your Home Assistant instance. Or open HACS yourself and search for **HAAC Bridge**.
+2. Click *Download* and restart Home Assistant.
+3. Choose which users may see which entities, in the Home Assistant UI or in `configuration.yaml` (see *Configuration* below).
+
 - Requires Home Assistant **2026.9.0** or newer.
 - Supported entity domains in v1: `switch`, `sensor`, `binary_sensor`, `climate`. Binary sensors are read-only, like sensors.
 - App: [stacknoise/haac-android](https://github.com/stacknoise/haac-android)
@@ -50,16 +60,6 @@ Home Assistant custom integration that gives the **HA Android Client (HAAC)** a 
 - The caller is always the Home Assistant user behind the access token; the app cannot ask for another user's entities.
 - Stable error codes (`HAB-…`) with plain-language messages, configuration problems and unknown users as *Repairs* issues, and the action `haac_bridge.reload` to re-read the YAML.
 - Distributed through HACS; CI runs hassfest, HACS validation, ruff, bandit, CodeQL and the tests.
-
-## Installation (HACS)
-
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=stacknoise&repository=haac-bridge&category=integration)
-
-HAAC Bridge is part of the official HACS list, so no custom repository is needed.
-
-1. Click the button above. It opens HAAC Bridge in the HACS of your Home Assistant instance. Or open HACS yourself and search for **HAAC Bridge**.
-2. Click *Download* and restart Home Assistant.
-3. Choose which users may see which entities, in the Home Assistant UI or in `configuration.yaml` (see *Configuration* below).
 
 ## Configuration
 
