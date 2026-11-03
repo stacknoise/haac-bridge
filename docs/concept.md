@@ -596,7 +596,7 @@ haac-bridge/                 # GitHub repo stacknoise/haac-bridge (chapter 16)
 ```
 
 - `manifest.json`: `"config_flow": true` with `"single_config_entry": true` (UI configuration and the entities of the schedules, 10.2, 19.5), `"iot_class": "local_push"`, `"dependencies": ["history", "recorder", "websocket_api"]`, semantic `version`.
-- `hacs.json`: name "HAAC Bridge", minimum HA version "homeassistant": "2026.9.0"; published as a custom repository (later optionally in the HACS default list).
+- `hacs.json`: name "HAAC Bridge", minimum HA version "homeassistant": "2026.9.0"; listed in the HACS default list (installation through the HACS search or the "Open in HACS" button, no custom repository needed).
 - Releases via GitHub tags; CI runs `hassfest` and the HACS validation action.
 
 ### 10.2 Configuration in configuration.yaml
