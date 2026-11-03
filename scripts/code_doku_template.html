@@ -1,0 +1,312 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>{{TITLE}}</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Kopfzeile mit Variantenwahl, darunter je Variante eine Arbeitsfläche (Baum, Karte oder Handbuch) mit Quelltext-Panel */
+:root{
+  --bg:#f3f5f1; --surface:#ffffff; --surface2:#eaeee8; --ink:#16251d; --muted:#586860; --line:#d5ddd4;
+  --accent:#1d774d; --on-accent:#ffffff; --yellow:#f1c000;
+  --imp:#d4690f; --use:#1d774d; --ok:#2e8b57; --warn:#b98a00; --bad:#c1412f;
+  --code-bg:#fbfcfa; --sk:#7a3a9e; --ss:#a8431b; --sc:#66766c; --sn:#1d65a0; --st:#1d774d;
+  --hl-t:#eef4ea; --hl-m:#fff1b8; --tl:60%; --tt:#16251d;
+  --f-d:'Barlow',system-ui,sans-serif; --f-b:'Inter',system-ui,sans-serif; --f-m:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  {{LAYERS_LIGHT}}
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1612; --surface:#16211b; --surface2:#1f2d25; --ink:#e5eee8; --muted:#94a69b; --line:#2b3b32;
+  --accent:#4fbf89; --on-accent:#0b1410; --imp:#f0913f; --use:#4fbf89; --ok:#4fbf89; --warn:#e3b72b; --bad:#ef7a68;
+  --code-bg:#121b16; --sk:#c39be0; --ss:#f0a07c; --sc:#7f9186; --sn:#7fb8e8; --st:#6fd3a0;
+  --hl-t:#1a2a21; --hl-m:#4a4210; --tl:34%; --tt:#f1f6f3;
+  {{LAYERS_DARK}} color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1612; --surface:#16211b; --surface2:#1f2d25; --ink:#e5eee8; --muted:#94a69b; --line:#2b3b32;
+  --accent:#4fbf89; --on-accent:#0b1410; --imp:#f0913f; --use:#4fbf89; --ok:#4fbf89; --warn:#e3b72b; --bad:#ef7a68;
+  --code-bg:#121b16; --sk:#c39be0; --ss:#f0a07c; --sc:#7f9186; --sn:#7fb8e8; --st:#6fd3a0;
+  --hl-t:#1a2a21; --hl-m:#4a4210; --tl:34%; --tt:#f1f6f3;
+  {{LAYERS_DARK}} color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-b);padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:0}
+a{color:inherit}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding-block:12px;border-bottom:3px solid var(--yellow);margin-bottom:12px}
+.brand{font:700 20px/1 var(--f-d);letter-spacing:.01em;display:flex;align-items:baseline;gap:8px}
+.brand b{color:var(--accent)} .brand small{font:500 12px var(--f-b);color:var(--muted)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 12px;display:flex;flex-direction:column;text-align:left;min-width:0}
+.tab span{font:600 14px var(--f-d)} .tab small{color:var(--muted);font-size:11px}
+.tab[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)} .tab[aria-selected=true] small{color:inherit;opacity:.85}
+.note{margin-left:auto;font-size:12px;color:var(--muted);max-width:420px}
+.app{min-height:200px}
+h2,h3{font-family:var(--f-d);margin:0;text-wrap:balance}
+.mono{font-family:var(--f-m);font-size:12px}
+.muted{color:var(--muted)}
+.pill{display:inline-block;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600;background:var(--surface2);white-space:nowrap}
+.ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:5px;padding:2px 8px;margin:0 4px 4px 0;font:500 12px var(--f-m);background:var(--surface);cursor:pointer;text-decoration:none;max-width:100%}
+.chip:hover{border-color:var(--accent)}
+.chip.imp{border-left:4px solid var(--imp)} .chip.use{border-left:4px solid var(--use)}
+.chip i{font-style:normal;color:var(--muted);font-size:10px}
+.sec{font:600 11px var(--f-b);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+.tile b{display:block;font:700 20px/1.1 var(--f-d);font-variant-numeric:tabular-nums} .tile small{color:var(--muted);font-size:11px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%} th{font:600 11px var(--f-b);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap}
+td{padding:5px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;vertical-align:top} tbody tr:hover{background:var(--surface2)}
+tr[data-m]{cursor:pointer} tr.cur{background:var(--hl-m)}
+.bar{display:inline-block;height:6px;border-radius:3px;background:currentColor;vertical-align:middle;min-width:2px}
+.scroll{overflow:auto}
+/* Quelltext */
+.src{display:flex;flex-direction:column;min-height:0;background:var(--code-bg);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.src-h{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--line);background:var(--surface);font:12px var(--f-m);flex-wrap:wrap}
+.code{overflow:auto;position:relative;flex:1;min-height:160px;font:12px/1.55 var(--f-m);padding-block:6px}
+.ln{display:grid;grid-template-columns:48px 1fr;min-width:max-content} .ln b{font-weight:400;color:var(--sc);text-align:right;padding-right:12px;user-select:none;opacity:.7} .ln>span{white-space:pre;padding-right:16px}
+.ln.it{background:var(--hl-t)} .ln.im{background:var(--hl-m)}
+.k{color:var(--sk)} .s{color:var(--ss)} .c,.cd{color:var(--sc);font-style:italic} .n{color:var(--sn)} .tl{color:var(--st);cursor:pointer;text-decoration:none} .tl:hover{text-decoration:underline}
+.empty{display:grid;place-items:center;text-align:center;color:var(--muted);padding:30px;min-height:120px}
+/* A: Explorer */
+.va{display:grid;grid-template-columns:minmax(240px,300px) minmax(0,1.05fr) minmax(0,1.2fr);gap:12px;height:calc(100vh - 110px);min-height:520px}
+.va>*{min-height:0;min-width:0}
+.tree{display:flex;flex-direction:column;overflow:hidden}
+.tree input,.srch{width:100%;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--ink);padding:9px 12px;font:13px var(--f-b);outline-offset:-2px}
+.tree-b{overflow:auto;flex:1;padding:4px 0}
+.tr{display:flex;align-items:center;gap:6px;padding:3px 10px;cursor:pointer;white-space:nowrap;font-size:13px}
+.tr:hover{background:var(--surface2)} .tr.sel{background:var(--hl-m)}
+.tr .car{width:10px;color:var(--muted);font-size:9px;flex:none} .tr .nm{overflow:hidden;text-overflow:ellipsis;flex:1}
+.tr .r{color:var(--muted);font:11px var(--f-m)}
+.tr.l0{font:600 13px var(--f-d);padding-top:6px} .tr.l1{padding-left:22px;color:var(--muted)} .tr.l2{padding-left:36px} .tr.l3{padding-left:56px;font:12px var(--f-m)}
+.ki{display:inline-block;vertical-align:middle;width:16px;height:16px;border-radius:3px;font:700 10px/16px var(--f-m);text-align:center;color:#fff;flex:none}
+.det{overflow:auto;padding:14px 16px}
+.det h2{font-size:26px;overflow-wrap:anywhere} .det .sub{font:12px var(--f-m);color:var(--muted);overflow-wrap:anywhere}
+.ctl{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom:8px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:5px 11px;border-right:1px solid var(--line);font-size:12px} .seg button:last-child{border:0}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--on-accent)}
+.legend{display:flex;align-items:center;gap:6px 16px;font-size:11px;color:var(--muted);flex-wrap:wrap;margin-top:6px}
+.legend .sw{display:inline-block;width:12px;height:12px;border-radius:2px;border:3px solid;vertical-align:middle}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:5px;padding:3px 9px;font-size:12px} .btn:hover{border-color:var(--accent)}
+svg text{font-family:var(--f-m);font-size:11px;fill:var(--ink)}
+.gv{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:12px;align-items:start}
+.gv details{border-bottom:1px solid var(--line);padding:3px 0} .gv summary{cursor:pointer;font-size:13px} .gv .pairs{padding:4px 0 6px 16px}
+.gs{cursor:pointer}
+@media (max-width:1000px){
+  .va{grid-template-columns:minmax(0,1fr);height:auto} .va .tree{max-height:320px} .va .src{height:480px}
+  .gv{grid-template-columns:minmax(0,1fr)} .note{margin-left:0}
+}
+</style>
+
+<header class="top">
+  <div class="brand"><b>{{BRAND}}</b> Code-Dokumentation <small id="ver"></small></div>
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <div class="note">Wird aus dem Quelltext erzeugt (<span class="mono">{{CMD}}</span>). Metriken sind Näherungen eines Quelltext-Scanners, keine Compiler-Analyse.</div>
+</header>
+<main id="app" class="app"></main>
+<script type="application/json" id="data">{{DATA}}</script>
+<script type="application/json" id="files">{{FILES}}</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent),F=JSON.parse(document.getElementById('files').textContent);
+const T=D.types,byId={},byName={},users={};
+T.forEach(t=>{byId[t.id]=t;(byName[t.name]=byName[t.name]||[]).push(t)});
+T.forEach(t=>t.deps.forEach(d=>(users[d]=users[d]||[]).push(t.id)));
+const LAYERS=D.projects.map(p=>p.name),sl=s=>s.replace(/\W+/g,'_');
+const lay=t=>t.project,nsS=n=>n,sn=id=>id.split('|')[1];
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const miOf=(loc,cc)=>Math.round(Math.max(0,(171-5.2*Math.log(Math.max(1,loc*8))-.23*cc-16.2*Math.log(Math.max(1,loc)))*100/171));
+T.forEach(t=>t.meths.forEach(m=>m.mi=miOf(m.loc,m.cc)));
+const ccC=c=>c>10?'bad':c>5?'warn':'ok', miC=m=>m>=55?'ok':m>=35?'warn':'bad', inC=i=>i>.8?'bad':i>.5?'warn':'ok';
+const KI={object:['O','#2c8f6a'],module:['M','#8a6d1d'],file:['F','#8a6d1d'],class:['C','#2c6fa3'],interface:['I','#8553ad'],record:['R','#b8741a'],struct:['S','#17878c'],enum:['E','#6f777d']};
+const kiHtml=t=>{const k=KI[t.kind]||KI.class;return `<span class="ki" style="background:${k[1]}" title="${t.kind}">${k[0]}</span>`};
+const pick=w=>byName[w][0];
+const typeLink=id=>`<a class="chip" data-go="${id}">${esc(sn(id))}</a>`;
+/* Syntax */
+const KW=new Set('abstract as async await base bool break case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly record ref return sealed short sizeof static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using var virtual void volatile while when init required with get set yield partial global nint'.split(' '));
+(D.kw||[]).forEach(w=>KW.add(w));
+const hlc={};
+function hlFile(p){
+  if(hlc[p])return hlc[p];
+  const src=F[p],re=/(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#(?!\[)[^\n]*)|("""[\s\S]*?"""|\$?@?"(?:\\.|[^"\\\n])*"|@\$?"(?:[^"]|"")*"|'(?:\\.|[^'\\\n])')|(\b\d[\d_]*(?:\.\d+)?[fFdDmMlLuU]*\b)|([A-Za-z_]\w*)/g;
+  const wrap=(c,s)=>s.split('\n').map(x=>`<span class="${c}">${esc(x)}</span>`).join('\n');
+  let out='',last=0,m;
+  while((m=re.exec(src))){
+    out+=esc(src.slice(last,m.index));last=re.lastIndex;
+    if(m[1])out+=wrap('c',m[1]);else if(m[2])out+=wrap('s',m[2]);else if(m[3])out+=wrap('n',m[3]);
+    else{const w=m[4];out+=KW.has(w)?`<span class="k">${w}</span>`:(byName[w]&&/^[A-Z]/.test(w))?`<a class="tl" data-go="${pick(w).id}">${w}</a>`:w}
+  }
+  out+=esc(src.slice(last));return hlc[p]=out.split('\n');
+}
+function srcView(el,t,m,opt={}){
+  if(!t){el.innerHTML='<div class="empty">Typ oder Methode wählen, dann erscheint hier der Quelltext.</div>';return}
+  const L=hlFile(t.file),a=opt.from||1,b=opt.to||L.length;
+  el.innerHTML=`<div class="src-h"><span>${esc(t.file)}</span><span class="muted">${m?`Methode ${esc(m.n)} · Zeilen ${m.l}–${m.e}`:`Typ ${esc(t.name)} · Zeilen ${t.l}–${t.e}`}</span></div><div class="code">`+
+   L.slice(a-1,b).map((h,i)=>{const n=a+i;return `<div class="ln${n>=t.l&&n<=t.e&&!opt.from?' it':''}${m&&n>=m.l&&n<=m.e?' im':''}"><b>${n}</b><span>${h||' '}</span></div>`}).join('')+'</div>';
+  const code=el.querySelector('.code'),tgt=(m?m.l:t.dl)-a;
+  code.scrollTop=Math.max(0,(code.children[Math.max(0,tgt)]?.offsetTop||0)-30);
+}
+function metricTiles(t){
+  return `<div class="tiles"><div class="tile"><b>${t.loc}</b><small>Codezeilen</small></div><div class="tile"><b class="${ccC(t.cc/Math.max(1,t.meths.length||1))}">${t.cc}</b><small>Komplexität (Σ CC)</small></div>
+  <div class="tile"><b class="${miC(t.mi)}">${t.mi}</b><small>Wartbarkeit (0–100)</small></div><div class="tile"><b>${t.meths.length}</b><small>Methoden</small></div>
+  <div class="tile"><b>${t.ce}</b><small>nutzt (Ce)</small></div><div class="tile"><b>${t.ca}</b><small>genutzt von (Ca)</small></div>
+  <div class="tile"><b class="${inC(t.instab)}">${t.instab.toFixed(2)}</b><small>Instabilität</small></div><div class="tile"><b class="${t.tested?'ok':'bad'}">${t.tested?'ja':'nein'}</b><small>Test nennt Typ</small></div></div>`;
+}
+function depChips(t){
+  const u=(users[t.id]||[]).slice().sort(),imp=t.deps.slice().sort();
+  const grp=(ids,c)=>ids.length?ids.map(i=>`<a class="chip ${c}" data-go="${i}" title="${esc(byId[i].ns)}">${esc(sn(i))}<i>${lay(byId[i])}</i></a>`).join(''):'<span class="muted">keine</span>';
+  return `<div class="sec">Nutzt (${imp.length})</div><div>${grp(imp,'imp')}</div><div class="sec">Wird genutzt von (${u.length})</div><div>${grp(u,'use')}</div>`;
+}
+function methodTable(t,curL){
+  const rows=t.meths.slice().sort((a,b)=>a.l-b.l).map(m=>`<tr data-m="${m.l}" class="${curL===m.l?'cur':''}"><td><b>${esc(m.n)}</b><div class="muted mono" style="max-width:380px;overflow-wrap:anywhere">${esc(m.sig)}</div></td><td>${m.vis}</td><td>${m.loc}</td><td class="${ccC(m.cc)}">${m.cc} <span class="bar" style="width:${Math.min(60,m.cc*5)}px"></span></td><td class="${miC(m.mi)}">${m.mi}</td><td class="mono muted">${m.l}–${m.e}</td></tr>`).join('');
+  return `<div class="scroll"><table><thead><tr><th>Methode</th><th>Sichtbar</th><th>LOC</th><th>CC</th><th>MI</th><th>Zeilen</th></tr></thead><tbody>${rows||'<tr><td colspan=6 class=muted>Keine Methoden gefunden (z. B. Record, Enum oder Interface ohne Rumpf).</td></tr>'}</tbody></table></div>`;
+}
+/* Zustand und Navigation */
+const S={id:D.start,line:null,group:null};
+let cur='explorer';
+function go(id,line){if(!byId[id])return;S.id=id;S.line=line||null;S.group=null;V[cur].sel&&V[cur].sel()}
+document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g){e.preventDefault();go(g.dataset.go)}});
+
+/* ===== Variante A: Explorer ===== */
+const TREE=LAYERS.map(L=>{const ts=T.filter(t=>lay(t)===L),m={};ts.forEach(t=>(m[t.ns]=m[t.ns]||[]).push(t));
+  return{L,loc:ts.reduce((s,t)=>s+t.loc,0),n:ts.length,ns:Object.keys(m).sort().map(k=>({ns:k,ts:m[k].sort((a,b)=>a.name.localeCompare(b.name))}))}});
+const A={open:new Set(['L:'+byId[D.start].project,'N:'+byId[D.start].ns,'T:'+D.start]),q:'',
+ render(app){
+  app.innerHTML=`<div class="va"><div class="card tree"><input class="srch" id="aq" placeholder="Typ oder Methode suchen …" aria-label="Suche" value="${esc(A.q)}"><div class="tree-b" id="atree"></div></div><div class="card det" id="adet"></div><div id="asrc" class="src"></div></div>`;
+  document.getElementById('aq').oninput=e=>{A.q=e.target.value;A.tree()};
+  document.getElementById('atree').onclick=e=>{const r=e.target.closest('.tr');if(!r)return;const k=r.dataset.k;
+    if(k[0]==='M'){const [id,l]=k.slice(2).split('@');go(id,+l);return}
+    if(k[0]==='T'){A.open.has(k)?A.open.delete(k):A.open.add(k);go(k.slice(2));A.tree();return}
+    A.open.has(k)?A.open.delete(k):A.open.add(k);S.group={k:k[0],key:k.slice(2)};A.tree();A.group()};
+  document.getElementById('adet').onclick=e=>{const r=e.target.closest('tr[data-m]');if(r){go(S.id,+r.dataset.m);return}const th=e.target.closest('th[data-s]');if(th){A.gs=th.dataset.s;A.group()}const mp=e.target.closest('[data-map]');if(mp){location.hash='map'}};
+  A.tree();S.group?A.group():A.sel();
+ },
+ tree(){
+  const q=A.q.trim().toLowerCase(),h=[],o=A.open,tm=t=>!q||t.name.toLowerCase().includes(q)||t.meths.some(m=>m.n.toLowerCase().includes(q));
+  TREE.forEach(L=>{const nss=L.ns.map(n=>({...n,ts:n.ts.filter(tm)})).filter(n=>n.ts.length);if(!nss.length)return;
+    const lo=q||o.has('L:'+L.L);
+    h.push(`<div class="tr l0${S.group&&S.group.k==='L'&&S.group.key===L.L?' sel':''}" data-k="L:${L.L}"><span class="car">${lo?'▼':'▶'}</span><span class="dot" style="color:var(--l-${sl(L.L)})"></span><span class="nm">${L.L}</span><span class="r">${L.n}</span></div>`);
+    if(!lo)return;
+    nss.forEach(n=>{const no=q||o.has('N:'+n.ns);
+      h.push(`<div class="tr l1${S.group&&S.group.k==='N'&&S.group.key===n.ns?' sel':''}" data-k="N:${n.ns}"><span class="car">${no?'▼':'▶'}</span><span class="nm">${esc(nsS(n.ns).replace(L.L+'.','').replace(L.L,'(Wurzel)'))}</span><span class="r">${n.ts.length}</span></div>`);
+      if(!no)return;
+      n.ts.forEach(t=>{const to=o.has('T:'+t.id)||(q&&t.meths.some(m=>m.n.toLowerCase().includes(q)));
+        h.push(`<div class="tr l2${!S.group&&S.id===t.id&&!S.line?' sel':''}" data-k="T:${t.id}">${kiHtml(t)}<span class="nm">${esc(t.name)}</span><span class="r ${ccC(t.cc/Math.max(1,t.meths.length))}">${t.loc}</span></div>`);
+        if(to)t.meths.slice().sort((a,b)=>a.l-b.l).forEach(m=>h.push(`<div class="tr l3${S.id===t.id&&S.line===m.l?' sel':''}" data-k="M:${t.id}@${m.l}"><span class="nm">${esc(m.n)}</span><span class="r ${ccC(m.cc)}">${m.cc}</span></div>`))})})});
+  document.getElementById('atree').innerHTML=h.join('')||'<div class="empty">Keine Treffer.</div>';
+ },
+
+ gs:'loc',
+ group(){
+  const g=S.group;if(!g)return;const ts=g.k==='L'?T.filter(t=>lay(t)===g.key):T.filter(t=>t.ns===g.key);
+  const col={name:(a,b)=>a.name.localeCompare(b.name),loc:(a,b)=>b.loc-a.loc,cc:(a,b)=>b.cc-a.cc,mi:(a,b)=>a.mi-b.mi,ce:(a,b)=>b.ce-a.ce,ca:(a,b)=>b.ca-a.ca};
+  const rows=ts.slice().sort(col[A.gs]||col.loc),loc=ts.reduce((s,t)=>s+t.loc,0),cc=ts.reduce((s,t)=>s+t.cc,0),mi=Math.round(ts.reduce((s,t)=>s+t.mi*t.loc,0)/Math.max(1,loc)),un=ts.filter(t=>!t.tested).length;
+  const title=g.k==='L'?g.key:nsS(g.key);
+  document.getElementById('adet').innerHTML=`<div class="sub">${g.k==='L'?'Projekt / Schicht':'Namespace · '+lay(ts[0])}</div><h2>${esc(title)}</h2>${g.k==='L'&&(D.notes||{})[g.key]?`<p>${esc(D.notes[g.key])}</p>`:''}
+   <div class="sec">Kennzahlen</div><div class="tiles"><div class="tile"><b>${ts.length}</b><small>Typen</small></div><div class="tile"><b>${ts.reduce((s,t)=>s+t.meths.length,0)}</b><small>Methoden</small></div><div class="tile"><b>${loc}</b><small>Codezeilen</small></div><div class="tile"><b>${cc}</b><small>Σ Komplexität</small></div><div class="tile"><b class="${miC(mi)}">${mi}</b><small>Ø Wartbarkeit</small></div><div class="tile"><b class="${un?'warn':'ok'}">${un}</b><small>ohne Testbezug</small></div></div>
+   <p><button class="btn" data-map="1">Im Abhängigkeits-Graph zeigen</button></p><div class="sec">Typen – Spaltenkopf sortiert</div>
+   <div class="scroll"><table><thead><tr><th data-s="name">Typ</th><th data-s="loc">LOC</th><th data-s="cc">CC</th><th data-s="mi">MI</th><th data-s="ce">Ce</th><th data-s="ca">Ca</th><th>Test</th></tr></thead><tbody>${rows.map(t=>`<tr data-go="${t.id}" style="cursor:pointer"><td>${kiHtml(t)} ${esc(t.name)}${g.k==='L'?`<div class="muted mono">${esc(nsS(t.ns))}</div>`:''}</td><td>${t.loc}</td><td class="${ccC(t.cc/Math.max(1,t.meths.length))}">${t.cc}</td><td class="${miC(t.mi)}">${t.mi}</td><td>${t.ce}</td><td>${t.ca}</td><td class="${t.tested?'ok':'bad'}">${t.tested?'ja':'nein'}</td></tr>`).join('')}</tbody></table></div>`;
+  srcView(document.getElementById('asrc'),null);
+ },
+ sel(){
+  const t=byId[S.id];if(!t)return;const m=S.line&&t.meths.find(x=>x.l===S.line);
+  // Baum auf Auswahl öffnen
+  A.open.add('L:'+lay(t));A.open.add('N:'+t.ns);A.open.add('T:'+t.id);A.tree();
+  const sel=document.querySelector('#atree .sel');sel&&sel.scrollIntoView({block:'nearest'});
+  document.getElementById('adet').innerHTML=`<div class="sub">${esc(nsS(t.ns))} · ${lay(t)}</div><h2>${esc(t.name)} <span class="pill">${t.kind}</span></h2>
+   <div class="sub">${esc(t.file)} · Zeilen ${t.l}–${t.e}</div>${t.doc?`<p>${esc(t.doc)}</p>`:''}
+   ${t.bases.length?`<div class="sec">Basistypen und Schnittstellen</div>${t.bases.map(b=>byName[b]?typeLink(pick(b).id):`<span class="chip">${esc(b)}</span>`).join('')}`:''}
+   <div class="sec">Kennzahlen</div>${metricTiles(t)}<p><button class="btn" data-map="1">Im Abhängigkeits-Graph zeigen</button></p><div class="sec">Methoden (${t.meths.length}) – Zeile anklicken zeigt den Quelltext</div>${methodTable(t,S.line)}${depChips(t)}`;
+  srcView(document.getElementById('asrc'),t,m);
+ }};
+
+/* ===== Tab: Abhängigkeiten ===== */
+const BANDS=D.bands;
+const NS={},EDGES={};
+T.forEach(t=>{const n=NS[t.ns]=NS[t.ns]||{ns:t.ns,L:lay(t),ts:[],loc:0};n.ts.push(t);n.loc+=t.loc});
+T.forEach(t=>t.deps.forEach(d=>{const u=byId[d];if(u.ns===t.ns)return;const k=t.ns+'>'+u.ns;(EDGES[k]=EDGES[k]||{a:t.ns,b:u.ns,pairs:[]}).pairs.push([t.id,d])}));
+const EL=Object.values(EDGES);
+const OUT={},INN={};EL.forEach(e=>{(OUT[e.a]=OUT[e.a]||[]).push(e);(INN[e.b]=INN[e.b]||[]).push(e)});
+const cyc=e=>!!EDGES[e.b+'>'+e.a],rank=ns=>D.rank[NS[ns].L],viol=e=>rank(e.a)>rank(e.b);
+const G={mode:'ns',ns:null,focus:null,depth:1,all:false,
+ render(app){
+  if(!G.ns)G.ns=byId[S.id].ns;if(!G.focus)G.focus=S.id;
+  app.innerHTML=`<div class="gv"><div><div class="ctl"><div class="seg" id="gmode" role="group" aria-label="Ansicht"><button data-mode="ns" aria-pressed="${G.mode==='ns'}">Namespaces</button><button data-mode="type" aria-pressed="${G.mode==='type'}">Typ im Fokus</button></div><span id="gctl"></span></div><div class="card scroll" id="gsvg" style="padding:6px"></div><div class="legend" id="gleg"></div></div><div class="card" id="gpanel" style="padding:12px 14px;max-height:calc(100vh - 150px);overflow:auto"></div></div>`;
+  document.getElementById('gmode').onclick=e=>{const b=e.target.closest('[data-mode]');if(b){G.mode=b.dataset.mode;G.render(app)}};
+  G.draw();
+ },
+ sel(){if(G.mode==='ns')G.ns=byId[S.id].ns;G.focus=S.id;G.draw()},
+ draw(){G.mode==='ns'?G.drawNs():G.drawType()},
+ drawNs(){
+  const wrap=document.getElementById('gsvg'),W=Math.max(560,wrap.clientWidth-14),NW=176,NH=26,GX=8,LBL=Math.max(104,Math.max(...BANDS.map(b=>b.length))*7+26),cols=Math.max(1,Math.floor((W-LBL-8)/(NW+GX)));
+  const pos={};let y=0;const bands=[];
+  BANDS.forEach(L=>{const ns=Object.keys(NS).filter(k=>NS[k].L===L).sort(),rows=Math.ceil(ns.length/cols)||1,h=rows*(NH+8)+12;bands.push({L,y,h});
+    ns.forEach((k,i)=>{pos[k]={x:LBL+(i%cols)*(NW+GX),y:y+8+Math.floor(i/cols)*(NH+8)}});y+=h+10});
+  const H=y,sel=G.ns,nb=new Set([sel]);(OUT[sel]||[]).forEach(e=>nb.add(e.b));(INN[sel]||[]).forEach(e=>nb.add(e.a));
+  const cx=k=>pos[k].x+NW/2;
+  const path=(e)=>{const a=pos[e.a],b=pos[e.b];let x1=cx(e.a),x2=cx(e.b),y1,y2,d;
+    if(Math.abs(a.y-b.y)<2){y1=a.y;y2=b.y;const m=Math.min(60,20+Math.abs(x1-x2)/6);d=`M${x1},${y1} C${x1},${y1-m} ${x2},${y2-m} ${x2},${y2}`}
+    else{const down=b.y>a.y;y1=a.y+(down?NH:0);y2=b.y+(down?0:NH);const m=Math.abs(y2-y1)/2;d=`M${x1},${y1} C${x1},${y1+(down?m:-m)} ${x2},${y2+(down?-m:m)} ${x2},${y2}`}return d};
+  let svg=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Namespace-Abhängigkeiten"><defs><marker id="ao" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="var(--imp)"/></marker><marker id="au" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8z" fill="var(--use)"/></marker></defs>`;
+  bands.forEach(b=>{svg+=`<rect x="0" y="${b.y}" width="${W}" height="${b.h}" rx="6" fill="var(--surface2)" opacity=".55"/><rect x="0" y="${b.y}" width="5" height="${b.h}" fill="var(--l-${sl(b.L)})"/><text x="14" y="${b.y+22}" style="font-family:var(--f-d);font-weight:700;font-size:14px">${b.L}</text>`});
+  if(G.all)EL.forEach(e=>{svg+=`<path d="${path(e)}" fill="none" stroke="var(--muted)" stroke-width="${Math.min(3,.6+Math.sqrt(e.pairs.length)*.4)}" opacity=".16"/>`});
+  EL.forEach(e=>{if(e.a!==sel&&e.b!==sel)return;const o=e.a===sel;svg+=`<path d="${path(e)}" fill="none" stroke="${o?'var(--imp)':'var(--use)'}" stroke-width="${1.2+Math.sqrt(e.pairs.length)*.7}" opacity=".85" marker-end="url(#${o?'ao':'au'})" ${cyc(e)?'stroke-dasharray="5 3"':''}><title>${esc(nsS(e.a))} → ${esc(nsS(e.b))}: ${e.pairs.length} Verweise</title></path>`});
+  Object.keys(NS).forEach(k=>{const p=pos[k],n=NS[k],dim=!nb.has(k),lab=nsS(k).replace(n.L+'.','').replace(n.L,'(Wurzel)');
+    svg+=`<g data-nsn="${k}" style="cursor:pointer" opacity="${dim?.4:1}"><title>${esc(nsS(k))} · ${n.ts.length} Typen · ${n.loc} LOC</title><rect x="${p.x}" y="${p.y}" width="${NW}" height="${NH}" rx="5" fill="var(--surface)" stroke="${k===sel?'var(--yellow)':'var(--l-'+sl(n.L)+')'}" stroke-width="${k===sel?3:1.3}"/><text x="${p.x+8}" y="${p.y+17}">${esc(lab.length>24?lab.slice(0,23)+'…':lab)}</text><text x="${p.x+NW-8}" y="${p.y+17}" text-anchor="end" style="fill:var(--muted)">${n.ts.length}</text></g>`});
+  wrap.innerHTML=svg+'</svg>';
+  wrap.onclick=e=>{const g=e.target.closest('[data-nsn]');if(g){G.ns=g.dataset.nsn;G.drawNs()}};
+  const nc=EL.filter(e=>cyc(e)&&e.a<e.b).length,nv=EL.filter(viol).length;
+  document.getElementById('gctl').innerHTML=`<label class="muted"><input type="checkbox" id="gall" ${G.all?'checked':''}> alle Verbindungen schwach einblenden</label>`;
+  document.getElementById('gall').onchange=e=>{G.all=e.target.checked;G.drawNs()};
+  document.getElementById('gleg').innerHTML=`<span><span class="sw" style="border-color:var(--imp)"></span> Auswahl nutzt</span><span><span class="sw" style="border-color:var(--use)"></span> nutzt die Auswahl</span><span>gestrichelt = gegenseitig (Zyklus)</span><span>Zahl im Kasten = Typen</span><span>Gesamt: ${Object.keys(NS).length} Namespaces, ${EL.length} Verbindungen, ${nc} gegenseitige Paare, ${nv} Verbindungen entgegen der Schichtung</span>`;
+  G.panelNs();
+ },
+ panelNs(){
+  const n=NS[G.ns],o=(OUT[G.ns]||[]).slice().sort((a,b)=>b.pairs.length-a.pairs.length),i=(INN[G.ns]||[]).slice().sort((a,b)=>b.pairs.length-a.pairs.length);
+  const row=(e,other,cls)=>{const t=byId[e.pairs[0][0]];return `<details><summary><span class="dot" style="color:var(--l-${sl(NS[other].L)})"></span> ${esc(nsS(other))} <b>${e.pairs.length}</b>${cyc(e)?' <span class="pill bad">Zyklus</span>':''}${viol(e)?' <span class="pill warn">gegen Schichtung</span>':''}</summary><div class="pairs">${e.pairs.slice(0,40).map(p=>`<div class="mono"><a data-focus="${p[0]}" class="chip ${cls}">${esc(sn(p[0]))}</a> → <a data-focus="${p[1]}" class="chip ${cls}">${esc(sn(p[1]))}</a></div>`).join('')}${e.pairs.length>40?`<div class="muted">… und ${e.pairs.length-40} weitere</div>`:''}</div></details>`};
+  const inst=(o.length+i.length)?o.length/(o.length+i.length):0;
+  const el=document.getElementById('gpanel');
+  el.innerHTML=`<div class="sub muted mono">${n.L}</div><h3 style="font-size:22px;overflow-wrap:anywhere">${esc(nsS(n.ns))}</h3>
+   <div class="tiles" style="margin-top:8px"><div class="tile"><b>${n.ts.length}</b><small>Typen</small></div><div class="tile"><b>${n.loc}</b><small>Codezeilen</small></div><div class="tile"><b>${o.length}</b><small>nutzt Namespaces</small></div><div class="tile"><b>${i.length}</b><small>genutzt von</small></div><div class="tile"><b class="${inC(inst)}">${inst.toFixed(2)}</b><small>Instabilität</small></div></div>
+   <div class="sec" style="color:var(--imp)">Nutzt (${o.length}) – aufklappen zeigt die Typpaare</div>${o.map(e=>row(e,e.b,'imp')).join('')||'<span class="muted">keine</span>'}
+   <div class="sec" style="color:var(--use)">Wird genutzt von (${i.length})</div>${i.map(e=>row(e,e.a,'use')).join('')||'<span class="muted">keine</span>'}
+   <div class="sec">Typen (${n.ts.length})</div><div>${n.ts.slice().sort((a,b)=>b.loc-a.loc).map(t=>`<a class="chip" data-focus="${t.id}">${esc(t.name)}</a>`).join('')}</div>`;
+  el.onclick=e=>{const f=e.target.closest('[data-focus]');if(f){e.preventDefault();G.focus=f.dataset.focus;G.mode='type';G.render(document.getElementById('app'))}};
+ },
+ drawType(){
+  const wrap=document.getElementById('gsvg'),f=byId[G.focus],max=30;
+  const cols={0:[f.id]},seen=new Set([f.id]);
+  const grow=(from,dir)=>{const r=[];from.forEach(id=>(dir<0?users[id]||[]:byId[id].deps).forEach(x=>{if(!seen.has(x)){seen.add(x);r.push(x)}}));return r.sort()};
+  cols[-1]=grow([f.id],-1);cols[1]=grow([f.id],1);
+  if(G.depth>1){cols[-2]=grow(cols[-1],-1);cols[2]=grow(cols[1],1)}
+  const cs=G.depth>1?[-2,-1,0,1,2]:[-1,0,1],NW=164,GX=56,R=26,rows=Math.max(...cs.map(c=>Math.min(max+1,(cols[c]||[]).length)),1),H=rows*R+50,W=cs.length*NW+(cs.length-1)*GX+20;
+  const xs=c=>10+cs.indexOf(c)*(NW+GX),ys=(c,i)=>40+i*R,P={};
+  cs.forEach(c=>(cols[c]||[]).slice(0,max).forEach((id,i)=>P[id]={c,x:xs(c),y:ys(c,i)}));
+  let svg=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Typ-Abhängigkeiten">`;
+  const names={'-2':'Nutzer der Nutzer','-1':'Nutzt den Typ','0':'Fokus','1':'Wird genutzt','2':'Abhängigkeiten der Abhängigkeiten'};
+  cs.forEach(c=>{const n=(cols[c]||[]).length;svg+=`<text x="${xs(c)}" y="16" style="fill:var(--muted);font-weight:600">${names[c]} (${n})</text>`;if(n>max)svg+=`<text x="${xs(c)}" y="${H-6}" style="fill:var(--muted)">+ ${n-max} weitere</text>`});
+  Object.keys(P).forEach(a=>byId[a].deps.forEach(b=>{if(!P[b]||P[b].c!==P[a].c+1)return;const A_=P[a],B_=P[b],x1=A_.x+NW,y1=A_.y+11,x2=B_.x,y2=B_.y+11,m=(x1+x2)/2,foc=a===f.id||b===f.id,col=b===f.id?'var(--use)':a===f.id?'var(--imp)':'var(--muted)';
+    svg+=`<path d="M${x1},${y1} C${m},${y1} ${m},${y2} ${x2},${y2}" fill="none" stroke="${col}" stroke-width="${foc?1.8:1}" opacity="${foc?.75:.3}"/>`}));
+  Object.entries(P).forEach(([id,p])=>{const t=byId[id],isf=id===f.id;svg+=`<g data-fo="${id}" style="cursor:pointer"><title>${esc(t.ns)}</title><rect x="${p.x}" y="${p.y}" width="${NW}" height="22" rx="4" fill="${isf?'var(--accent)':'var(--surface)'}" stroke="var(--l-${sl(lay(t))})" stroke-width="1.5"/><text x="${p.x+8}" y="${p.y+15}" style="${isf?'fill:var(--on-accent);font-weight:600':''}">${esc(t.name.length>24?t.name.slice(0,23)+'…':t.name)}</text></g>`});
+  wrap.innerHTML=svg+'</svg>';
+  wrap.onclick=e=>{const g=e.target.closest('[data-fo]');if(g){G.focus=g.dataset.fo;G.drawType()}};
+  document.getElementById('gctl').innerHTML=`<input class="srch card" id="gq" list="gdl" style="width:230px;border-radius:6px" placeholder="Typ wählen …" value="${esc(f.name)}"><datalist id="gdl">${T.map(t=>`<option value="${esc(t.name)}">`).join('')}</datalist> <div class="seg" id="gdep"><button data-d="1" aria-pressed="${G.depth===1}">1 Stufe</button><button data-d="2" aria-pressed="${G.depth===2}">2 Stufen</button></div>`;
+  document.getElementById('gq').onchange=e=>{const t=byName[e.target.value];if(t){G.focus=t[0].id;G.drawType()}};
+  document.getElementById('gdep').onclick=e=>{const b=e.target.closest('[data-d]');if(b){G.depth=+b.dataset.d;G.drawType()}};
+  document.getElementById('gleg').innerHTML=`<span><span class="sw" style="border-color:var(--use)"></span> nutzen den Typ</span><span><span class="sw" style="border-color:var(--imp)"></span> vom Typ genutzt</span><span>Kastenrand = Schicht. Klick auf einen Kasten setzt ihn in den Fokus.</span>`;
+  document.getElementById('gpanel').innerHTML=`<div class="sub muted mono">${esc(nsS(f.ns))} · ${lay(f)}</div><h3 style="font-size:22px">${esc(f.name)} <span class="pill">${f.kind}</span></h3>${f.doc?`<p>${esc(f.doc)}</p>`:''}${metricTiles(f)}<p><a class="btn" href="#explorer" data-open="${f.id}" style="text-decoration:none;display:inline-block;margin-top:10px">Im Explorer öffnen</a> <button class="btn" data-nsjump="${f.ns}">Namespace im Graph</button></p>${depChips(f).replace(/data-go=/g,'data-fo2=')}`;
+  const pn=document.getElementById('gpanel');pn.onclick=e=>{const o=e.target.closest('[data-open]');if(o){go(o.dataset.open);return}const j=e.target.closest('[data-nsjump]');if(j){G.ns=j.dataset.nsjump;G.mode='ns';G.render(document.getElementById('app'));return}const c=e.target.closest('[data-fo2]');if(c){e.preventDefault();G.focus=c.dataset.fo2;G.drawType()}};
+ }};
+
+/* ===== Start ===== */
+const V={explorer:A,map:G},NAMES={explorer:['Explorer','Namespaces, Klassen, Methoden, Quelltext'],map:['Abhängigkeiten','Karte der Verbindungen']};
+function show(k){if(!V[k])k='explorer';cur=k;
+  document.getElementById('tabs').innerHTML=Object.entries(NAMES).map(([i,n])=>`<button class="tab" role="tab" aria-selected="${i===k}" data-v="${i}"><span>${n[0]}</span><small>${n[1]}</small></button>`).join('');
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{location.hash=b.dataset.v;});
+  V[k].render(document.getElementById('app'));}
+document.getElementById('ver').textContent='Stand '+D.version;
+addEventListener('hashchange',()=>show(location.hash.slice(1)));
+show(location.hash.slice(1)||'explorer');
+</script>
+
+</body></html>

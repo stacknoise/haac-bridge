@@ -27,10 +27,13 @@ ruff format --check .                     # formatting (ruff format . fixes it)
 bandit -c pyproject.toml -r custom_components scripts
 python scripts/code_index.py --check      # code index and error code list up to date, docstrings present
 python scripts/build_dependencies.py --check   # dependency map in docs/review up to date
+python scripts/build_code_doku.py --check      # code documentation in docs/code-doku up to date
 pytest                                    # needs Linux/WSL/container
 ```
 
 The dependency map (layers, cycles, per-module details) is generated, not written by hand: `python scripts/build_dependencies.py` writes `docs/review/dependencies.html` and `docs/review/dependency-graph.html`. Run it with every code change (not only when imports move) and commit the result in the same commit, like the code index; CI fails (`--check`) if it is outdated. Imports under `TYPE_CHECKING` are shown separately and do not count as dependencies.
+
+The code documentation is generated too: `python scripts/build_code_doku.py` writes `docs/code-doku/index.html`, one self-contained page (open it in a browser) with an explorer (project, module, class, method) showing metrics, the docstring and the source text, and a dependency map between modules and classes. **The documentation must be updated with every code change**: run the script and commit the page in the same commit; CI (`--check`) fails if it is outdated. The page shows the docstrings, so change them when the behaviour changes. Metrics (lines, complexity, maintainability, Ca/Ce) are approximations of a source scanner, not a compiler analysis. The page template is `scripts/code_doku_template.html`; the same script and template are used in `stacknoise/haac-android`, keep them identical.
 
 Besides these, CI runs `hassfest`, the HACS validation (`hacs/action`), PMD CPD (copy-paste detection) and CodeQL.
 
@@ -55,6 +58,7 @@ custom_components/haac_bridge/
   schedules/   model, store, triggers, recurrence, planner, runner, run_log, manager, entities (concept 19)
   api/         the haac_bridge/* WebSocket commands, one module per command group
 scripts/code_index.py             # generates docs/code-index.md and docs/error-codes.md
+scripts/build_code_doku.py        # generates docs/code-doku/index.html (code documentation); code_doku_template.html is its page
 tests/                            # same topic structure as the integration
 docs/                             # concept.md, code-index.md, error-codes.md
 .github/workflows/                # validate.yml, tests.yml, release.yml

@@ -54,6 +54,7 @@ combine-as-imports = true
 "tests/**" = ["D", "S101", "PLR0913", "PLR0917"]
 "scripts/**" = ["S101", "RUF001"]  # en dashes in generated Markdown headers
 "scripts/build_dependencies.py" = ["C901", "PLR0912", "PLR0915"]  # one-off analysis script, long but linear
+"scripts/build_code_doku.py" = ["C901", "PLR0912", "PLR0913", "PLR0915", "PLR0917"]  # source scanner for the code documentation
 
 [tool.bandit]
 exclude_dirs = ["tests"]
