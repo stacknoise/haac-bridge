@@ -13,7 +13,7 @@ Home Assistant custom integration (domain `haac_bridge`) that gives the HA Andro
 
 ```text
 CLAUDE.md
-README.md                 # HACS installation, YAML example (concept 10.2)
+README.md                 # user-facing: HACS install, quick setup (details in docs/features.md, configuration.md, websocket-api.md)
 hacs.json
 docs/concept.md
 docs/development.md       # developer guide: setup, checks, factories, error codes, code index, releases
