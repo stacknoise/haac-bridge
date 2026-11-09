@@ -396,9 +396,8 @@ def check_repeat(repeat: Repeat, when: When, now: datetime | None = None) -> Non
         )
         if due:
             raise ScheduleError(ErrorCode.SCH_IN_PAST)
-    elif repeat.end_date is not None:
-        if repeat.end_date < today:
-            raise ScheduleError(ErrorCode.SCH_IN_PAST)
+    elif repeat.end_date is not None and repeat.end_date < today:
+        raise ScheduleError(ErrorCode.SCH_IN_PAST)
 
 
 def parse_off_reason(raw: object) -> OffReason | None:
