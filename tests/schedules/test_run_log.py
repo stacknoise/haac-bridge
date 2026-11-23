@@ -1,7 +1,7 @@
 """Tests for the run log and its command (concept 19.11)."""
 
 from collections.abc import Callable, Coroutine
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
@@ -75,7 +75,7 @@ async def test_a_missed_run_is_logged_once(hass: HomeAssistant) -> None:
 
 async def test_an_entry_carries_every_field(hass: HomeAssistant) -> None:
     log = await loaded(hass)
-    at = datetime(2026, 10, 19, 6, 45, tzinfo=UTC)
+    at = dt_util.utcnow().replace(microsecond=0) - timedelta(hours=1)
     log.record(entry(at=at, result=RunResult.MISSED))
     assert log.runs_of("user-1") == [
         {
