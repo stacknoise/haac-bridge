@@ -7,6 +7,7 @@ from typing import Any
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.auth.models import User
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
@@ -202,14 +203,15 @@ async def test_run_now_keeps_a_repeating_schedule(
 async def test_a_missed_last_run_is_logged_and_removes_the_schedule(
     hass: HomeAssistant, world: World, log: Callable[[], list[dict[str, Any]]]
 ) -> None:
+    missed_at = dt_util.utcnow().replace(microsecond=0) - timedelta(hours=1)
     schedule = await add(
         hass,
         world.anton.id,
         when=WEEKLY_MORNING,
-        repeat=repeat_of("once", date(2026, 10, 19)),
+        repeat=repeat_of("once", missed_at.date()),
         notify=True,
     )
-    at = utc(2026, 10, 19, 5, 45)
+    at = missed_at
     planner = manager_of(hass).planner
     assert planner.on_missed is not None
     await planner.on_missed(schedule, at, last=True)
@@ -230,11 +232,12 @@ async def test_a_missed_run_that_is_not_the_last_is_logged_and_the_schedule_stay
     schedule = await add(hass, world.anton.id, when=WEEKLY_MORNING)
     planner = manager_of(hass).planner
     assert planner.on_missed is not None
-    await planner.on_missed(schedule, utc(2026, 10, 19, 5, 45), last=False)
+    missed_at = dt_util.utcnow().replace(microsecond=0) - timedelta(hours=1)
+    await planner.on_missed(schedule, missed_at, last=False)
     assert manager_of(hass).store.get(schedule.id) is not None
     [entry] = log()
     assert (entry["result"], entry["removed"]) == ("missed", False)
-    await planner.on_missed(schedule, utc(2026, 10, 19, 5, 45), last=False)
+    await planner.on_missed(schedule, missed_at, last=False)
     assert len(log()) == 1  # the same missed run is logged once
 
 
